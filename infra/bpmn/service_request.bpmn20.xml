@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://openagrios.org/bpmn">
+
+  <process id="service_request_lifecycle" name="Quy trình Yêu cầu &amp; Điều phối Cơ giới hóa (SOP-01)" isExecutable="true">
+    <startEvent id="startRequest" name="Nông hộ gửi yêu cầu thu hoạch" flowable:initiator="requesterUserId"/>
+    <sequenceFlow id="flow1" sourceRef="startRequest" targetRef="taskCoordinatorSchedule"/>
+
+    <userTask id="taskCoordinatorSchedule"
+              name="Điều phối viên kiểm tra xung đột &amp; ghép cặp Máy - Người"
+              flowable:candidateGroups="COORDINATOR"/>
+    <sequenceFlow id="flow2" sourceRef="taskCoordinatorSchedule" targetRef="taskOperatorExecute"/>
+
+    <userTask id="taskOperatorExecute"
+              name="Người vận hành thực hiện ca gặt &amp; cập nhật tiến độ"
+              flowable:candidateGroups="OPERATOR"/>
+    <sequenceFlow id="flow3" sourceRef="taskOperatorExecute" targetRef="taskFarmerAcceptance"/>
+
+    <userTask id="taskFarmerAcceptance"
+              name="Nông hộ kiểm tra minh chứng &amp; xác nhận nghiệm thu"
+              flowable:candidateGroups="FARMER"/>
+    <sequenceFlow id="flow4" sourceRef="taskFarmerAcceptance" targetRef="endRequest"/>
+
+    <endEvent id="endRequest" name="Đóng ca &amp; Niêm phong Sổ cái Audit SHA-256"/>
+  </process>
+</definitions>

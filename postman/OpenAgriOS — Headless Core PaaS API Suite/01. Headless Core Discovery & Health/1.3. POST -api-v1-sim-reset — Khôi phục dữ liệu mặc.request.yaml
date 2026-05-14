@@ -1,0 +1,11 @@
+$kind: http-request
+name: 1.3. POST /api/v1/sim/reset — Khôi phục dữ liệu mặc định
+url: "{{base_url}}/api/v1/sim/reset"
+method: POST
+headers:
+  Authorization: Bearer {{coord_token}}
+  Content-Type: application/json
+body:
+  type: text
+  content: "{}"
+order: 3000

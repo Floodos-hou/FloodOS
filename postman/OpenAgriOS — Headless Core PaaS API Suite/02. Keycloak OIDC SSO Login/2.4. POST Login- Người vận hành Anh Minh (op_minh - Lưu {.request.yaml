@@ -1,0 +1,21 @@
+$kind: http-request
+name: "2.4. POST Login: Người vận hành Anh Minh (op_minh -> Lưu {{op_token}})"
+url: "{{base_url}}/api/v1/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "username": "op_minh",
+      "password": "123456"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.collectionVariables.set('op_token', json.access_token);
+      pm.test('Issued OPERATOR JWT', () => pm.expect(json.user.role).to.eql('OPERATOR'));
+    language: text/javascript
+order: 4000

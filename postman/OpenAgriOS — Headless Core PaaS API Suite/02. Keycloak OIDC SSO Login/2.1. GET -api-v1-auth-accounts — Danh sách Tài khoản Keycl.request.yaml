@@ -1,0 +1,5 @@
+$kind: http-request
+name: 2.1. GET /api/v1/auth/accounts — Danh sách Tài khoản Keycloak Realm
+url: "{{base_url}}/api/v1/auth/accounts"
+method: GET
+order: 1000

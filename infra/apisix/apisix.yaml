@@ -1,0 +1,30 @@
+# ============================================================================
+# APACHE APISIX — ZERO-TRUST API GATEWAY CONFIGURATION (Apache-2.0 License)
+# Thực thi biên mạng Zero-Trust, kiểm tra JWT OIDC Keycloak, Rate Limit & CORS
+# ============================================================================
+routes:
+  - id: openagrios-core-api-route
+    name: "OpenAgriOS Headless Core API Gateway Route"
+    uris:
+      - "/api/v1/*"
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    upstream:
+      type: roundrobin
+      nodes:
+        "core-api:8000": 1
+    plugins:
+      cors:
+        allow_origins: "*"
+        allow_methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        allow_headers: "Authorization,Content-Type,X-Correlation-Id,X-Org-Id,X-User-Id,X-User-Roles"
+      limit-req:
+        rate: 50
+        burst: 20
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+      proxy-rewrite:
+        headers:
+          set:
+            X-Gateway: "Apache-APISIX-ZeroTrust"
+#END

@@ -1,0 +1,500 @@
+{
+  "info": {
+    "_postman_id": "a76ee726-2026-4c59-a69d-openagrios01",
+    "name": "OpenAgriOS — Headless Core PaaS API Suite",
+    "description": "Bộ Postman Collection kiểm thử hệ thống OpenAgriOS Core PaaS (Java 21 LTS):\n1. Khám phá dịch vụ Headless Core & Kiểm tra trạng thái hệ thống\n2. Đăng nhập Keycloak OIDC SSO & Cấp phát JWT cho các vai trò và tổ chức\n3. Kiểm tra phân quyền Zero-Trust RBAC (403) & Cách ly dữ liệu đa tổ chức RLS\n4. Đặt lịch dịch vụ & Kiểm tra xung đột khung giờ tại Backend (409 Conflict)\n5. Báo cáo sự cố thiết bị, lưu trữ minh chứng S3 & Phê duyệt điều phối thay thế trên BPMN 2.0\n6. Nghiệm thu dịch vụ, Bản sao số ETSI NGSI-LD & Truy vết Sổ cái Kiểm toán SHA-256",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "farmer_token", "value": "", "type": "string" },
+    { "key": "coord_token", "value": "", "type": "string" },
+    { "key": "op_token", "value": "", "type": "string" },
+    { "key": "repair_token", "value": "", "type": "string" },
+    { "key": "st_coord_token", "value": "", "type": "string" },
+    { "key": "top_option_id", "value": "OPT-M02-OP-02-ASG-102", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01. Headless Core Discovery & Health",
+      "item": [
+        {
+          "name": "1.1. GET / — Headless PaaS Discovery Manifest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON Headless Manifest', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.service).to.include('Headless Core PaaS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2. GET /api/v1/health — Kiểm tra các dịch vụ Core & BPMN 2.0 XML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Core is HEALTHY & BPMN XML loaded', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('HEALTHY');",
+                  "    pm.expect(json.bpmn_definitions).to.have.property('service_request');",
+                  "    pm.expect(json.bpmn_definitions).to.have.property('incident_replan');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3. POST /api/v1/sim/reset — Khôi phục dữ liệu mặc định",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/api/v1/sim/reset", "host": ["{{base_url}}"], "path": ["api", "v1", "sim", "reset"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Keycloak OIDC SSO Login",
+      "item": [
+        {
+          "name": "2.1. GET /api/v1/auth/accounts — Danh sách Tài khoản Keycloak Realm",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/auth/accounts", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "accounts"] }
+          }
+        },
+        {
+          "name": "2.2. POST Login: Nông hộ Bác Ba (farmer_ba -> Lưu {{farmer_token}})",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"farmer_ba\",\n  \"password\": \"123456\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('farmer_token', json.access_token);",
+                  "pm.test('Issued FARMER JWT for HTX_CANTHO_01', () => {",
+                  "    pm.expect(json.user.role).to.eql('FARMER');",
+                  "    pm.expect(json.user.organization_id).to.eql('HTX_CANTHO_01');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3. POST Login: Điều phối viên Chị Lan (coord_htx01 -> Lưu {{coord_token}})",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"coord_htx01\",\n  \"password\": \"123456\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('coord_token', json.access_token);",
+                  "pm.test('Issued COORDINATOR JWT for HTX_CANTHO_01', () => {",
+                  "    pm.expect(json.user.role).to.eql('COORDINATOR');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4. POST Login: Người vận hành Anh Minh (op_minh -> Lưu {{op_token}})",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"op_minh\",\n  \"password\": \"123456\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('op_token', json.access_token);",
+                  "pm.test('Issued OPERATOR JWT', () => pm.expect(json.user.role).to.eql('OPERATOR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5. POST Login: Đội sửa chữa (repair_01 -> Lưu {{repair_token}})",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"repair_01\",\n  \"password\": \"123456\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('repair_token', json.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6. POST Login: HTX Sóc Trăng 02 (coord_htx02 -> Lưu {{st_coord_token}})",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"coord_htx02\",\n  \"password\": \"123456\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('st_coord_token', json.access_token);",
+                  "pm.test('Issued JWT for Tenant HTX_SOCTRANG_02', () => {",
+                  "    pm.expect(json.user.organization_id).to.eql('HTX_SOCTRANG_02');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03. Kiểm tra Phân quyền RBAC (403) & Cách ly Đa tổ chức RLS",
+      "item": [
+        {
+          "name": "3.1. GET /api/v1/state (Role FARMER) — Quyền hiển thị vùng ruộng theo chủ sở hữu",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{farmer_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/state", "host": ["{{base_url}}"], "path": ["api", "v1", "state"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const fullFields = json.fields.filter(f => f.visibility === 'FULL').map(f => f.field_id);",
+                  "pm.test('RLS Visibility: Farmer Ba has FULL access to F01, F03, F07', () => {",
+                  "    pm.expect(fullFields).to.deep.equal(['F01', 'F03', 'F07']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2. GET /api/v1/state (Tenant HTX_SOCTRANG_02) — Cách ly dữ liệu giữa các HTX",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{st_coord_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/state", "host": ["{{base_url}}"], "path": ["api", "v1", "state"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Multi-tenancy RLS: Sóc Trăng only sees F_ST01', () => {",
+                  "    pm.expect(json.fields.length).to.eql(1);",
+                  "    pm.expect(json.fields[0].field_id).to.eql('F_ST01');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3. POST /api/v1/assignments (Role FARMER) — Chặn vượt quyền điều phối (403 Forbidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"request_id\": \"REQ-04\",\n  \"machine_id\": \"M02\",\n  \"operator_id\": \"OP-02\",\n  \"start_time\": \"2026-11-20T13:00:00Z\",\n  \"end_time\": \"2026-11-20T17:00:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/assignments", "host": ["{{base_url}}"], "path": ["api", "v1", "assignments"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Farmer is blocked with 403 Forbidden when trying to dispatch machine', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().error).to.eql('RBAC_FORBIDDEN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04. Đặt lịch & Kiểm tra Xung đột Khung giờ (409 Conflict)",
+      "item": [
+        {
+          "name": "4.1. POST /api/v1/requests — Nông hộ Bác Ba tạo yêu cầu thu hoạch vùng F07",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field_id\": \"F07\",\n  \"requested_start\": \"2026-11-21T13:00:00Z\",\n  \"requested_end\": \"2026-11-21T17:00:00Z\",\n  \"notes\": \"Đặt lịch thu hoạch lúa Đông Xuân OM18 tại Gò Tháp Mười\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/requests", "host": ["{{base_url}}"], "path": ["api", "v1", "requests"] }
+          }
+        },
+        {
+          "name": "4.2. POST /api/v1/assignments — Xếp trùng lịch máy M01 (409 Conflict)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"request_id\": \"REQ-04\",\n  \"machine_id\": \"M01\",\n  \"operator_id\": \"OP-01\",\n  \"start_time\": \"2026-11-20T08:00:00Z\",\n  \"end_time\": \"2026-11-20T11:30:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/assignments", "host": ["{{base_url}}"], "path": ["api", "v1", "assignments"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Overlapping shift on M01 is rejected with 409 Conflict', () => {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().error).to.eql('MACHINE_TIME_OVERLAP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Báo cáo Sự cố, Lưu trữ S3 & Điều phối Thay thế BPMN 2.0",
+      "item": [
+        {
+          "name": "5.1. POST /api/v1/incidents — Lái máy op_minh báo hỏng M01 + Lưu S3 + Đề xuất máy thay thế",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{op_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"machine_id\": \"M01\",\n  \"severity\": \"CRITICAL\",\n  \"incident_type\": \"Đứt dây curoa buồng đập & Kẹt trục cuốn\",\n  \"description\": \"Máy M01 hỏng tại F01, cần dừng 24h để thay dây curoa.\",\n  \"estimated_downtime_hours\": 24,\n  \"evidence_filename\": \"minh_chung_dut_curoa_M01.jpg\",\n  \"force_no_option\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/incidents", "host": ["{{base_url}}"], "path": ["api", "v1", "incidents"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('M01 breakdown impacts ASG-102 & ASG-103 and recommends M02 replacement', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(json.impacted_assignment_ids).to.include('ASG-102');",
+                  "    pm.expect(json.candidate_options[0].machine_id).to.eql('M02');",
+                  "    pm.collectionVariables.set('top_option_id', json.candidate_options[0].option_id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2. POST /api/v1/incidents/INC-2026-001/approve-replan — Điều phối viên duyệt BPMN điều M02 thay thế",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"option_id\": \"{{top_option_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/incidents/INC-2026-001/approve-replan",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "incidents", "INC-2026-001", "approve-replan"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Old shift ASG-102 is SUPERSEDED and new shift ASG-102-R1 is created', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(json.superseded_assignment_id).to.eql('ASG-102');",
+                  "    pm.expect(json.new_assignment_id).to.eql('ASG-102-R1');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3. POST /api/v1/incidents/INC-2026-001/repair — Đội sửa chữa cập nhật chẩn đoán",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{repair_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosis\": \"Đã thay dây curoa buồng đập Bando và kiểm tra tải.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/incidents/INC-2026-001/repair",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "incidents", "INC-2026-001", "repair"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Nghiệm thu, Bản sao số NGSI-LD & Sổ cái Audit SHA-256",
+      "item": [
+        {
+          "name": "6.1. POST /api/v1/acceptances — Nông hộ Bác Ba xác nhận nghiệm thu ca ASG-102-R1",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignment_id\": \"ASG-102-R1\",\n  \"action\": \"FARMER_CONFIRM\",\n  \"notes\": \"Bác Ba xác nhận máy M02 đã thu hoạch sạch 2.2 ha tại Kênh Xáng Ô Môn.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/acceptances", "host": ["{{base_url}}"], "path": ["api", "v1", "acceptances"] }
+          }
+        },
+        {
+          "name": "6.2. GET /api/v1/audit/lineage/CORR-GOLDEN-F03 — Truy vết Phả hệ Dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/lineage/CORR-GOLDEN-F03",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "audit", "lineage", "CORR-GOLDEN-F03"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Lineage has full multi-role history & SHA-256 chain is valid', () => {",
+                  "    pm.expect(json.chain_proof.chain_valid).to.be.true;",
+                  "    pm.expect(json.lineage_steps.length).to.be.at.least(5);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3. GET /api/v1/audit/verify — Kiểm chứng toàn vẹn Sổ cái Bất biến SHA-256",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/audit/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "audit", "verify"] }
+          }
+        },
+        {
+          "name": "6.4. GET /api/v1/digital-twin/entities — Xuất thực thể Bản sao số chuẩn ETSI NGSI-LD",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/digital-twin/entities",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "digital-twin", "entities"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

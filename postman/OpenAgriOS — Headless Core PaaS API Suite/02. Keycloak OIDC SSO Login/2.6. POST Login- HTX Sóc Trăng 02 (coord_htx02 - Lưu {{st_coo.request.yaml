@@ -1,0 +1,23 @@
+$kind: http-request
+name: "2.6. POST Login: HTX Sóc Trăng 02 (coord_htx02 -> Lưu {{st_coord_token}})"
+url: "{{base_url}}/api/v1/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "username": "coord_htx02",
+      "password": "123456"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.collectionVariables.set('st_coord_token', json.access_token);
+      pm.test('Issued JWT for Tenant HTX_SOCTRANG_02', () => {
+          pm.expect(json.user.organization_id).to.eql('HTX_SOCTRANG_02');
+      });
+    language: text/javascript
+order: 6000

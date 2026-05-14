@@ -1,0 +1,31 @@
+$kind: http-request
+name: 5.1. POST /api/v1/incidents — Lái máy op_minh báo hỏng M01 + Lưu S3 + Đề xuất máy thay thế
+url: "{{base_url}}/api/v1/incidents"
+method: POST
+headers:
+  Authorization: Bearer {{op_token}}
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "machine_id": "M01",
+      "severity": "CRITICAL",
+      "incident_type": "Đứt dây curoa buồng đập & Kẹt trục cuốn",
+      "description": "Máy M01 hỏng tại F01, cần dừng 24h để thay dây curoa.",
+      "estimated_downtime_hours": 24,
+      "evidence_filename": "minh_chung_dut_curoa_M01.jpg",
+      "force_no_option": false
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.test('M01 breakdown impacts ASG-102 & ASG-103 and recommends M02 replacement', () => {
+          pm.response.to.have.status(201);
+          pm.expect(json.impacted_assignment_ids).to.include('ASG-102');
+          pm.expect(json.candidate_options[0].machine_id).to.eql('M02');
+          pm.collectionVariables.set('top_option_id', json.candidate_options[0].option_id);
+      });
+    language: text/javascript
+order: 1000

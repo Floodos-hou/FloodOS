@@ -1,0 +1,16 @@
+$kind: http-request
+name: 3.1. GET /api/v1/state (Role FARMER) — Quyền hiển thị vùng ruộng theo chủ sở hữu
+url: "{{base_url}}/api/v1/state"
+method: GET
+headers:
+  Authorization: Bearer {{farmer_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      const fullFields = json.fields.filter(f => f.visibility === 'FULL').map(f => f.field_id);
+      pm.test('RLS Visibility: Farmer Ba has FULL access to F01, F03, F07', () => {
+          pm.expect(fullFields).to.deep.equal(['F01', 'F03', 'F07']);
+      });
+    language: text/javascript
+order: 1000

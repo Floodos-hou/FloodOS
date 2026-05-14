@@ -1,0 +1,14 @@
+$kind: http-request
+name: 5.3. POST /api/v1/incidents/INC-2026-001/repair — Đội sửa chữa cập nhật chẩn đoán
+url: "{{base_url}}/api/v1/incidents/INC-2026-001/repair"
+method: POST
+headers:
+  Authorization: Bearer {{repair_token}}
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "diagnosis": "Đã thay dây curoa buồng đập Bando và kiểm tra tải."
+    }
+order: 3000

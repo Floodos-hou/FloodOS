@@ -1,0 +1,17 @@
+$kind: http-request
+name: 4.1. POST /api/v1/requests — Nông hộ Bác Ba tạo yêu cầu thu hoạch vùng F07
+url: "{{base_url}}/api/v1/requests"
+method: POST
+headers:
+  Authorization: Bearer {{farmer_token}}
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "field_id": "F07",
+      "requested_start": "2026-11-21T13:00:00Z",
+      "requested_end": "2026-11-21T17:00:00Z",
+      "notes": "Đặt lịch thu hoạch lúa Đông Xuân OM18 tại Gò Tháp Mười"
+    }
+order: 1000

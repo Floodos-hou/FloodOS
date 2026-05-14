@@ -1,0 +1,16 @@
+$kind: http-request
+name: 3.2. GET /api/v1/state (Tenant HTX_SOCTRANG_02) — Cách ly dữ liệu giữa các HTX
+url: "{{base_url}}/api/v1/state"
+method: GET
+headers:
+  Authorization: Bearer {{st_coord_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.test('Multi-tenancy RLS: Sóc Trăng only sees F_ST01', () => {
+          pm.expect(json.fields.length).to.eql(1);
+          pm.expect(json.fields[0].field_id).to.eql('F_ST01');
+      });
+    language: text/javascript
+order: 2000

@@ -1,0 +1,20 @@
+$kind: http-request
+name: "2.5. POST Login: Đội sửa chữa (repair_01 -> Lưu {{repair_token}})"
+url: "{{base_url}}/api/v1/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "username": "repair_01",
+      "password": "123456"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.collectionVariables.set('repair_token', json.access_token);
+    language: text/javascript
+order: 5000

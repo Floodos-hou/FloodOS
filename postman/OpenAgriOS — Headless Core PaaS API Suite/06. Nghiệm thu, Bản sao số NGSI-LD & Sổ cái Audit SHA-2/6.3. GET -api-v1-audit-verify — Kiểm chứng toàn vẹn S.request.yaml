@@ -1,0 +1,7 @@
+$kind: http-request
+name: 6.3. GET /api/v1/audit/verify — Kiểm chứng toàn vẹn Sổ cái Bất biến SHA-256
+url: "{{base_url}}/api/v1/audit/verify"
+method: GET
+headers:
+  Authorization: Bearer {{coord_token}}
+order: 3000

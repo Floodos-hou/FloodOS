@@ -1,0 +1,17 @@
+$kind: collection
+description: |-
+  Bộ Postman Collection kiểm thử hệ thống OpenAgriOS Core PaaS (Java 21 LTS):
+  1. Khám phá dịch vụ Headless Core & Kiểm tra trạng thái hệ thống
+  2. Đăng nhập Keycloak OIDC SSO & Cấp phát JWT cho các vai trò và tổ chức
+  3. Kiểm tra phân quyền Zero-Trust RBAC (403) & Cách ly dữ liệu đa tổ chức RLS
+  4. Đặt lịch dịch vụ & Kiểm tra xung đột khung giờ tại Backend (409 Conflict)
+  5. Báo cáo sự cố thiết bị, lưu trữ minh chứng S3 & Phê duyệt điều phối thay thế trên BPMN 2.0
+  6. Nghiệm thu dịch vụ, Bản sao số ETSI NGSI-LD & Truy vết Sổ cái Kiểm toán SHA-256
+variables:
+  base_url: http://localhost:8000
+  farmer_token: ""
+  coord_token: ""
+  op_token: ""
+  repair_token: ""
+  st_coord_token: ""
+  top_option_id: OPT-M02-OP-02-ASG-102

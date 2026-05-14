@@ -1,0 +1,26 @@
+$kind: http-request
+name: 3.3. POST /api/v1/assignments (Role FARMER) — Chặn vượt quyền điều phối (403 Forbidden)
+url: "{{base_url}}/api/v1/assignments"
+method: POST
+headers:
+  Authorization: Bearer {{farmer_token}}
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "request_id": "REQ-04",
+      "machine_id": "M02",
+      "operator_id": "OP-02",
+      "start_time": "2026-11-20T13:00:00Z",
+      "end_time": "2026-11-20T17:00:00Z"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Farmer is blocked with 403 Forbidden when trying to dispatch machine', () => {
+          pm.response.to.have.status(403);
+          pm.expect(pm.response.json().error).to.eql('RBAC_FORBIDDEN');
+      });
+    language: text/javascript
+order: 3000

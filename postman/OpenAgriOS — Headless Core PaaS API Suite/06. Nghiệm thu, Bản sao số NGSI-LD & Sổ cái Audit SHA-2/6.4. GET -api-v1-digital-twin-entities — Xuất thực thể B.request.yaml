@@ -1,0 +1,7 @@
+$kind: http-request
+name: 6.4. GET /api/v1/digital-twin/entities — Xuất thực thể Bản sao số chuẩn ETSI NGSI-LD
+url: "{{base_url}}/api/v1/digital-twin/entities"
+method: GET
+headers:
+  Authorization: Bearer {{coord_token}}
+order: 4000

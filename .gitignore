@@ -1,0 +1,32 @@
+# Java & Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Environment & local credentials
+.env
+.env.local
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs & temp files
+*.log
+logs/
+temp/
+tmp/
+
+# Competition proposals & internal design documents (prevent leak)
+*.docx
+*.pptx
+OpenAgriOS_De_xuat*
+OpenAgriOS_Ke_hoach*

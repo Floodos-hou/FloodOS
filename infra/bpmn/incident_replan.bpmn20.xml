@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://openagrios.org/bpmn">
+
+  <process id="incident_replan_workflow" name="Quy trình Sự cố Máy hỏng &amp; Tái lập Kế hoạch Cứu viện (SOP-02)" isExecutable="true">
+    <startEvent id="startIncident" name="Người vận hành báo hỏng máy kèm ảnh MinIO" flowable:initiator="operatorUserId"/>
+    <sequenceFlow id="incFlow1" sourceRef="startIncident" targetRef="serviceImpactAnalysis"/>
+
+    <serviceTask id="serviceImpactAnalysis"
+                 name="Tự động khoanh vùng ca đứt gãy &amp; Tính điểm máy cứu viện (Rule Engine + PostGIS)"
+                 flowable:expression="${intelligenceEngine.evaluateImpactAndCandidates(incidentId)}"/>
+    <sequenceFlow id="incFlow2" sourceRef="serviceImpactAnalysis" targetRef="parallelSplit"/>
+
+    <parallelGateway id="parallelSplit"/>
+    <sequenceFlow id="incFlow3a" sourceRef="parallelSplit" targetRef="taskCoordinatorApproveReplan"/>
+    <sequenceFlow id="incFlow3b" sourceRef="parallelSplit" targetRef="taskRepairTeamFix"/>
+
+    <userTask id="taskCoordinatorApproveReplan"
+              name="Điều phối viên HTX phê duyệt phương án máy cứu viện thay thế"
+              flowable:candidateGroups="COORDINATOR"/>
+    <sequenceFlow id="incFlow4" sourceRef="taskCoordinatorApproveReplan" targetRef="taskFarmerConfirmNewSchedule"/>
+
+    <userTask id="taskFarmerConfirmNewSchedule"
+              name="Nông hộ nhận thông báo &amp; nghiệm thu ca thay thế"
+              flowable:candidateGroups="FARMER"/>
+    <sequenceFlow id="incFlow5a" sourceRef="taskFarmerConfirmNewSchedule" targetRef="endReplan"/>
+
+    <userTask id="taskRepairTeamFix"
+              name="Đội sửa chữa tiếp nhận phiếu sửa &amp; khắc phục thiết bị"
+              flowable:candidateGroups="REPAIR_TEAM"/>
+    <sequenceFlow id="incFlow5b" sourceRef="taskRepairTeamFix" targetRef="endRepair"/>
+
+    <endEvent id="endReplan" name="Hoàn tất điều phối thay thế"/>
+    <endEvent id="endRepair" name="Hoàn tất phiếu sửa chữa"/>
+  </process>
+</definitions>

@@ -1,0 +1,13 @@
+# Use this workspace to collaborate
+workspace:
+  id: 93809688-296e-41d9-8d46-be0f8bedc5a4
+
+localResources:
+  collections:
+    - ../OpenAgriOS — Headless Core PaaS API Suite
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
+cloudResources:
+  collections:
+    ../OpenAgriOS — Headless Core PaaS API Suite: a76ee726-2026-4c59-a69d-openagrios01

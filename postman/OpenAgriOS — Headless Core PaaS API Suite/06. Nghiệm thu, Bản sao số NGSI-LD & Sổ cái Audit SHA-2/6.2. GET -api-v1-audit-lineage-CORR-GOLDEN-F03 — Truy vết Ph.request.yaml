@@ -1,0 +1,16 @@
+$kind: http-request
+name: 6.2. GET /api/v1/audit/lineage/CORR-GOLDEN-F03 — Truy vết Phả hệ Dữ liệu
+url: "{{base_url}}/api/v1/audit/lineage/CORR-GOLDEN-F03"
+method: GET
+headers:
+  Authorization: Bearer {{coord_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      pm.test('Lineage has full multi-role history & SHA-256 chain is valid', () => {
+          pm.expect(json.chain_proof.chain_valid).to.be.true;
+          pm.expect(json.lineage_steps.length).to.be.at.least(5);
+      });
+    language: text/javascript
+order: 2000

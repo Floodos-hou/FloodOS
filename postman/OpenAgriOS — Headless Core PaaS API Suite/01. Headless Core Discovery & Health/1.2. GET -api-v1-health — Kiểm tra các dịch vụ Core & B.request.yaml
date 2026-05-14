@@ -1,0 +1,15 @@
+$kind: http-request
+name: 1.2. GET /api/v1/health — Kiểm tra các dịch vụ Core & BPMN 2.0 XML
+url: "{{base_url}}/api/v1/health"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Core is HEALTHY & BPMN XML loaded', () => {
+          const json = pm.response.json();
+          pm.expect(json.status).to.eql('HEALTHY');
+          pm.expect(json.bpmn_definitions).to.have.property('service_request');
+          pm.expect(json.bpmn_definitions).to.have.property('incident_replan');
+      });
+    language: text/javascript
+order: 2000
