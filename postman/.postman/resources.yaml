@@ -5,6 +5,7 @@ workspace:
 localResources:
   collections:
     - ../OpenAgriOS — Headless Core PaaS API Suite
+    - ../OpenAgriOS_Tier1_Core.postman_collection.json
 
 # Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
 
