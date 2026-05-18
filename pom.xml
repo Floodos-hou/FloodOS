@@ -1,0 +1,64 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.openagrios</groupId>
+    <artifactId>openagrios-parent</artifactId>
+    <version>1.0.0-tier1</version>
+    <packaging>jar</packaging>
+
+    <name>OpenAgriOS :: DX-OS Open-Core Platform</name>
+    <description>Open-Core Platform-as-a-Service for Digital Agricultural Mechanization & Smart Rural Logistics</description>
+    <url>https://github.com/openagrios-hou/openagrios</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+
+    <build>
+        <sourceDirectory>.</sourceDirectory>
+        <plugins>
+            <!-- Compiler plugin configuring Java 21 LTS -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>21</release>
+                    <encoding>UTF-8</encoding>
+                    <includes>
+                        <include>core/**/*.java</include>
+                        <include>apps/**/*.java</include>
+                        <include>tests/**/*.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+
+            <!-- Executable JAR creation -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>org.openagrios.apps.agriops.OpenAgriOsServer</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

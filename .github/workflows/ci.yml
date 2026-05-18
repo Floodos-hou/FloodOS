@@ -1,0 +1,31 @@
+name: OpenAgriOS CI
+
+on:
+  push:
+    branches: [ "main", "tier-1-core" ]
+  pull_request:
+    branches: [ "main", "tier-1-core" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
+    - name: Compile Core, Apps, and Tests
+      run: |
+        mkdir -p target/classes
+        find core apps tests -name "*.java" > sources.txt
+        javac -encoding UTF-8 -d target/classes @sources.txt
+
+    - name: Run Integration & Acceptance Tests
+      run: |
+        java -cp target/classes org.openagrios.tests.AcceptanceTestRunner
