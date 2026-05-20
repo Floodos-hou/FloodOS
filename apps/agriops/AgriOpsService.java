@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 OpenAgriOS Contributors
+
 package org.openagrios.apps.agriops;
 
 import org.openagrios.core.dataservices.*;
@@ -80,13 +83,31 @@ public final class AgriOpsService {
             return new HttpResult(401, err);
         }
 
-        String token = KeycloakOidcEngine.issueJwt(user);
-        Map<String, Object> decoded = KeycloakOidcEngine.verifyJwt(token);
+        String token;
+        Map<String, Object> decoded;
+        String authMode;
+
+        String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
+        Optional<Map<String, Object>> liveToken = KeycloakOidcEngine.tryLiveKeycloakLogin(
+                keycloakIssuer, "agriops-web", username, password
+        );
+
+        if (liveToken.isPresent()) {
+            token = String.valueOf(liveToken.get().get("access_token"));
+            decoded = KeycloakOidcEngine.verifyJwt(token);
+            authMode = "LIVE_KEYCLOAK_OIDC";
+        } else {
+            // Standalone Dev Mock Engine: Used for zero-dependency local testing & CI
+            token = KeycloakOidcEngine.issueJwt(user);
+            decoded = KeycloakOidcEngine.verifyJwt(token);
+            authMode = "STANDALONE_DEV_MOCK";
+        }
 
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("username", user.username());
         after.put("role", user.role());
         after.put("organization_id", user.organizationId());
+        after.put("auth_mode", authMode);
 
         store.auditLedger.appendRecord(
                 user.organizationId(),
@@ -105,7 +126,12 @@ public final class AgriOpsService {
         res.put("access_token", token);
         res.put("token_type", "Bearer");
         res.put("expires_in", 86400);
-        res.put("sso_issuer", "http://localhost:8080/realms/openagrios");
+        res.put("sso_issuer", keycloakIssuer);
+        res.put("auth_mode", authMode);
+        if ("STANDALONE_DEV_MOCK".equals(authMode)) {
+            res.put("dev_notice", "Mô phỏng OIDC độc lập phục vụ kiểm thử đơn vị & CI (Không phụ thuộc container Keycloak ngoài). Khởi chạy compose.yaml để kích hoạt xác thực Keycloak thực tế.");
+            res.put("ephemeral_key_in_use", KeycloakOidcEngine.isEphemeralKeyInUse());
+        }
         res.put("user", user.toPublicMap(null));
         res.put("jwt_decoded", decoded);
         return new HttpResult(200, res);

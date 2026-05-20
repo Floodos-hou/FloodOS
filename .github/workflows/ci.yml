@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenAgriOS Contributors
+
 name: OpenAgriOS CI
 
 on:
@@ -20,7 +23,7 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Compile Core, Apps, and Tests
+    - name: Compile Core, Apps, and Tests (POSIX standard)
       run: |
         mkdir -p target/classes
         find core apps tests -name "*.java" > sources.txt
@@ -28,4 +31,4 @@ jobs:
 
     - name: Run Integration & Acceptance Tests
       run: |
-        java -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+        java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner

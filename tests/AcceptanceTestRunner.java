@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 OpenAgriOS Contributors
+
 package org.openagrios.tests;
 
 import org.openagrios.apps.agriops.OpenAgriOsServer;

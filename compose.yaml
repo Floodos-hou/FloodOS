@@ -1,11 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenAgriOS Contributors
 # ============================================================================
 # OPENAGRIOS — TẦNG 1 HEADLESS CORE PaaS STACK (100% PERMISSIVE OPEN SOURCE)
 # Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
+# Tất cả phiên bản image đều được pin cố định (không dùng :latest)
 # ============================================================================
 services:
   # 1. STRUCTURED DATA & RLS ENGINE (PostgreSQL 16 - Permissive BSD/MIT-style License)
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.2-alpine
     container_name: openagrios-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-openagrios}
@@ -24,20 +27,26 @@ services:
 
   # 2. IDENTITY / SSO / RBAC / MULTI-TENANCY (Keycloak 24 - Apache-2.0 License)
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    image: quay.io/keycloak/keycloak:24.0.5
     container_name: openagrios-keycloak
     command: ["start-dev", "--import-realm"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_dev_only}
+      KC_HEALTH_ENABLED: "true"
     ports:
       - "8080:8080"
     volumes:
       - ./infra/keycloak/openagrios-realm.json:/opt/keycloak/data/import/openagrios-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
-  # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License)
+  # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License, Pinned v3.64)
   object-storage:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.64
     container_name: openagrios-s3-storage
     command: "server -s3 -s3.port=9000 -dir=/data"
     ports:
@@ -45,10 +54,15 @@ services:
       - "8888:8888"
     volumes:
       - s3data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License)
+  # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License, Pinned v7.0.0)
   flowable:
-    image: flowable/flowable-rest:latest
+    image: flowable/flowable-rest:7.0.0
     container_name: openagrios-flowable
     environment:
       SERVER_PORT: 8081
@@ -62,7 +76,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License)
+  # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License, Pinned v3.9.0)
   apisix:
     image: apache/apisix:3.9.0-debian
     container_name: openagrios-apisix
@@ -75,7 +89,7 @@ services:
     depends_on:
       - core-api
 
-  # 6. OPENAGRIOS HEADLESS CORE API (Apache-2.0 License)
+  # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
   core-api:
     build:
       context: .
@@ -90,6 +104,8 @@ services:
       - "8000:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      object-storage:
         condition: service_healthy
 
 volumes:

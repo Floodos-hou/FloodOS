@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 OpenAgriOS Contributors
+
 package org.openagrios.apps.agriops;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -115,6 +118,8 @@ public final class OpenAgriOsServer {
 
                 Map<String, Object> manifest = new LinkedHashMap<>();
                 manifest.put("service", "OpenAgriOS Tier-1 Headless Core PaaS (Java 21 Modular Architecture)");
+                manifest.put("stage", "DEVELOPER_PREVIEW_MVP");
+                manifest.put("version", "0.1.0-alpha");
                 manifest.put("runtime", "OpenJDK 21 LTS — Virtual Threads");
                 manifest.put("architecture", "DX-OS Open-Core (core/identity, core/api-gateway, core/workflow, core/data-services, apps/agriops)");
                 manifest.put("license", "Apache-2.0");
@@ -130,7 +135,8 @@ public final class OpenAgriOsServer {
                 spec.put("openapi", "3.0.3");
                 spec.put("info", Map.of(
                         "title", "OpenAgriOS Tier-1 Headless Core PaaS API (Java 21)",
-                        "version", "2.0.0",
+                        "version", "0.1.0-alpha",
+                        "description", "Developer Preview / MVP API specification for OpenAgriOS Headless Core PaaS & AgriOps Application",
                         "license", Map.of("name", "Apache-2.0", "url", "https://www.apache.org/licenses/LICENSE-2.0")
                 ));
                 sendJson(ex, 200, spec, null);
@@ -144,7 +150,7 @@ public final class OpenAgriOsServer {
 
             if ("/api/v1/health".equals(path)) {
                 Map<String, Object> coreServices = new LinkedHashMap<>();
-                coreServices.put("identity_sso", "Keycloak OIDC / RBAC (org.openagrios.core.identity)");
+                coreServices.put("identity_sso", "Keycloak OIDC / RBAC (Dual Mode: Live Keycloak OIDC / Embedded Dev Mock)");
                 coreServices.put("api_gateway", "Apache APISIX Zero-Trust (org.openagrios.core.gateway)");
                 coreServices.put("structured_db", "PostgreSQL 16 + GiST + Row-Level Security (org.openagrios.core.dataservices)");
                 coreServices.put("unstructured_storage", "SeaweedFS S3 Object Storage (org.openagrios.core.dataservices)");
@@ -153,8 +159,10 @@ public final class OpenAgriOsServer {
 
                 Map<String, Object> health = new LinkedHashMap<>();
                 health.put("status", "HEALTHY");
+                health.put("stage", "DEVELOPER_PREVIEW_MVP");
                 health.put("platform", "OpenAgriOS DX-OS Open-Core Headless PaaS (Java 21 LTS)");
                 health.put("license", "Apache-2.0 (100% OSI Compliant)");
+                health.put("identity_ephemeral_key", KeycloakOidcEngine.isEphemeralKeyInUse());
                 health.put("core_services", coreServices);
                 health.put("bpmn_definitions", service.getStore().bpmnEngine.getDefinitions());
                 sendJson(ex, 200, health, null);

@@ -3,7 +3,8 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Java: 21 LTS](https://img.shields.io/badge/Java-21_LTS-orange.svg)](pom.xml)
 [![Architecture: DX--OS Open--Core](https://img.shields.io/badge/Architecture-DX--OS_Open--Core-purple.svg)](docs/architecture.md)
-[![Build Status: Passing](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](tests/)
+[![Status: Prototype / MVP Preview](https://img.shields.io/badge/Status-Prototype%20%2F%20MVP%20Preview-yellow.svg)](CHANGELOG.md)
+[![CI: Automated Test](https://img.shields.io/badge/CI-Passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Standard: ETSI NGSI--LD](https://img.shields.io/badge/Standard-ETSI_NGSI--LD-informational.svg)](core/data-services/NgsiLdTwinMapper.java)
 
 ---
@@ -15,13 +16,14 @@
 - **Định vị sản phẩm**: Nền tảng dịch vụ lõi nguồn mở phân tầng (**DX-OS Open-Core PaaS**) dành cho điều phối cơ giới hóa, quản trị chuỗi cung ứng dịch vụ nông nghiệp và phục hồi đứt gãy mùa vụ theo thời gian thực.
 - **Tổ chức bảo trợ**: OpenAgriOS Community.
 
-### 1.2. Trạng thái Dự án (Release Status)
-- **Phiên bản hiện tại**: `v1.0.0-tier1` (Tier-1 Headless Core PaaS & AgriOps Reference Application).
-- **Mức độ hoàn thiện**:
-  - ✅ **Tầng 1 (Core Platform PaaS)**: Hoàn thành 100% các khối Identity/RBAC, Zero-Trust Gateway, Workflow BPMN 2.0, Multi-Tenant RLS, S3 Object Storage, Bản sao số ETSI NGSI-LD và Sổ cái Kiểm toán Bất biến SHA-256.
-  - ✅ **Tầng 2 (Capability Engines - HPDI)**: Hoàn thành thuật toán phát hiện xung đột lịch trình (GiST Temporal Exclusion) và thuật toán đối sánh không gian đa tiêu chí (PostGIS Spatial Matching).
-  - ✅ **Tầng 3 (Domain Application - AgriOps)**: Hoàn thành phân hệ điều phối cơ giới hóa thu hoạch lúa đồng bằng sông Cửu Long.
-  - ✅ **Bộ kiểm thử tự động (CI/CD)**: Đạt 100% tỷ lệ pass trên bộ 9 ca tích hợp (Acceptance Tests) và Postman API Collection.
+### 1.2. Trạng thái Dự án (Release Status & Scope)
+- **Giai đoạn hiện tại**: **Prototype / MVP đang phát triển — Phiên bản thử nghiệm đầu tiên (`v0.1.0-alpha` / `Tier-1 Core Preview`)**.
+- **Phạm vi đã kiểm chứng thực tế**:
+  - ✅ **Bộ kiểm thử tích hợp đơn nguyên (In-Process Integration Test)**: Bộ chạy [`AcceptanceTestRunner.java`](tests/AcceptanceTestRunner.java) kiểm thử tự động toàn bộ 9 ca nghiệp vụ cốt lõi (OIDC Token, Phân quyền RBAC, Cách ly RLS, Xung đột lịch GiST 409, Khảo sát cứu nạn không gian, Điều phối lại BPMN, Sổ cái băm SHA-256) trên môi trường Java 21 thuần túy độc lập, không phụ thuộc hạ tầng ngoài.
+  - ✅ **Cơ chế Định danh Hai Chế độ (Dual-Mode Identity)**:
+    - *Chế độ 1 (Standalone Dev Mock)*: Tự cấp phát và xác thực OIDC JWT với khóa ngẫu nhiên tạm thời (Ephemeral 256-bit Key) sinh động lúc khởi động để phục vụ kiểm thử nhanh và chạy CI độc lập.
+    - *Chế độ 2 (Live Keycloak OIDC)*: Hỗ trợ kết nối và xác thực ủy quyền với cụm Keycloak 24.0 bên ngoài qua giao thức OIDC Password/Code Flow.
+  - 🔄 **Môi trường Phân tán Trọn gói (Containerized Stack)**: File [`compose.yaml`](compose.yaml) khai báo ngăn xếp hoàn chỉnh gồm PostgreSQL 16.2, Keycloak 24.0.5, SeaweedFS 3.64, Flowable 7.0.0 và APISIX 3.9.0 với các phiên bản image được ghim cố định (pinned tags) và thiết lập healthcheck sẵn sàng cho giai đoạn kiểm thử phân tán.
 
 ---
 
@@ -57,25 +59,28 @@ Tại các vựa lúa trọng điểm như Đồng bằng sông Cửu Long, tỷ
 Hệ thống được thiết kế theo triết lý **Hệ điều hành Chuyển đổi số (DX-OS)** phân tách thành 3 tầng độc lập hoàn toàn, không phụ thuộc chéo:
 
 ```
-OpenAgriOS Organization
-└── openagrios (Public)
-    ├── core/                         # [TẦNG 1] NỀN TẢNG LÕI DÙNG CHUNG (HEADLESS CORE PaaS)
-    │   ├── identity/                 # Keycloak OIDC, JWT HMAC-SHA256, Quản lý tài khoản & RBAC
-    │   ├── api-gateway/              # Chốt chặn Apache APISIX Zero-Trust & Rate Limit (HTTP 403)
-    │   ├── workflow/                 # Động cơ quy trình chuẩn BPMN 2.0 XML (Flowable Engine)
-    │   └── data-services/            # Dịch vụ dữ liệu: RLS, S3, SHA-256 Audit, NGSI-LD Twin, Spatial & Conflict
-    ├── apps/                         # [TẦNG 3] ỨNG DỤNG NGHIỆP VỤ CẮM-VÀ-CHẠY (DOMAIN APPLICATIONS)
-    │   └── agriops/                  # Ứng dụng Điều phối Cơ giới hóa & Phục hồi Đứt gãy Thu hoạch
-    ├── infra/                        # HẠ TẦNG KHAI BÁO (IaC & Container Definitions)
-    │   ├── apisix/                   # Cấu hình định tuyến APISIX Standalone (apisix.yaml)
-    │   ├── bpmn/                     # Sơ đồ quy trình nghiệp vụ BPMN 2.0 XML
-    │   ├── db/                       # Khởi tạo lược đồ PostgreSQL 16, btree_gist & RLS (schema.sql)
-    │   └── keycloak/                 # Khai báo Realm, Clients & Roles Keycloak (openagrios-realm.json)
-    ├── docs/                         # TÀI LIỆU KỸ THUẬT & KIẾN TRÚC HỆ THỐNG
-    ├── tests/                        # BỘ KIỂM THỬ TỰ ĐỘNG & POSTMAN COLLECTIONS
-    ├── .github/                      # CI/CD WORKFLOWS & MẪU PHẢN ÁNH LỖI (ISSUE TEMPLATES)
-    ├── compose.yaml                  # Khởi chạy toàn bộ hệ thống bằng Docker Compose
-    └── .env.example                  # Mẫu cấu hình biến môi trường an toàn
+openagrios/
+├── core/                         # [TẦNG 1] NỀN TẢNG LÕI DÙNG CHUNG (HEADLESS CORE PaaS)
+│   ├── identity/                 # Keycloak OIDC (Live Keycloak & Embedded Dev Mock), JWT, RBAC
+│   ├── api-gateway/              # Chốt chặn Apache APISIX Zero-Trust & Rate Limit (HTTP 403)
+│   ├── workflow/                 # Động cơ quy trình chuẩn BPMN 2.0 XML (Flowable Engine)
+│   └── data-services/            # Dịch vụ dữ liệu: RLS, S3, SHA-256 Audit, NGSI-LD Twin, Spatial & Conflict
+├── apps/                         # [TẦNG 3] ỨNG DỤNG NGHIỆP VỤ CẮM-VÀ-CHẠY (DOMAIN APPLICATIONS)
+│   └── agriops/                  # Ứng dụng Điều phối Cơ giới hóa & Phục hồi Đứt gãy Thu hoạch
+├── infra/                        # HẠ TẦNG KHAI BÁO (IaC & Container Definitions)
+│   ├── apisix/                   # Cấu hình định tuyến APISIX Standalone (apisix.yaml)
+│   ├── bpmn/                     # Sơ đồ quy trình nghiệp vụ BPMN 2.0 XML
+│   ├── db/                       # Khởi tạo lược đồ PostgreSQL 16, btree_gist & RLS (schema.sql)
+│   └── keycloak/                 # Khai báo Realm, Clients & Roles Keycloak (openagrios-realm.json)
+├── docs/                         # TÀI LIỆU KỸ THUẬT & KIẾN TRÚC HỆ THỐNG
+├── tests/                        # BỘ KIỂM THỬ TỰ ĐỘNG & POSTMAN COLLECTIONS
+│   ├── AcceptanceTestRunner.java # Bộ kiểm thử chấp nhận E2E 9 ca
+│   └── postman/                  # Postman collection & environment
+├── .github/                      # CI/CD WORKFLOWS & MẪU PHẢN ÁNH LỖI (ISSUE TEMPLATES)
+├── compose.yaml                  # Khởi chạy toàn bộ hệ thống bằng Docker Compose (Pinned images)
+├── Dockerfile                    # Container build chính thức cho Java 21 LTS
+├── pom.xml                       # File cấu hình build đa nền tảng Apache Maven
+└── .env.example                  # Mẫu cấu hình biến môi trường an toàn
 ```
 
 ### Không gian Năng lực Số HPDI:
@@ -90,7 +95,7 @@ OpenAgriOS Organization
 
 ### 5.1. 6 Khối Tính năng Cốt lõi
 1. **Định danh Đăng nhập Một lần (OIDC SSO) & Phân quyền Đa người thuê (RBAC & RLS)**:
-   - Tích hợp chuẩn Keycloak 24.0 cấp JWT Token.
+   - Tích hợp chuẩn Keycloak OIDC cấp phát và xác thực JWT Token.
    - Nông hộ chỉ nhìn thấy và thao tác trên thửa ruộng của mình; các HTX khác nhau được cách ly hoàn toàn ở tầng cơ sở dữ liệu.
 2. **Khám phá Dịch vụ Headless PaaS Tự động**:
    - Điểm cuối `/` và `/api/v1/health` cung cấp bản kê khai (Manifest) toàn bộ trạng thái tài nguyên, phiên bản OpenAPI 3.0 và quy trình BPMN đang nạp.
@@ -109,33 +114,55 @@ OpenAgriOS Organization
 
 ### 6.1. Ngăn xếp Công nghệ Nguồn mở Chuẩn mực
 
-| Thành phần | Công nghệ lựa chọn | Giấy phép Nguồn mở | Lý do lựa chọn |
-| :--- | :--- | :--- | :--- |
-| **Ngôn ngữ & Runtime** | Java 21 LTS (OpenJDK / Eclipse Temurin) | **EPL-2.0 / GPL-2.0+CE** | Hiệu năng cao, Virtual Threads tối ưu hàng vạn kết nối I/O, gõ tĩnh an toàn. |
-| **Quản trị Định danh (IAM)** | Red Hat Keycloak 24.0 | **Apache-2.0** | Chuẩn công nghiệp về OIDC/OAuth2, RBAC và Multi-Tenancy. |
-| **Cổng API Biên mạng** | Apache APISIX 3.9 | **Apache-2.0** | Cổng API đám mây tốc độ cao, hỗ trợ Zero-Trust và phân tán linh hoạt. |
-| **Động cơ Quy trình** | Flowable BPMN 2.0 Engine | **Apache-2.0** | Chuẩn đặc tả OMG BPMN 2.0 XML quốc tế, quản lý trạng thái tin cậy. |
-| **Lưu trữ Đối tượng Phi cấu trúc** | SeaweedFS S3 Storage | **Apache-2.0** | Tương thích S3 API, phân tán cao, thay thế hoàn toàn MinIO (vốn dùng giấy phép AGPL). |
-| **Cơ sở dữ liệu Quan hệ & Không gian** | PostgreSQL 16 + `btree_gist` + RLS | **PostgreSQL License** | Hỗ trợ ràng buộc loại trừ không gian thời gian và cách ly dữ liệu cấp hàng. |
-| **Chuẩn hóa Bản sao số** | ETSI GS CIM 009 / FIWARE NGSI-LD | **Apache-2.0** | Chuẩn châu Âu cho dữ liệu bản sao số nông nghiệp thông minh. |
+| Thành phần | Công nghệ lựa chọn | Phiên bản ghim (Pinned) | Giấy phép Nguồn mở | Lý do lựa chọn |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ngôn ngữ & Runtime** | Java 21 LTS | OpenJDK 21 / Eclipse Temurin | **EPL-2.0 / GPL-2.0+CE** | Hiệu năng cao, Virtual Threads tối ưu hàng vạn kết nối I/O, gõ tĩnh an toàn. |
+| **Quản trị Định danh (IAM)** | Red Hat Keycloak | `24.0.5` | **Apache-2.0** | Chuẩn công nghiệp về OIDC/OAuth2, RBAC và Multi-Tenancy. |
+| **Cổng API Biên mạng** | Apache APISIX | `3.9.0-debian` | **Apache-2.0** | Cổng API đám mây tốc độ cao, hỗ trợ Zero-Trust và phân tán linh hoạt. |
+| **Động cơ Quy trình** | Flowable BPMN Engine | `7.0.0` | **Apache-2.0** | Chuẩn đặc tả OMG BPMN 2.0 XML quốc tế, quản lý trạng thái tin cậy. |
+| **Lưu trữ Đối tượng Phi cấu trúc** | SeaweedFS S3 Storage | `3.64` | **Apache-2.0** | Tương thích S3 API, phân tán cao, thay thế hoàn toàn MinIO (vốn dùng giấy phép AGPL). |
+| **Cơ sở dữ liệu Quan hệ & Không gian** | PostgreSQL + GiST + RLS | `16.2-alpine` | **PostgreSQL License** | Hỗ trợ ràng buộc loại trừ không gian thời gian và cách ly dữ liệu cấp hàng. |
+| **Chuẩn hóa Bản sao số** | ETSI GS CIM 009 / NGSI-LD | `v1.6` | **Apache-2.0** | Chuẩn châu Âu cho dữ liệu bản sao số nông nghiệp thông minh. |
 
 ---
 
-## 7. Cài đặt & Khởi chạy từ Mã nguồn
+## 7. Cài đặt & Khởi chạy từ Mã nguồn (Đa Nền Tảng)
 
-### 7.1. Chạy Trực tiếp với Java 21 LTS (Không cần cài đặt thêm)
-Không cần cài đặt các công cụ build phức tạp, mã nguồn được thiết kế tự biên dịch trực tiếp thông qua JDK 21 chuẩn:
+OpenAgriOS hỗ trợ xây dựng nhất quán trên cả Linux, macOS và Windows thông qua các công cụ chuẩn.
 
+### 7.1. Cách 1: Sử dụng Apache Maven (Khuyến nghị cho mọi hệ điều hành)
+```bash
+# Biên dịch dự án
+mvn clean compile
+
+# Chạy bộ kiểm thử tự động
+mvn test
+
+# Khởi chạy máy chủ API
+mvn exec:java -Dexec.mainClass="org.openagrios.apps.agriops.OpenAgriOsServer"
+```
+
+### 7.2. Cách 2: Sử dụng Trình biên dịch Java 21 Thuần túy
+
+**Trên Linux / macOS (POSIX Shell):**
+```bash
+# 1. Tạo thư mục output và biên dịch
+mkdir -p target/classes
+find core apps tests -name "*.java" > sources.txt
+javac -encoding UTF-8 -d target/classes @sources.txt
+
+# 2. Khởi chạy máy chủ OpenAgriOS
+java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
+```
+
+**Trên Windows (PowerShell):**
 ```powershell
-# Bước 1: Di chuyển vào thư mục dự án
-cd D:\OpenAgriOS
-
-# Bước 2: Tạo thư mục đích và biên dịch toàn bộ các phân hệ
+# 1. Tạo thư mục output và biên dịch
 New-Item -ItemType Directory -Force target/classes
 javac -encoding UTF-8 -d target/classes (Get-ChildItem -Recurse core/*.java, apps/*.java, tests/*.java).FullName
 
-# Bước 3: Khởi động máy chủ OpenAgriOS Headless Core PaaS
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
+# 2. Khởi chạy máy chủ OpenAgriOS
+java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
 ```
 
 Máy chủ sẽ khởi chạy tại cổng `8000`:
@@ -143,8 +170,8 @@ Máy chủ sẽ khởi chạy tại cổng `8000`:
 - **Health Check**: `http://localhost:8000/api/v1/health`
 - **OpenAPI 3.0 Spec**: `http://localhost:8000/openapi.json`
 
-### 7.2. Khởi chạy với Docker Compose
-Để khởi chạy trọn gói ngăn xếp hạ tầng bao gồm PostgreSQL, Keycloak, SeaweedFS, Flowable và APISIX:
+### 7.3. Cách 3: Khởi chạy Cụm Hạ tầng qua Docker Compose
+Sử dụng duy nhất tệp [`compose.yaml`](compose.yaml) để khởi động toàn bộ cụm dịch vụ:
 
 ```bash
 docker compose up -d
@@ -155,10 +182,16 @@ docker compose up -d
 ## 8. Kiểm thử Tự động, Cấu hình & Dữ liệu Mẫu
 
 ### 8.1. Chạy Bộ Kiểm Thử Chấp Nhận Tự Động (Acceptance Test Suite)
-OpenAgriOS tích hợp sẵn bộ kiểm thử E2E tự động xác thực toàn bộ các ràng buộc nghiệp vụ và bảo mật:
+OpenAgriOS tích hợp sẵn bộ kiểm thử E2E tự động xác thực toàn bộ các ràng buộc nghiệp vụ và bảo mật trong môi trường độc lập:
 
+**Trên Linux / macOS:**
 ```bash
 java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+```
+
+**Trên Windows PowerShell:**
+```powershell
+java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.tests.AcceptanceTestRunner
 ```
 
 **9/9 Ca Kiểm thử Đạt Tiêu chuẩn Tự động (100% Pass Rate)**:
@@ -196,6 +229,7 @@ Import vào Postman để kiểm thử tuần tự 18 API có sẵn script tự 
 Dự án được phân phối chính thức theo điều khoản của **[Apache License 2.0](LICENSE)**.
 
 ### 9.2. Tuân thủ Tiêu chuẩn Bản quyền Phần mềm Nguồn mở
+- **SPDX License Headers**: Toàn bộ các tệp mã nguồn Java, SQL, BPMN XML, YAML cấu hình và Dockerfile đều được gắn định danh bản quyền chuẩn `SPDX-License-Identifier: Apache-2.0`.
 - **100% Permissive Open-Core**: Toàn bộ mã nguồn do nhóm phát triển và các thư viện bên thứ ba tích hợp đều thuộc các giấy phép nguồn mở được công nhận bởi OSI (**Apache-2.0**, **PostgreSQL License**, **EPL-2.0**).
 - **Loại trừ Copyleft Độc quyền**: Dự án nói không với các giấy phép lây nhiễm (Viral Copyleft) như AGPL-3.0 trong các thành phần phân phối lõi, bảo đảm các tổ chức và doanh nghiệp có thể yên tâm tích hợp, thương mại hóa dịch vụ trên nền tảng mà không lo ngại rủi ro pháp lý. Chi tiết xem tại [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
