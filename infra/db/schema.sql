@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 OpenAgriOS Contributors
+
 -- ============================================================================
 -- OPENAGRIOS PLATFORM — MULTI-TENANT DATABASE SCHEMA
 -- PostgreSQL 16 + btree_gist + GeoJSON JSONB + Row-Level Security (RLS)

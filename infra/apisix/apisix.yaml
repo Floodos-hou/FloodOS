@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenAgriOS Contributors
+
 # ============================================================================
 # APACHE APISIX — ZERO-TRUST API GATEWAY CONFIGURATION (Apache-2.0 License)
 # Thực thi biên mạng Zero-Trust, kiểm tra JWT OIDC Keycloak, Rate Limit & CORS
