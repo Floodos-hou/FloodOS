@@ -19,11 +19,11 @@
 ### 1.2. Trạng thái Dự án (Release Status & Scope)
 - **Giai đoạn hiện tại**: **Prototype / MVP đang phát triển — Phiên bản thử nghiệm đầu tiên (`v0.1.0-alpha` / `Tier-1 Core Preview`)**.
 - **Phạm vi đã kiểm chứng thực tế**:
-  - ✅ **Bộ kiểm thử tích hợp đơn nguyên (In-Process Integration Test)**: Bộ chạy [`AcceptanceTestRunner.java`](tests/AcceptanceTestRunner.java) kiểm thử tự động toàn bộ 9 ca nghiệp vụ cốt lõi (OIDC Token, Phân quyền RBAC, Cách ly RLS, Xung đột lịch GiST 409, Khảo sát cứu nạn không gian, Điều phối lại BPMN, Sổ cái băm SHA-256) trên môi trường Java 21 thuần túy độc lập, không phụ thuộc hạ tầng ngoài.
-  - ✅ **Cơ chế Định danh Hai Chế độ (Dual-Mode Identity)**:
-    - *Chế độ 1 (Standalone Dev Mock)*: Tự cấp phát và xác thực OIDC JWT với khóa ngẫu nhiên tạm thời (Ephemeral 256-bit Key) sinh động lúc khởi động để phục vụ kiểm thử nhanh và chạy CI độc lập.
-    - *Chế độ 2 (Live Keycloak OIDC)*: Hỗ trợ kết nối và xác thực ủy quyền với cụm Keycloak 24.0 bên ngoài qua giao thức OIDC Password/Code Flow.
-  - 🔄 **Môi trường Phân tán Trọn gói (Containerized Stack)**: File [`compose.yaml`](compose.yaml) khai báo ngăn xếp hoàn chỉnh gồm PostgreSQL 16.2, Keycloak 24.0.5, SeaweedFS 3.64, Flowable 7.0.0 và APISIX 3.9.0 với các phiên bản image được ghim cố định (pinned tags) và thiết lập healthcheck sẵn sàng cho giai đoạn kiểm thử phân tán.
+  - ✅ **Bộ kiểm thử tích hợp đơn nguyên (In-Process Integration Test)**: Bộ chạy [`AcceptanceTestRunner.java`](tests/AcceptanceTestRunner.java) kiểm thử tự động toàn bộ 10 ca nghiệp vụ cốt lõi (OIDC Token, Token Giả mạo bị từ chối 401, Phân quyền RBAC 403, Cách ly RLS, Xung đột lịch GiST 409, Khảo sát cứu nạn không gian, Điều phối lại BPMN, Sổ cái băm SHA-256) trên môi trường Java 21 thuần túy độc lập, không phụ thuộc hạ tầng ngoài.
+  - ✅ **Cơ chế Định danh Hai Chế độ Phân tách Rõ Ràng (Strict Dual-Mode Identity)**:
+    - *Chế độ Mặc định (DEV_MOCK_STANDALONE)*: Tự cấp phát và xác thực OIDC JWT với khóa ngẫu nhiên tạm thời (Ephemeral 256-bit Key) sinh động lúc khởi động để phục vụ kiểm thử nhanh và chạy CI độc lập.
+    - *Chế độ Sản xuất (KEYCLOAK_PRODUCTION)*: Kích hoạt khi cấu hình `OPENAGRIOS_AUTH_MODE=KEYCLOAK`, yêu cầu kết nối bắt buộc đến máy chủ Keycloak OIDC 24.0 bên ngoài qua giao thức OIDC Password/Code Flow và xác thực Token Introspection RFC 7662. Tuyệt đối không tự ý fallback sang mock khi gặp lỗi trong chế độ sản xuất.
+  - 🔄 **Môi trường Phân tán Trọn gói (Containerized Stack)**: File duy nhất [`compose.yaml`](compose.yaml) khai báo ngăn xếp hoàn chỉnh gồm PostgreSQL 16.2, Keycloak 24.0.5, SeaweedFS 3.64, Flowable 7.0.0 và APISIX 3.9.0 với các phiên bản image được ghim cố định (pinned tags) và thiết lập healthcheck sẵn sàng cho giai đoạn kiểm thử phân tán.
 
 ---
 
@@ -74,10 +74,10 @@ openagrios/
 │   └── keycloak/                 # Khai báo Realm, Clients & Roles Keycloak (openagrios-realm.json)
 ├── docs/                         # TÀI LIỆU KỸ THUẬT & KIẾN TRÚC HỆ THỐNG
 ├── tests/                        # BỘ KIỂM THỬ TỰ ĐỘNG & POSTMAN COLLECTIONS
-│   ├── AcceptanceTestRunner.java # Bộ kiểm thử chấp nhận E2E 9 ca
+│   ├── AcceptanceTestRunner.java # Bộ kiểm thử chấp nhận E2E 10 ca
 │   └── postman/                  # Postman collection & environment
 ├── .github/                      # CI/CD WORKFLOWS & MẪU PHẢN ÁNH LỖI (ISSUE TEMPLATES)
-├── compose.yaml                  # Khởi chạy toàn bộ hệ thống bằng Docker Compose (Pinned images)
+├── compose.yaml                  # Khởi chạy duy nhất toàn bộ hệ thống bằng Docker Compose (Pinned images)
 ├── Dockerfile                    # Container build chính thức cho Java 21 LTS
 ├── pom.xml                       # File cấu hình build đa nền tảng Apache Maven
 └── .env.example                  # Mẫu cấu hình biến môi trường an toàn
@@ -95,7 +95,7 @@ openagrios/
 
 ### 5.1. 6 Khối Tính năng Cốt lõi
 1. **Định danh Đăng nhập Một lần (OIDC SSO) & Phân quyền Đa người thuê (RBAC & RLS)**:
-   - Tích hợp chuẩn Keycloak OIDC cấp phát và xác thực JWT Token.
+   - Tích hợp chuẩn Keycloak OIDC cấp phát và xác thực JWT Token với hỗ trợ Authorization Code + PKCE.
    - Nông hộ chỉ nhìn thấy và thao tác trên thửa ruộng của mình; các HTX khác nhau được cách ly hoàn toàn ở tầng cơ sở dữ liệu.
 2. **Khám phá Dịch vụ Headless PaaS Tự động**:
    - Điểm cuối `/` và `/api/v1/health` cung cấp bản kê khai (Manifest) toàn bộ trạng thái tài nguyên, phiên bản OpenAPI 3.0 và quy trình BPMN đang nạp.
@@ -170,11 +170,11 @@ Máy chủ sẽ khởi chạy tại cổng `8000`:
 - **Health Check**: `http://localhost:8000/api/v1/health`
 - **OpenAPI 3.0 Spec**: `http://localhost:8000/openapi.json`
 
-### 7.3. Cách 3: Khởi chạy Cụm Hạ tầng qua Docker Compose
-Sử dụng duy nhất tệp [`compose.yaml`](compose.yaml) để khởi động toàn bộ cụm dịch vụ:
+### 7.3. Cách 3: Khởi chạy Cụm Hạ tầng qua Docker Compose (Chính Thức)
+Sử dụng duy nhất tệp [`compose.yaml`](compose.yaml) để khởi động toàn bộ 6 dịch vụ hạ tầng gồm PostgreSQL, Keycloak, SeaweedFS, Flowable và APISIX:
 
 ```bash
-docker compose up -d
+docker compose -f compose.yaml up -d
 ```
 
 ---
@@ -184,7 +184,7 @@ docker compose up -d
 ### 8.1. Chạy Bộ Kiểm Thử Chấp Nhận Tự Động (Acceptance Test Suite)
 OpenAgriOS tích hợp sẵn bộ kiểm thử E2E tự động xác thực toàn bộ các ràng buộc nghiệp vụ và bảo mật trong môi trường độc lập:
 
-**Trên Linux / macOS:**
+**Trên Linux / macOS (POSIX):**
 ```bash
 java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
 ```
@@ -194,18 +194,24 @@ java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTes
 java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.tests.AcceptanceTestRunner
 ```
 
-**9/9 Ca Kiểm thử Đạt Tiêu chuẩn Tự động (100% Pass Rate)**:
+**10/10 Ca Kiểm thử Đạt Tiêu chuẩn Tự động (100% Pass Rate)**:
 1. `[PASS]` Core Platform Health & BPMN 2.0 XML Definitions verified.
 2. `[PASS]` OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.
-3. `[PASS]` Multi-Tenant RLS & Field-Level Visibility verified (3 thửa sở hữu nhìn rõ, 7 thửa của hộ khác bị làm mờ).
-4. `[PASS]` Zero-Trust RBAC Guard verified (`HTTP 403 Forbidden` khi Nông hộ tự ý điều phối máy).
-5. `[PASS]` Time-Window Conflict Engine verified (`HTTP 409 Conflict: MACHINE_TIME_OVERLAP`).
-6. `[PASS]` Unfeasible replacement fallback state verified (Xử lý khi không có máy khả dụng).
-7. `[PASS]` Incident reported + S3 ETag verification -> Spatial Engine đề xuất máy giải cứu M02.
-8. `[PASS]` BPMN Replan approved -> Ca gặt ASG-102 được thay thế thành công bằng ASG-102-R1.
-9. `[PASS]` Immutable SHA-256 Audit Chain & Data Lineage verified (Kiểm chứng toán học 5 khối băm liên hoàn).
+3. `[PASS]` Zero-Trust Token Guard: Rejected tampered signature and missing token (HTTP 401).
+4. `[PASS]` Multi-Tenant RLS & Field-Level Visibility verified (3 thửa sở hữu nhìn rõ, 7 thửa của hộ khác bị làm mờ).
+5. `[PASS]` Zero-Trust RBAC Guard verified (`HTTP 403 Forbidden` khi Nông hộ tự ý điều phối máy).
+6. `[PASS]` Time-Window Conflict Engine verified (`HTTP 409 Conflict: MACHINE_TIME_OVERLAP`).
+7. `[PASS]` Unfeasible replacement fallback state verified (Xử lý khi không có máy khả dụng).
+8. `[PASS]` Incident reported + S3 ETag verification -> Spatial Engine đề xuất máy giải cứu M02.
+9. `[PASS]` BPMN Replan approved -> Ca gặt ASG-102 được thay thế thành công bằng ASG-102-R1.
+10. `[PASS]` Immutable SHA-256 Audit Chain & Data Lineage verified (Kiểm chứng toán học 5 khối băm liên hoàn).
 
-### 8.2. Danh sách Tài khoản Kiểm Thử (Mật khẩu: `123456`)
+### 8.2. Danh sách Tài khoản Kiểm Thử (Mật khẩu Demo: `123456`)
+
+> [!CAUTION]
+> **CẢNH BÁO AN NINH BẮT BUỘC (SECURITY NOTICE):**
+> Toàn bộ danh sách tài khoản và mật khẩu mặc định (`123456`) dưới đây được thiết kế **DUY NHẤT cho môi trường thử nghiệm cục bộ (Local Development & CI Acceptance Testing)**.
+> **TUYỆT ĐỐI KHÔNG SỬ DỤNG** các tài khoản và mật khẩu này khi triển khai hệ thống lên môi trường mạng công khai (Production). Khi đưa vào vận hành thực tế, biến môi trường `OPENAGRIOS_AUTH_MODE=KEYCLOAK` phải được kích hoạt để toàn bộ tài khoản được quản trị tập trung thông qua bảng điều khiển Keycloak Realm Admin và cấp phát qua giao thức OIDC Authorization Code + PKCE.
 
 | Tài khoản (`username`) | Vai trò (`Role`) | Tổ chức (`Tenant`) | Chức năng nghiệp vụ kiểm thử |
 | :--- | :--- | :--- | :--- |

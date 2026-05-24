@@ -162,6 +162,7 @@ public final class OpenAgriOsServer {
                 health.put("stage", "DEVELOPER_PREVIEW_MVP");
                 health.put("platform", "OpenAgriOS DX-OS Open-Core Headless PaaS (Java 21 LTS)");
                 health.put("license", "Apache-2.0 (100% OSI Compliant)");
+                health.put("identity_auth_mode", KeycloakOidcEngine.getActiveAuthMode().name());
                 health.put("identity_ephemeral_key", KeycloakOidcEngine.isEphemeralKeyInUse());
                 health.put("core_services", coreServices);
                 health.put("bpmn_definitions", service.getStore().bpmnEngine.getDefinitions());

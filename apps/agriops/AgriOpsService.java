@@ -128,7 +128,7 @@ public final class AgriOpsService {
         res.put("expires_in", 86400);
         res.put("sso_issuer", keycloakIssuer);
         res.put("auth_mode", authMode);
-        if ("STANDALONE_DEV_MOCK".equals(authMode)) {
+        if ("DEV_MOCK_STANDALONE".equals(authMode)) {
             res.put("dev_notice", "Mô phỏng OIDC độc lập phục vụ kiểm thử đơn vị & CI (Không phụ thuộc container Keycloak ngoài). Khởi chạy compose.yaml để kích hoạt xác thực Keycloak thực tế.");
             res.put("ephemeral_key_in_use", KeycloakOidcEngine.isEphemeralKeyInUse());
         }

@@ -79,6 +79,14 @@ public final class AcceptanceTestRunner {
             String tSt = String.valueOf(stLogin.body().get("access_token"));
             System.out.println("[PASS] OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.");
 
+            // 2.1. Zero-Trust Gateway rejects invalid, forged, or missing JWT tokens (HTTP 401)
+            ApiRes forgedTokenRes = apiReq("GET", "/api/v1/state", tFarmer + "forged_tampered_signature", null);
+            check(forgedTokenRes.status() == 401 && "UNAUTHORIZED".equals(forgedTokenRes.body().get("error")), "Tampered token was not rejected with 401");
+
+            ApiRes noTokenRes = apiReq("GET", "/api/v1/state", null, null);
+            check(noTokenRes.status() == 401 && "UNAUTHORIZED".equals(noTokenRes.body().get("error")), "Missing token was not rejected with 401");
+            System.out.println("[PASS] Zero-Trust Token Guard: Rejected tampered signature and missing token (HTTP 401).");
+
             // 3. Multi-Tenancy RLS & Role-Based Field Visibility
             ApiRes stFarmer = apiReq("GET", "/api/v1/state", tFarmer, null);
             ApiRes stCoord2 = apiReq("GET", "/api/v1/state", tSt, null);
