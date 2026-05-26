@@ -74,16 +74,36 @@ public final class KeycloakOidcEngine {
         }
     }
 
+    private static volatile AuthMode overriddenAuthMode = null;
+
+    public static void setAuthModeForTesting(AuthMode mode) {
+        overriddenAuthMode = mode;
+    }
+
+    public static void resetAuthModeForTesting() {
+        overriddenAuthMode = null;
+    }
+
     /**
      * Resolves the configured active identity mode.
+     * Throws IllegalStateException if OPENAGRIOS_AUTH_MODE has an invalid/unrecognized value.
      */
     public static AuthMode getActiveAuthMode() {
-        String mode = System.getenv().getOrDefault("OPENAGRIOS_AUTH_MODE", "DEV_MOCK_STANDALONE")
-                .trim().toUpperCase(Locale.ROOT);
-        if ("KEYCLOAK".equals(mode) || "PRODUCTION".equals(mode) || "KEYCLOAK_PRODUCTION".equals(mode)) {
-            return AuthMode.KEYCLOAK_PRODUCTION;
+        if (overriddenAuthMode != null) {
+            return overriddenAuthMode;
         }
-        return AuthMode.DEV_MOCK_STANDALONE;
+        String raw = System.getenv("OPENAGRIOS_AUTH_MODE");
+        if (raw == null || raw.isBlank()) {
+            return AuthMode.DEV_MOCK_STANDALONE;
+        }
+        String mode = raw.trim().toUpperCase(Locale.ROOT);
+        return switch (mode) {
+            case "KEYCLOAK", "PRODUCTION", "KEYCLOAK_PRODUCTION" -> AuthMode.KEYCLOAK_PRODUCTION;
+            case "MOCK", "DEV", "DEV_MOCK", "DEV_MOCK_STANDALONE" -> AuthMode.DEV_MOCK_STANDALONE;
+            default -> throw new IllegalStateException(
+                    "Lỗi cấu hình OPENAGRIOS_AUTH_MODE không hợp lệ: '" + raw +
+                    "'. Các giá trị hợp lệ: KEYCLOAK_PRODUCTION (hoặc KEYCLOAK) hoặc DEV_MOCK_STANDALONE (hoặc MOCK). Hệ thống từ chối khởi động khi cấu hình sai.");
+        };
     }
 
     public static boolean isEphemeralKeyInUse() {
@@ -280,24 +300,31 @@ public final class KeycloakOidcEngine {
             throw new IllegalArgumentException("JWT subject claim (sub) is missing or empty");
         }
 
-        // 6. Verify Signature depending on mode
-        if ("HS256".equals(alg)) {
+        // 6. Verify Signature strictly according to Active Auth Mode
+        AuthMode activeMode = getActiveAuthMode();
+        if (activeMode == AuthMode.DEV_MOCK_STANDALONE) {
+            // In standalone/mock mode, ONLY accept HS256 tokens issued by our ephemeral engine.
+            // Explicitly reject RS256 because standalone mock mode has no valid RSA verification mechanism.
+            if (!"HS256".equals(alg)) {
+                throw new SecurityException("Từ chối JWT: Chế độ DEV_MOCK_STANDALONE chỉ chấp nhận token 'HS256' do mock engine phát hành. Thuật toán '" + alg + "' (bao gồm RS256) bị từ chối vì không có cơ chế xác minh khóa công khai RSA trong môi trường mock độc lập.");
+            }
             String signingInput = parts[0] + "." + parts[1];
             byte[] expectedSig = hmacSha256(signingInput.getBytes(StandardCharsets.US_ASCII));
             byte[] actualSig = b64UrlDecode(parts[2]);
             if (!MessageDigest.isEqual(expectedSig, actualSig)) {
-                throw new IllegalArgumentException("Invalid HMAC-SHA256 signature in JWT");
+                throw new SecurityException("Invalid HMAC-SHA256 signature in JWT (chữ ký không khớp hoặc token bị can thiệp)");
             }
-        } else if ("RS256".equals(alg)) {
-            // In Keycloak production mode, verify via live token introspection endpoint
-            if (getActiveAuthMode() == AuthMode.KEYCLOAK_PRODUCTION) {
-                boolean active = introspectLiveKeycloakToken(normExpectedIss, expectedAudience, null, token);
-                if (!active) {
-                    throw new IllegalArgumentException("Keycloak Token Introspection rejected token (active=false or revoked)");
-                }
+        } else if (activeMode == AuthMode.KEYCLOAK_PRODUCTION) {
+            // In Keycloak production mode, reject HS256 mock tokens and require valid RS256 via live RFC 7662 introspection.
+            if (!"RS256".equals(alg)) {
+                throw new SecurityException("Từ chối JWT: Chế độ KEYCLOAK_PRODUCTION từ chối thuật toán '" + alg + "' (HS256 mock bị cấm). Bắt buộc token OIDC chuẩn RS256 do máy chủ Keycloak phát hành.");
+            }
+            boolean active = introspectLiveKeycloakToken(normExpectedIss, expectedAudience, null, token);
+            if (!active) {
+                throw new SecurityException("Keycloak Token Introspection rejected token (active=false, revoked, hoặc không kết nối được máy chủ Keycloak RFC 7662)");
             }
         } else {
-            throw new IllegalArgumentException("Unsupported JWT algorithm: " + alg);
+            throw new IllegalStateException("Trạng thái AuthMode không hợp lệ: " + activeMode);
         }
 
         return payload;
@@ -428,5 +455,28 @@ public final class KeycloakOidcEngine {
                 + "&code_challenge=" + URLEncoder.encode(codeChallenge, StandardCharsets.UTF_8)
                 + "&code_challenge_method=S256"
                 + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
+    }
+
+    public static String createForgedRs256Token(String sub, String role, String orgId) {
+        Map<String, Object> header = new LinkedHashMap<>();
+        header.put("alg", "RS256");
+        header.put("typ", "JWT");
+
+        long now = Instant.now().getEpochSecond();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("iss", DEFAULT_ISSUER);
+        payload.put("sub", sub);
+        payload.put("aud", DEFAULT_AUDIENCE);
+        payload.put("iat", now);
+        payload.put("exp", now + 3600);
+        payload.put("nbf", now - 5);
+        payload.put("preferred_username", sub);
+        payload.put("organization_id", orgId);
+        payload.put("realm_access", Map.of("roles", List.of(role)));
+
+        String hB64 = b64UrlEncode(JsonCodec.toJson(header).getBytes(StandardCharsets.UTF_8));
+        String pB64 = b64UrlEncode(JsonCodec.toJson(payload).getBytes(StandardCharsets.UTF_8));
+        String fakeSig = b64UrlEncode("forged_unverified_rsa_signature_payload".getBytes(StandardCharsets.UTF_8));
+        return hB64 + "." + pB64 + "." + fakeSig;
     }
 }

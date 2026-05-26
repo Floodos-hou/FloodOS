@@ -36,12 +36,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - APISIX `3.9.0-debian`.
   - `infra/db/schema.sql`: Declarative PostgreSQL schema with `btree_gist`, RLS policies, and NGSI-LD entity structures.
   - `infra/keycloak/openagrios-realm.json`: Declarative Keycloak realm export with multi-tenant roles and pre-seeded accounts.
-  - `infra/apisix/apisix.yaml`: Apache APISIX route and security definitions.
+  - `infra/apisix/apisix.yaml`: Apache APISIX route and security definitions including `openid-connect` plugin.
   - `infra/bpmn/`: Production BPMN 2.0 XML diagrams for service request lifecycle and incident replanning.
 - **Compliance & Licensing**:
   - Added `SPDX-License-Identifier: Apache-2.0` headers to all Java, SQL, XML, Dockerfile, and YAML workflow files.
   - Comprehensive `THIRD_PARTY_NOTICES.md` documenting 100% permissive open-source compatibility.
 - **Testing & Verification**:
-  - Automated integration test suite `AcceptanceTestRunner` covering 9 operational scenarios with 100% pass rate.
+  - Automated integration test suite `AcceptanceTestRunner` covering 10 operational scenarios with 100% pass rate.
   - Postman Collection v2.1 with comprehensive assertions and environmental variables (`tests/postman/`).
   - Cross-platform build instructions supporting Maven, Linux/macOS POSIX shell, and Windows PowerShell.
+
+### Security
+- **Strict OIDC RS256 Verification & Fail-Fast Protection**:
+  - Explicitly reject RS256 tokens in `DEV_MOCK_STANDALONE` mode to prevent unverified RSA signature bypass.
+  - Enforce `KEYCLOAK_PRODUCTION` strict failure mode: returns HTTP 401 `KEYCLOAK_LOGIN_FAILED` immediately when Keycloak is offline; strictly prohibits falling back to mock tokens.
+  - Fail-fast configuration check: Invalid `OPENAGRIOS_AUTH_MODE` environment variable values throw an immediate `IllegalStateException`.
+  - Added test cases in `AcceptanceTestRunner` Suite 4 verifying rejection of forged RS256 tokens and mock fallback prevention.
+
+### Infrastructure Integrations
+- **Dual-Mode Container & In-Process Adapters**:
+  - `SeaweedS3StorageService`: Real HTTP REST client PUT/GET against SeaweedFS S3 endpoint (:8333) with fallback to in-memory cryptographic MD5 ETag storage.
+  - `BpmnWorkflowEngine`: Live Flowable REST Engine v7.0.0 integration via REST API with in-process W3C DOM BPMN 2.0 XML parser fallback.
+  - `APISIX`: Configured `openid-connect` plugin in `infra/apisix/apisix.yaml` for Keycloak OIDC bearer token authentication at gateway boundary.

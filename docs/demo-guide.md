@@ -50,11 +50,12 @@ RUNNING OPENAGRIOS INTEGRATION TEST SUITE (JAVA 21)
 ============================================================================
 [PASS] Core Platform Health & BPMN 2.0 XML Definitions verified.
 [PASS] OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.
+[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, and verified Keycloak production failure without mock fallback (HTTP 401).
 [PASS] Multi-Tenant RLS & Field-Level Visibility verified: [F01, F03, F07] unmasked, 7 masked.
 [PASS] Zero-Trust RBAC Guard verified (HTTP 403 Forbidden on unauthorized dispatch).
 [PASS] Time-Window Conflict Engine verified (HTTP 409: MACHINE_TIME_OVERLAP).
 [PASS] Unfeasible replacement fallback state verified.
-[PASS] Incident reported + S3 ETag (57a5b08f) -> Rescue candidate M02 (93.8 pts, 1.37 km).
+[PASS] Incident reported + S3 ETag (befbecf3) -> Rescue candidate M02 (93.8 pts, 1.37 km).
 [PASS] BPMN Replan approved -> Shift ASG-102 superseded by ASG-102-R1.
 [PASS] Immutable SHA-256 Audit Chain & Data Lineage verified (5 linked records).
 ============================================================================

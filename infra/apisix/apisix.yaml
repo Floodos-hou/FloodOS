@@ -6,8 +6,35 @@
 # Thực thi biên mạng Zero-Trust, kiểm tra JWT OIDC Keycloak, Rate Limit & CORS
 # ============================================================================
 routes:
-  - id: openagrios-core-api-route
-    name: "OpenAgriOS Headless Core API Gateway Route"
+  # 1. Public Discovery, Health, and Login Route (No Token Required)
+  - id: openagrios-public-discovery-route
+    name: "OpenAgriOS Public Manifest & Login Route"
+    uris:
+      - "/"
+      - "/api/v1"
+      - "/api/v1/health"
+      - "/api/v1/auth/accounts"
+      - "/api/v1/auth/login"
+    methods: ["GET", "POST", "OPTIONS"]
+    upstream:
+      type: roundrobin
+      nodes:
+        "core-api:8000": 1
+    plugins:
+      cors:
+        allow_origins: "*"
+        allow_methods: "GET,POST,OPTIONS"
+        allow_headers: "Authorization,Content-Type"
+      limit-req:
+        rate: 100
+        burst: 50
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+
+  # 2. Zero-Trust Protected Core API Route (Enforced via Keycloak OIDC Token Introspection)
+  - id: openagrios-protected-core-route
+    name: "OpenAgriOS Zero-Trust Protected Core API Route"
     uris:
       - "/api/v1/*"
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -26,6 +53,13 @@ routes:
         rejected_code: 429
         key_type: var
         key: remote_addr
+      openid-connect:
+        client_id: "agriops-web"
+        client_secret: "agriops-client-secret"
+        discovery: "http://keycloak:8080/realms/openagrios/.well-known/openid-configuration"
+        bearer_only: true
+        realm: "openagrios"
+        introspection_endpoint: "http://keycloak:8080/realms/openagrios/protocol/openid-connect/token/introspect"
       proxy-rewrite:
         headers:
           set:

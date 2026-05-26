@@ -3,13 +3,21 @@
 
 package org.openagrios.core.dataservices;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.*;
 
 /**
  * SeaweedFS S3-Compatible Unstructured Object Storage Service.
- * Manages object metadata, storage keys, and MD5-based ETag cryptographic checksums.
+ * Supports dual-mode execution:
+ * 1. SEAWEEDFS_S3_LIVE: Performs live HTTP PUT/GET operations against SeaweedFS S3 endpoint (:8333).
+ * 2. EMBEDDED_DEV_MOCK: Standalone in-memory metadata store with cryptographic MD5 ETag computation
+ *    when running unit/integration tests without external containers.
  */
 public final class SeaweedS3StorageService {
 
@@ -23,7 +31,9 @@ public final class SeaweedS3StorageService {
             String etag,
             String uploadedBy,
             String dataUrl,
-            String createdAt
+            String createdAt,
+            String storageBackend,
+            boolean liveS3Connected
     ) {
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -37,11 +47,30 @@ public final class SeaweedS3StorageService {
             m.put("uploaded_by", uploadedBy);
             m.put("data_url", dataUrl);
             m.put("created_at", createdAt);
+            m.put("storage_backend", storageBackend);
+            m.put("live_s3_connected", liveS3Connected);
             return m;
         }
     }
 
+    private final String s3Endpoint;
+    private final HttpClient httpClient;
     private final Map<String, S3ObjectMeta> objects = new LinkedHashMap<>();
+
+    public SeaweedS3StorageService() {
+        this(System.getenv().getOrDefault("S3_ENDPOINT", "http://localhost:8333"));
+    }
+
+    public SeaweedS3StorageService(String s3Endpoint) {
+        this.s3Endpoint = s3Endpoint != null ? s3Endpoint.replaceAll("/+$", "") : "http://localhost:8333";
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(1200))
+                .build();
+    }
+
+    public String getS3Endpoint() {
+        return s3Endpoint;
+    }
 
     public synchronized void clear() {
         objects.clear();
@@ -76,8 +105,41 @@ public final class SeaweedS3StorageService {
         String objKey = String.format("s3://%s/%s/%s/%s/%s",
                 bucket, orgId.toLowerCase(Locale.ROOT), folder, recordId, filename);
         String etag = md5Hex(objKey + "|" + timestamp);
+        String backend = "EMBEDDED_DEV_MOCK";
+        boolean liveConnected = false;
+
+        // Attempt live HTTP PUT to SeaweedFS S3 REST API endpoint
+        try {
+            String pathUrl = s3Endpoint + "/" + bucket + "/" + orgId.toLowerCase(Locale.ROOT) + "/" + folder + "/" + recordId + "/" + filename;
+            byte[] bodyBytes = (dataUrl != null && !dataUrl.isBlank())
+                    ? dataUrl.getBytes(StandardCharsets.UTF_8)
+                    : ("OpenAgriOS S3 Evidence Record: " + filename + " | Org: " + orgId + " | TS: " + timestamp).getBytes(StandardCharsets.UTF_8);
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(pathUrl))
+                    .timeout(Duration.ofMillis(1200))
+                    .header("Content-Type", mimeType != null ? mimeType : "application/octet-stream")
+                    .PUT(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                backend = "SEAWEEDFS_S3_LIVE";
+                liveConnected = true;
+                Optional<String> remoteEtag = resp.headers().firstValue("ETag");
+                if (remoteEtag.isPresent()) {
+                    etag = remoteEtag.get().replace("\"", "");
+                }
+            }
+        } catch (Exception ignored) {
+            // Live S3 endpoint offline in standalone testing; gracefully defaults to EMBEDDED_DEV_MOCK
+            backend = "EMBEDDED_DEV_MOCK";
+            liveConnected = false;
+        }
+
         S3ObjectMeta meta = new S3ObjectMeta(
-                objKey, orgId, bucket, filename, mimeType, sizeBytes, etag, uploadedBy, dataUrl, timestamp
+                objKey, orgId, bucket, filename, mimeType, sizeBytes, etag, uploadedBy, dataUrl, timestamp,
+                backend, liveConnected
         );
         objects.put(objKey, meta);
         return meta;

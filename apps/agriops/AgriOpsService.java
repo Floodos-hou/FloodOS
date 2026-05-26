@@ -75,33 +75,95 @@ public final class AgriOpsService {
     public synchronized HttpResult loginOidc(Map<String, Object> body) {
         String username = String.valueOf(body.getOrDefault("username", "")).trim();
         String password = String.valueOf(body.getOrDefault("password", "")).trim();
+
+        KeycloakOidcEngine.AuthMode currentMode = KeycloakOidcEngine.getActiveAuthMode();
+
+        // --------------------------------------------------------------------
+        // 1. KEYCLOAK PRODUCTION MODE: Must authenticate against real Keycloak OIDC
+        //    NEVER fall back to mock accounts or mock tokens.
+        // --------------------------------------------------------------------
+        if (currentMode == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
+            String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
+            Optional<Map<String, Object>> liveToken = KeycloakOidcEngine.tryLiveKeycloakLogin(
+                    keycloakIssuer, "agriops-web", username, password
+            );
+
+            if (liveToken.isEmpty()) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", "KEYCLOAK_LOGIN_FAILED");
+                err.put("status", 401);
+                err.put("message", "Chế độ KEYCLOAK_PRODUCTION: Đăng nhập OIDC thất bại (Sai username/password hoặc máy chủ Keycloak không phản hồi). Tuyệt đối không fallback sang mock token.");
+                return new HttpResult(401, err);
+            }
+
+            String token = String.valueOf(liveToken.get().get("access_token"));
+            Map<String, Object> decoded;
+            try {
+                decoded = KeycloakOidcEngine.verifyJwt(token);
+            } catch (Exception ex) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", "KEYCLOAK_INTROSPECTION_FAILED");
+                err.put("status", 401);
+                err.put("message", "Chế độ KEYCLOAK_PRODUCTION: Token phát hành từ Keycloak bị từ chối khi thẩm định: " + ex.getMessage());
+                return new HttpResult(401, err);
+            }
+
+            String role = "FARMER";
+            Object realmAccess = decoded.get("realm_access");
+            if (realmAccess instanceof Map<?, ?> rm) {
+                Object rolesObj = rm.get("roles");
+                if (rolesObj instanceof List<?> roles && !roles.isEmpty()) {
+                    role = String.valueOf(roles.get(0));
+                }
+            }
+            String userId = String.valueOf(decoded.getOrDefault("sub", username));
+            String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
+            UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
+
+            Map<String, Object> after = new LinkedHashMap<>();
+            after.put("username", liveUser.username());
+            after.put("role", liveUser.role());
+            after.put("organization_id", liveUser.organizationId());
+            after.put("auth_mode", "LIVE_KEYCLOAK_OIDC");
+
+            store.auditLedger.appendRecord(
+                    orgId,
+                    "CORR-AUTH-" + liveUser.username().toUpperCase(Locale.ROOT),
+                    "KeycloakSession",
+                    liveUser.userId(),
+                    "OIDC_SSO_LOGIN_SUCCESS",
+                    liveUser.username(),
+                    liveUser.role(),
+                    null,
+                    after,
+                    200
+            );
+
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("access_token", token);
+            res.put("token_type", "Bearer");
+            res.put("expires_in", 3600);
+            res.put("sso_issuer", keycloakIssuer);
+            res.put("auth_mode", "LIVE_KEYCLOAK_OIDC");
+            res.put("user", liveUser.toPublicMap(store.organizations.containsKey(orgId) ? store.organizations.get(orgId).name() : orgId));
+            return new HttpResult(200, res);
+        }
+
+        // --------------------------------------------------------------------
+        // 2. DEV MOCK STANDALONE MODE: Used exclusively for local offline testing/CI
+        //    Issues HS256 tokens signed with process-ephemeral 256-bit key.
+        // --------------------------------------------------------------------
         UserAccount user = store.usersByUsername.get(username);
         if (user == null || !user.password().equals(password)) {
             Map<String, Object> err = new LinkedHashMap<>();
             err.put("error", "INVALID_CREDENTIALS");
-            err.put("message", "Đăng nhập Keycloak thất bại: Sai tên đăng nhập hoặc mật khẩu.");
+            err.put("message", "Đăng nhập thất bại: Sai tên đăng nhập hoặc mật khẩu trong bộ dữ liệu demo cục bộ.");
             return new HttpResult(401, err);
         }
 
-        String token;
-        Map<String, Object> decoded;
-        String authMode;
-
-        String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
-        Optional<Map<String, Object>> liveToken = KeycloakOidcEngine.tryLiveKeycloakLogin(
-                keycloakIssuer, "agriops-web", username, password
-        );
-
-        if (liveToken.isPresent()) {
-            token = String.valueOf(liveToken.get().get("access_token"));
-            decoded = KeycloakOidcEngine.verifyJwt(token);
-            authMode = "LIVE_KEYCLOAK_OIDC";
-        } else {
-            // Standalone Dev Mock Engine: Used for zero-dependency local testing & CI
-            token = KeycloakOidcEngine.issueJwt(user);
-            decoded = KeycloakOidcEngine.verifyJwt(token);
-            authMode = "STANDALONE_DEV_MOCK";
-        }
+        String token = KeycloakOidcEngine.issueDevMockJwt(user);
+        Map<String, Object> decoded = KeycloakOidcEngine.verifyJwt(token);
+        String authMode = "STANDALONE_DEV_MOCK";
 
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("username", user.username());
@@ -126,14 +188,9 @@ public final class AgriOpsService {
         res.put("access_token", token);
         res.put("token_type", "Bearer");
         res.put("expires_in", 86400);
-        res.put("sso_issuer", keycloakIssuer);
+        res.put("sso_issuer", KeycloakOidcEngine.DEFAULT_ISSUER);
         res.put("auth_mode", authMode);
-        if ("DEV_MOCK_STANDALONE".equals(authMode)) {
-            res.put("dev_notice", "Mô phỏng OIDC độc lập phục vụ kiểm thử đơn vị & CI (Không phụ thuộc container Keycloak ngoài). Khởi chạy compose.yaml để kích hoạt xác thực Keycloak thực tế.");
-            res.put("ephemeral_key_in_use", KeycloakOidcEngine.isEphemeralKeyInUse());
-        }
-        res.put("user", user.toPublicMap(null));
-        res.put("jwt_decoded", decoded);
+        res.put("user", user.toPublicMap(store.organizations.get(user.organizationId()) != null ? store.organizations.get(user.organizationId()).name() : user.organizationId()));
         return new HttpResult(200, res);
     }
 

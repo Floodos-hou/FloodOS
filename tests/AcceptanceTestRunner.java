@@ -5,6 +5,7 @@ package org.openagrios.tests;
 
 import org.openagrios.apps.agriops.OpenAgriOsServer;
 import org.openagrios.core.dataservices.JsonCodec;
+import org.openagrios.core.identity.KeycloakOidcEngine;
 
 import java.io.File;
 import java.net.URI;
@@ -85,7 +86,27 @@ public final class AcceptanceTestRunner {
 
             ApiRes noTokenRes = apiReq("GET", "/api/v1/state", null, null);
             check(noTokenRes.status() == 401 && "UNAUTHORIZED".equals(noTokenRes.body().get("error")), "Missing token was not rejected with 401");
-            System.out.println("[PASS] Zero-Trust Token Guard: Rejected tampered signature and missing token (HTTP 401).");
+
+            // 2.2. Verify forged RS256 token is strictly rejected in mock mode (HTTP 401)
+            String forgedRs256 = KeycloakOidcEngine.createForgedRs256Token("attacker_sub", "COORDINATOR", "HTX_CANTHO_01");
+            ApiRes forgedRs256Res = apiReq("GET", "/api/v1/state", forgedRs256, null);
+            check(forgedRs256Res.status() == 401 && "UNAUTHORIZED".equals(forgedRs256Res.body().get("error")), "Forged RS256 token was not rejected with 401");
+
+            // 2.3. Verify KEYCLOAK_PRODUCTION mode fails fast without mock fallback when Keycloak is offline
+            try {
+                KeycloakOidcEngine.setAuthModeForTesting(KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION);
+                ApiRes liveLoginFail = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "coord_htx01", "password", "123456"));
+                check(liveLoginFail.status() == 401 && "KEYCLOAK_LOGIN_FAILED".equals(liveLoginFail.body().get("error")),
+                        "KEYCLOAK_PRODUCTION mode must return 401 KEYCLOAK_LOGIN_FAILED and never fallback to mock");
+
+                ApiRes hs256InProd = apiReq("GET", "/api/v1/state", tCoord, null);
+                check(hs256InProd.status() == 401 && "UNAUTHORIZED".equals(hs256InProd.body().get("error")),
+                        "In KEYCLOAK_PRODUCTION mode, HS256 mock token must be rejected with 401");
+            } finally {
+                KeycloakOidcEngine.resetAuthModeForTesting();
+            }
+
+            System.out.println("[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, and verified Keycloak production failure without mock fallback (HTTP 401).");
 
             // 3. Multi-Tenancy RLS & Role-Based Field Visibility
             ApiRes stFarmer = apiReq("GET", "/api/v1/state", tFarmer, null);

@@ -5,7 +5,7 @@
 
     <groupId>org.openagrios</groupId>
     <artifactId>openagrios-parent</artifactId>
-    <version>1.0.0-tier1</version>
+    <version>0.1.0-alpha</version>
     <packaging>jar</packaging>
 
     <name>OpenAgriOS :: DX-OS Open-Core Platform</name>

@@ -3,6 +3,7 @@
 
 package org.openagrios.core.workflow;
 
+import org.openagrios.core.dataservices.JsonCodec;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -10,11 +11,21 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 /**
- * OMG BPMN 2.0 XML Parser and Process Instance Execution Engine.
- * Parses BPMN definitions directly using W3C DOM XML Parser (javax.xml.parsers).
+ * OMG BPMN 2.0 XML Parser and Workflow Process Execution Engine.
+ * Supports dual-mode execution:
+ * 1. FLOWABLE_REST_ENGINE_V7: Calls live Flowable REST Engine (:8080) via REST API
+ *    when Docker Compose infrastructure is active.
+ * 2. EMBEDDED_W3C_DOM_BPMN_ENGINE: Standalone in-process execution parsing standard
+ *    BPMN 2.0 XML via W3C DOM without external container dependencies.
  */
 public final class BpmnWorkflowEngine {
 
@@ -31,6 +42,8 @@ public final class BpmnWorkflowEngine {
         public String status;
         public final List<Map<String, Object>> history;
         public String updatedAt;
+        public String engineRuntime;
+        public String flowableInstanceId;
 
         public BpmnProcessInstance(
                 String processInstanceId,
@@ -42,7 +55,9 @@ public final class BpmnWorkflowEngine {
                 String candidateGroup,
                 String status,
                 List<Map<String, Object>> history,
-                String updatedAt
+                String updatedAt,
+                String engineRuntime,
+                String flowableInstanceId
         ) {
             this.processInstanceId = processInstanceId;
             this.organizationId = organizationId;
@@ -54,6 +69,8 @@ public final class BpmnWorkflowEngine {
             this.status = status;
             this.history = new ArrayList<>(history);
             this.updatedAt = updatedAt;
+            this.engineRuntime = engineRuntime;
+            this.flowableInstanceId = flowableInstanceId;
         }
 
         public Map<String, Object> toMap() {
@@ -68,15 +85,33 @@ public final class BpmnWorkflowEngine {
             m.put("status", status);
             m.put("history", history);
             m.put("updated_at", updatedAt);
+            m.put("engine_runtime", engineRuntime);
+            if (flowableInstanceId != null) {
+                m.put("flowable_instance_id", flowableInstanceId);
+            }
             return m;
         }
     }
 
+    private final String flowableRestUrl;
+    private final HttpClient httpClient;
     private final Map<String, Object> definitions;
     private final Map<String, BpmnProcessInstance> instances = new LinkedHashMap<>();
 
     public BpmnWorkflowEngine(File bpmnDir) {
+        this(bpmnDir, System.getenv().getOrDefault("FLOWABLE_REST_URL", "http://localhost:8080/flowable-rest"));
+    }
+
+    public BpmnWorkflowEngine(File bpmnDir, String flowableRestUrl) {
         this.definitions = loadBpmnDefinitions(bpmnDir);
+        this.flowableRestUrl = flowableRestUrl != null ? flowableRestUrl.replaceAll("/+$", "") : "http://localhost:8080/flowable-rest";
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(1200))
+                .build();
+    }
+
+    public String getFlowableRestUrl() {
+        return flowableRestUrl;
     }
 
     public synchronized void clearInstances() {
@@ -158,9 +193,40 @@ public final class BpmnWorkflowEngine {
             List<Map<String, Object>> initialHistory,
             String ts
     ) {
+        String runtimeMode = "EMBEDDED_W3C_DOM_BPMN_ENGINE (Flowable REST offline)";
+        String flowableId = null;
+
+        // Attempt live call to Flowable REST API v7.0.0
+        try {
+            String url = flowableRestUrl + "/service/runtime/process-instances";
+            String basicAuth = "Basic " + Base64.getEncoder().encodeToString("rest-admin:test".getBytes(StandardCharsets.UTF_8));
+            String jsonPayload = String.format(
+                    "{\"processDefinitionKey\":\"%s\",\"businessKey\":\"%s\"}",
+                    definitionKey, businessKey
+            );
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofMillis(1200))
+                    .header("Authorization", basicAuth)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200 || resp.statusCode() == 201) {
+                Map<String, Object> resMap = JsonCodec.parseObject(resp.body());
+                flowableId = String.valueOf(resMap.getOrDefault("id", "flowable-" + processInstanceId));
+                runtimeMode = "FLOWABLE_REST_ENGINE_V7 (Live Container)";
+            }
+        } catch (Exception ignored) {
+            // Standalone testing mode: smoothly executes embedded W3C DOM BPMN 2.0 parser & state machine
+            runtimeMode = "EMBEDDED_W3C_DOM_BPMN_ENGINE (Flowable REST offline)";
+        }
+
         instances.put(processInstanceId, new BpmnProcessInstance(
                 processInstanceId, orgId, definitionKey, businessKey,
-                currentStepId, currentStepName, candidateGroup, "ACTIVE", initialHistory, ts
+                currentStepId, currentStepName, candidateGroup, "ACTIVE", initialHistory, ts,
+                runtimeMode, flowableId
         ));
     }
 
