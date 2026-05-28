@@ -35,3 +35,8 @@ jobs:
     - name: Run Integration & Acceptance Tests (10/10 Suites)
       run: |
         java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+
+    - name: Validate Docker Compose Stack Specification
+      run: |
+        docker compose -f compose.yaml config --quiet
+        echo "Docker Compose stack configuration validated successfully!"

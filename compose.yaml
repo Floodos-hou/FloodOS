@@ -1,113 +1,240 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
-# ============================================================================
-# OPENAGRIOS — TẦNG 1 HEADLESS CORE PaaS STACK (100% PERMISSIVE OPEN SOURCE)
-# Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
-# Tất cả phiên bản image đều được pin cố định (không dùng :latest)
-# ============================================================================
-services:
-  # 1. STRUCTURED DATA & RLS ENGINE (PostgreSQL 16 - Permissive BSD/MIT-style License)
-  postgres:
-    image: postgres:16.2-alpine
-    container_name: openagrios-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-openagrios}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
-      POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openagrios} -d ${POSTGRES_DB:-openagrios_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  # 2. IDENTITY / SSO / RBAC / MULTI-TENANCY (Keycloak 24 - Apache-2.0 License)
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0.5
-    container_name: openagrios-keycloak
-    command: ["start-dev", "--import-realm"]
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_dev_only}
-      KC_HEALTH_ENABLED: "true"
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./infra/keycloak/openagrios-realm.json:/opt/keycloak/data/import/openagrios-realm.json:ro
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License, Pinned v3.64)
-  object-storage:
-    image: chrislusf/seaweedfs:3.64
-    container_name: openagrios-s3-storage
-    command: "server -s3 -s3.port=9000 -dir=/data"
-    ports:
-      - "9000:9000"
-      - "8888:8888"
-    volumes:
-      - s3data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License, Pinned v7.0.0)
-  flowable:
-    image: flowable/flowable-rest:7.0.0
-    container_name: openagrios-flowable
-    environment:
-      SERVER_PORT: 8081
-      SPRING_DATASOURCE_DRIVER-CLASS-NAME: org.postgresql.Driver
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-openagrios_db}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-openagrios}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License, Pinned v3.9.0)
-  apisix:
-    image: apache/apisix:3.9.0-debian
-    container_name: openagrios-apisix
-    environment:
-      APISIX_STAND_ALONE: "true"
-    ports:
-      - "9080:9080"
-    volumes:
-      - ./infra/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
-    depends_on:
-      - core-api
-
-  # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
-  core-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: openagrios-core-api
-    environment:
-      PORT: 8000
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/openagrios
-      S3_ENDPOINT: http://object-storage:9000
-      FLOWABLE_ENDPOINT: http://flowable:8081/flowable-rest
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      object-storage:
-        condition: service_healthy
-
-volumes:
-  pgdata:
-  s3data:
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright 2026 OpenAgriOS Contributors
+
+# ============================================================================
+
+# OPENAGRIOS — TẦNG 1 HEADLESS CORE PaaS STACK (100% PERMISSIVE OPEN SOURCE)
+
+# Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
+
+# Tất cả phiên bản image đều được pin cố định (không dùng :latest)
+
+# ============================================================================
+
+services:
+
+  # 1. STRUCTURED DATA & RLS ENGINE (PostgreSQL 16 - Permissive BSD/MIT-style License)
+
+  postgres:
+
+    image: postgres:16.2-alpine
+
+    container_name: openagrios-postgres
+
+    environment:
+
+      POSTGRES_USER: ${POSTGRES_USER:-openagrios}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
+
+      POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
+
+    ports:
+
+      - "5432:5432"
+
+    volumes:
+
+      - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openagrios} -d ${POSTGRES_DB:-openagrios_db}"]
+
+      interval: 5s
+
+      timeout: 5s
+
+      retries: 10
+
+
+
+  # 2. IDENTITY / SSO / RBAC / MULTI-TENANCY (Keycloak 24 - Apache-2.0 License)
+
+  keycloak:
+
+    image: quay.io/keycloak/keycloak:24.0.5
+
+    container_name: openagrios-keycloak
+
+    command: ["start-dev", "--import-realm"]
+
+    environment:
+
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_dev_only}
+
+      KC_HEALTH_ENABLED: "true"
+
+    ports:
+
+      - "8080:8080"
+
+    volumes:
+
+      - ./infra/keycloak/openagrios-realm.json:/opt/keycloak/data/import/openagrios-realm.json:ro
+
+    healthcheck:
+
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
+
+      interval: 10s
+
+      timeout: 5s
+
+      retries: 10
+
+
+
+  # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License, Pinned v3.64)
+
+  object-storage:
+
+    image: chrislusf/seaweedfs:3.64
+
+    container_name: openagrios-s3-storage
+
+    command: "server -s3 -s3.port=9000 -dir=/data"
+
+    ports:
+
+      - "9000:9000"
+
+      - "8888:8888"
+
+    volumes:
+
+      - s3data:/data
+
+    healthcheck:
+
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 || exit 1"]
+
+      interval: 5s
+
+      timeout: 5s
+
+      retries: 5
+
+
+
+  # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License, Pinned v7.0.0)
+
+  flowable:
+
+    image: flowable/flowable-rest:7.0.0
+
+    container_name: openagrios-flowable
+
+    environment:
+
+      SERVER_PORT: 8081
+
+      SPRING_DATASOURCE_DRIVER-CLASS-NAME: org.postgresql.Driver
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-openagrios_db}
+
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-openagrios}
+
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
+
+    ports:
+
+      - "8081:8081"
+
+    depends_on:
+
+      postgres:
+
+        condition: service_healthy
+
+
+
+  # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License, Pinned v3.9.0)
+
+  apisix:
+
+    image: apache/apisix:3.9.0-debian
+
+    container_name: openagrios-apisix
+
+    environment:
+
+      APISIX_STAND_ALONE: "true"
+
+    ports:
+
+      - "9080:9080"
+
+    volumes:
+
+      - ./infra/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+
+    depends_on:
+
+      - core-api
+
+
+
+  # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
+
+  core-api:
+
+    build:
+
+      context: .
+
+      dockerfile: Dockerfile
+
+    container_name: openagrios-core-api
+
+    environment:
+
+      PORT: 8000
+
+      OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
+
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/openagrios
+
+      S3_ENDPOINT: http://object-storage:9000
+
+      FLOWABLE_REST_URL: http://flowable:8081/flowable-rest
+
+      FLOWABLE_ENDPOINT: http://flowable:8081/flowable-rest
+
+      DATABASE_URL: jdbc:postgresql://postgres:5432/openagrios_db
+
+      POSTGRES_USER: 
+
+      POSTGRES_PASSWORD: 
+
+    ports:
+
+      - "8000:8000"
+
+    depends_on:
+
+      postgres:
+
+        condition: service_healthy
+
+      keycloak:
+
+        condition: service_healthy
+
+      object-storage:
+
+        condition: service_healthy
+
+
+
+volumes:
+
+  pgdata:
+
+  s3data:
+

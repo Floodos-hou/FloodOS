@@ -54,8 +54,8 @@ routes:
         key_type: var
         key: remote_addr
       openid-connect:
-        client_id: "agriops-web"
-        client_secret: "agriops-client-secret"
+        client_id: "agriops-gateway"
+        client_secret: "agriops-gateway-secret-2026"
         discovery: "http://keycloak:8080/realms/openagrios/.well-known/openid-configuration"
         bearer_only: true
         realm: "openagrios"

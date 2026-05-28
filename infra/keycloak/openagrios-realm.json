@@ -11,12 +11,30 @@
   "editUsernameAllowed": false,
   "roles": {
     "realm": [
-      { "name": "FARMER", "description": "Nông hộ khai báo vùng canh tác, đặt lịch và xác nhận nghiệm thu" },
-      { "name": "COORDINATOR", "description": "Điều phối viên HTX lập kế hoạch, ghép cặp máy-người và phê duyệt BPMN" },
-      { "name": "MACHINE_OWNER", "description": "Chủ máy quản lý đội máy và xác nhận điều động thiết bị" },
-      { "name": "OPERATOR", "description": "Người vận hành máy cập nhật tiến độ hiện trường và báo sự cố" },
-      { "name": "REPAIR_TEAM", "description": "Đội sửa chữa tiếp nhận phiếu sửa và cập nhật kết quả bảo trì" },
-      { "name": "PLATFORM_ADMIN", "description": "Quản trị kỹ thuật nền tảng DX-OS Core" }
+      {
+        "name": "FARMER",
+        "description": "Nông hộ khai báo vùng canh tác, đặt lịch và xác nhận nghiệm thu"
+      },
+      {
+        "name": "COORDINATOR",
+        "description": "Điều phối viên HTX lập kế hoạch, ghép cặp máy-người và phê duyệt BPMN"
+      },
+      {
+        "name": "MACHINE_OWNER",
+        "description": "Chủ máy quản lý đội máy và xác nhận điều động thiết bị"
+      },
+      {
+        "name": "OPERATOR",
+        "description": "Người vận hành máy cập nhật tiến độ hiện trường và báo sự cố"
+      },
+      {
+        "name": "REPAIR_TEAM",
+        "description": "Đội sửa chữa tiếp nhận phiếu sửa và cập nhật kết quả bảo trì"
+      },
+      {
+        "name": "PLATFORM_ADMIN",
+        "description": "Quản trị kỹ thuật nền tảng DX-OS Core"
+      }
     ]
   },
   "clients": [
@@ -27,8 +45,13 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:8000/*", "http://localhost:3000/*"],
-      "webOrigins": ["*"],
+      "redirectUris": [
+        "http://localhost:8000/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
       "protocolMappers": [
         {
           "name": "organization_id_mapper",
@@ -45,6 +68,17 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "agriops-gateway",
+      "name": "Apache APISIX Zero-Trust Gateway Confidential Client",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agriops-gateway-secret-2026",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect"
     }
   ],
   "users": [
@@ -55,9 +89,21 @@
       "firstName": "Bác Ba",
       "lastName": "Nguyễn Văn (Nông hộ F01, F03)",
       "email": "farmer_ba@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["FARMER"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "FARMER"
+      ]
     },
     {
       "username": "coord_htx01",
@@ -66,9 +112,21 @@
       "firstName": "Chị Lan",
       "lastName": "Trần Thị (Điều phối viên HTX Cần Thơ 01)",
       "email": "coord_htx01@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["COORDINATOR"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "COORDINATOR"
+      ]
     },
     {
       "username": "op_minh",
@@ -77,9 +135,21 @@
       "firstName": "Anh Minh",
       "lastName": "Lê Hoàng (Lái máy M01)",
       "email": "op_minh@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["OPERATOR"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "OPERATOR"
+      ]
     },
     {
       "username": "op_nam",
@@ -88,9 +158,21 @@
       "firstName": "Anh Nam",
       "lastName": "Phạm Văn (Lái máy M02 - Cứu viện)",
       "email": "op_nam@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["OPERATOR"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "OPERATOR"
+      ]
     },
     {
       "username": "owner_tu",
@@ -99,9 +181,21 @@
       "firstName": "Chú Tư",
       "lastName": "Võ Văn (Chủ đội máy M01, M02)",
       "email": "owner_tu@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["MACHINE_OWNER"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "MACHINE_OWNER"
+      ]
     },
     {
       "username": "repair_01",
@@ -110,9 +204,21 @@
       "firstName": "Đội Thợ Sửa 01",
       "lastName": "Trạm Cơ khí Nông nghiệp Cần Thơ",
       "email": "repair_01@htxcantho01.vn",
-      "attributes": { "organization_id": ["HTX_CANTHO_01"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["REPAIR_TEAM"]
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "REPAIR_TEAM"
+      ]
     },
     {
       "username": "coord_htx02",
@@ -121,9 +227,21 @@
       "firstName": "Anh Hùng",
       "lastName": "Đặng Quốc (Điều phối viên HTX Sóc Trăng 02 - Test RLS)",
       "email": "coord_htx02@htxsoctrang02.vn",
-      "attributes": { "organization_id": ["HTX_SOCTRANG_02"] },
-      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
-      "realmRoles": ["COORDINATOR"]
+      "attributes": {
+        "organization_id": [
+          "HTX_SOCTRANG_02"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "COORDINATOR"
+      ]
     }
   ]
 }
