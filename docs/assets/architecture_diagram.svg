@@ -1,0 +1,186 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenAgriOS Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B132B"/>
+      <stop offset="50%" stop-color="#1C2541"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="tier1Grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#059669" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="tier2Grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="infraGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="720" rx="16" fill="url(#bgGrad)"/>
+  <rect width="1196" height="716" x="2" y="2" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Title Banner -->
+  <g transform="translate(40, 28)">
+    <rect width="1120" height="64" rx="10" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+    <circle cx="36" cy="32" r="16" fill="#10B981"/>
+    <text x="36" y="38" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="16" fill="#FFFFFF" text-anchor="middle">OA</text>
+    <text x="68" y="30" font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#F8FAFC">OpenAgriOS — Kiến trúc Tổng thể DX-OS 3 Tầng (Open-Core Architecture)</text>
+    <text x="68" y="49" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" fill="#94A3B8">Nền tảng Điều hành Nông nghiệp số Phân tầng • Apache-2.0 Open Source • Java 21 LTS Virtual Threads</text>
+    <rect x="990" y="20" width="110" height="24" rx="12" fill="#047857"/>
+    <text x="1045" y="36" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#ECFDF5" text-anchor="middle">v0.1.0-alpha</text>
+  </g>
+
+  <!-- TIER 3: CHANNELS & CLIENT APPS -->
+  <g transform="translate(40, 110)">
+    <rect width="1120" height="90" rx="10" fill="#1E293B" stroke="#3B82F6" stroke-width="1" stroke-dasharray="4 2"/>
+    <text x="24" y="26" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#60A5FA">TẦNG 3: KÊNH TIẾP CẬN &amp; TƯƠNG TÁC NGƯỜI DÙNG (Channels &amp; Edge Clients)</text>
+    
+    <!-- Channel 1 -->
+    <rect x="24" y="38" width="250" height="40" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="36" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">AgriOps Web Workspace</text>
+    <text x="245" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8" text-anchor="end">React / Next.js</text>
+
+    <!-- Channel 2 -->
+    <rect x="294" y="38" width="250" height="40" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="306" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">Mobile App Vận hành</text>
+    <text x="515" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8" text-anchor="end">Flutter Android/iOS</text>
+
+    <!-- Channel 3 -->
+    <rect x="564" y="38" width="250" height="40" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="576" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">IoT Field Telematics</text>
+    <text x="785" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8" text-anchor="end">MQTT / NGSI-LD</text>
+
+    <!-- Channel 4 -->
+    <rect x="834" y="38" width="260" height="40" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="846" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">Public REST API / Postman</text>
+    <text x="1065" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8" text-anchor="end">OpenAPI 3.0</text>
+  </g>
+
+  <!-- ZERO-TRUST API GATEWAY BOUNDARY -->
+  <g transform="translate(40, 215)">
+    <rect width="1120" height="46" rx="8" fill="#1E293B" stroke="#F59E0B" stroke-width="1.5"/>
+    <circle cx="30" cy="23" r="10" fill="#D97706"/>
+    <text x="30" y="27" font-family="'Segoe UI', Roboto, sans-serif" font-weight="bold" font-size="11" fill="#FFF" text-anchor="middle">⚡</text>
+    <text x="50" y="28" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#FBBF24">Biên mạng Zero-Trust Gateway (Apache APISIX 3.9 Standalone)</text>
+    <text x="540" y="28" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#CBD5E1">JWT Bearer Validation • Keycloak RFC 7662 Introspection • Rate Limiter (Token Bucket) • CORS Guard</text>
+    <rect x="1010" y="11" width="90" height="22" rx="4" fill="#78350F"/>
+    <text x="1055" y="26" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="bold" fill="#FDE68A" text-anchor="middle">Port 9080</text>
+  </g>
+
+  <!-- TIER 2 & TIER 1 CONTAINER -->
+  <g transform="translate(40, 275)">
+    <!-- TIER 2: AGRIOPS APPLICATION (apps/agriops) -->
+    <rect width="1120" height="110" rx="10" fill="url(#tier2Grad)" stroke="#38BDF8" stroke-width="1.2"/>
+    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#38BDF8">TẦNG 2: DỊCH VỤ NGHIỆP VỤ NÔNG NGHIỆP SỐ (Tier-2 Domain App — apps/agriops)</text>
+
+    <!-- App Box 1 -->
+    <rect x="24" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="36" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriOpsService.java</text>
+    <text x="36" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Điều phối gặt, xếp lịch máy,</text>
+    <text x="36" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">xử lý sự cố và nghiệm thu vụ</text>
+
+    <!-- App Box 2 -->
+    <rect x="294" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="306" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriDataStore.java</text>
+    <text x="306" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Kho dữ liệu HTX, máy gặt,</text>
+    <text x="306" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">thửa ruộng &amp; đồng hồ giả lập</text>
+
+    <!-- App Box 3 -->
+    <rect x="564" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="576" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriModels.java</text>
+    <text x="576" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Record domain entities:</text>
+    <text x="576" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">FieldPlot, Machine, Incident</text>
+
+    <!-- App Box 4 -->
+    <rect x="834" y="36" width="260" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
+    <text x="846" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">OpenAgriOsServer.java</text>
+    <text x="846" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">HTTP REST Server Port 8000</text>
+    <text x="846" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">JDK 21 Virtual Threads</text>
+  </g>
+
+  <!-- TIER 1: OPEN-CORE HEADLESS PAAS (core/) -->
+  <g transform="translate(40, 400)">
+    <rect width="1120" height="175" rx="10" fill="url(#tier1Grad)" stroke="#10B981" stroke-width="1.5"/>
+    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#34D399">TẦNG 1: DỊCH VỤ NỀN TẢNG LÕI NGUỒN MỞ (Tier-1 Headless Core PaaS — core/)</text>
+
+    <!-- Module 1: Identity -->
+    <rect x="24" y="36" width="250" height="125" rx="6" fill="#0F172A" stroke="#059669" filter="url(#cardShadow)"/>
+    <text x="36" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#6EE7B7">core/identity</text>
+    <text x="36" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#F1F5F9">KeycloakOidcEngine.java</text>
+    <text x="36" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Dual-Mode OIDC Engine</text>
+    <text x="36" y="108" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Ephemeral 256-bit Key / Dev</text>
+    <text x="36" y="122" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• RFC 7662 Token Introspect</text>
+    <text x="36" y="136" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• RFC 7636 PKCE Generator</text>
+    <text x="36" y="150" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#EF4444">• Từ chối RS256 giả mạo 401</text>
+
+    <!-- Module 2: Gateway -->
+    <rect x="294" y="36" width="250" height="125" rx="6" fill="#0F172A" stroke="#059669" filter="url(#cardShadow)"/>
+    <text x="306" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#6EE7B7">core/api-gateway</text>
+    <text x="306" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#F1F5F9">ZeroTrustGateway.java</text>
+    <text x="306" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Header Injection Proxy</text>
+    <text x="306" y="108" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• RBAC Matrix: FARMER, COORD,</text>
+    <text x="306" y="122" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">  OPERATOR, REPAIR_TEAM</text>
+    <text x="306" y="136" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Rate Limiter (Token Bucket)</text>
+    <text x="306" y="150" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#F59E0B">• Chặn trái quyền 403 Forbidden</text>
+
+    <!-- Module 3: Workflow -->
+    <rect x="564" y="36" width="250" height="125" rx="6" fill="#0F172A" stroke="#059669" filter="url(#cardShadow)"/>
+    <text x="576" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#6EE7B7">core/workflow</text>
+    <text x="576" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#F1F5F9">BpmnWorkflowEngine.java</text>
+    <text x="576" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Live Flowable REST Client</text>
+    <text x="576" y="108" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• W3C DOM BPMN 2.0 Parser</text>
+    <text x="576" y="122" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Quy trình service_request</text>
+    <text x="576" y="136" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• Quy trình incident_replan</text>
+    <text x="576" y="150" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#10B981">• UserTask state transition</text>
+
+    <!-- Module 4: Data Services -->
+    <rect x="834" y="36" width="260" height="125" rx="6" fill="#0F172A" stroke="#059669" filter="url(#cardShadow)"/>
+    <text x="846" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#6EE7B7">core/data-services</text>
+    <text x="846" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#F1F5F9">Core Data Engines</text>
+    <text x="846" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• ImmutableAuditLedger (SHA-256)</text>
+    <text x="846" y="108" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• SeaweedS3StorageService (REST S3)</text>
+    <text x="846" y="122" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• TenantRlsContext (PostgreSQL RLS)</text>
+    <text x="846" y="136" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• ScheduleConflictEngine (GiST 409)</text>
+    <text x="846" y="150" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8">• SpatialMatchingEngine (Haversine)</text>
+  </g>
+
+  <!-- INFRASTRUCTURE LAYER (Docker Compose Stack) -->
+  <g transform="translate(40, 590)">
+    <rect width="1120" height="100" rx="10" fill="url(#infraGrad)" stroke="#8B5CF6" stroke-width="1.2"/>
+    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#C4B5FD">HẠ TẦNG TRIỂN KHAI PHÂN TÁN (Containerized Stack — compose.yaml, 100% Pinned Images &amp; Healthcheck)</text>
+
+    <!-- Infra 1 -->
+    <rect x="24" y="36" width="200" height="50" rx="6" fill="#0F172A" stroke="#4C1D95" filter="url(#cardShadow)"/>
+    <text x="34" y="56" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#DDD6FE">PostgreSQL 16.2</text>
+    <text x="34" y="72" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#A78BFA">GiST + RLS (:5432)</text>
+
+    <!-- Infra 2 -->
+    <rect x="244" y="36" width="200" height="50" rx="6" fill="#0F172A" stroke="#4C1D95" filter="url(#cardShadow)"/>
+    <text x="254" y="56" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#DDD6FE">Keycloak 24.0.5</text>
+    <text x="254" y="72" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#A78BFA">OIDC SSO (:8080)</text>
+
+    <!-- Infra 3 -->
+    <rect x="464" y="36" width="200" height="50" rx="6" fill="#0F172A" stroke="#4C1D95" filter="url(#cardShadow)"/>
+    <text x="474" y="56" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#DDD6FE">SeaweedFS 3.64</text>
+    <text x="474" y="72" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#A78BFA">S3 Storage (:9000)</text>
+
+    <!-- Infra 4 -->
+    <rect x="684" y="36" width="200" height="50" rx="6" fill="#0F172A" stroke="#4C1D95" filter="url(#cardShadow)"/>
+    <text x="694" y="56" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#DDD6FE">Flowable 7.0.0</text>
+    <text x="694" y="72" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#A78BFA">BPMN REST (:8081)</text>
+
+    <!-- Infra 5 -->
+    <rect x="904" y="36" width="190" height="50" rx="6" fill="#0F172A" stroke="#4C1D95" filter="url(#cardShadow)"/>
+    <text x="914" y="56" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#DDD6FE">Apache APISIX 3.9</text>
+    <text x="914" y="72" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#A78BFA">Gateway (:9080)</text>
+  </g>
+</svg>

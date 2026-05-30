@@ -30,7 +30,7 @@
     <build>
         <sourceDirectory>.</sourceDirectory>
         <plugins>
-            <!-- Compiler plugin configuring Java 21 LTS -->
+            <!-- Compiler plugin configuring Java 21 LTS across core, apps, tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -44,6 +44,31 @@
                         <include>tests/**/*.java</include>
                     </includes>
                 </configuration>
+            </plugin>
+
+            <!-- Test runner: executes AcceptanceTestRunner during 'mvn test' -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>acceptance-tests</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.openagrios.tests.AcceptanceTestRunner</mainClass>
+                            <systemProperties>
+                                <systemProperty>
+                                    <key>file.encoding</key>
+                                    <value>UTF-8</value>
+                                </systemProperty>
+                            </systemProperties>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Executable JAR creation -->

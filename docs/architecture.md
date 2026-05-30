@@ -6,6 +6,10 @@ OpenAgriOS được thiết kế theo triết lý **DX-OS Open-Core (Digital Tra
 
 ## 1. Mô hình Kiến trúc Tổng thể 3 Tầng
 
+<p align="center">
+  <img src="assets/architecture_diagram.svg" alt="Kiến trúc Tổng thể OpenAgriOS DX-OS 3 Tầng" width="100%">
+</p>
+
 ```mermaid
 flowchart TD
     subgraph T3 ["TẦNG 3: ỨNG DỤNG NGHIỆP VỤ (APPLICATIONS)"]
@@ -51,6 +55,10 @@ flowchart TD
   - Cấp phát và xác thực chữ ký số JSON Web Token (JWT Bearer Token) đối xứng HMAC-SHA256.
   - Hỗ trợ đa tổ chức đa người thuê (Multi-Tenancy) với mã định danh tổ chức `organization_id` nhúng trực tiếp trong JWT claims.
   - Phân quyền theo vai trò (Role-Based Access Control - RBAC): `COORDINATOR`, `FARMER`, `OPERATOR`, `MACHINE_OWNER`, `REPAIR_TEAM`.
+
+<p align="center">
+  <img src="assets/security_zero_trust.svg" alt="Kiến trúc Bảo mật Zero-Trust & RLS" width="100%">
+</p>
 
 ### 2.2. `core/api-gateway` — Cổng API Biên mạng Zero-Trust
 - **Chuẩn công nghệ**: Kiến trúc tương thích Apache APISIX 3.9 Cloud-Native API Gateway.

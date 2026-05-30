@@ -1,0 +1,223 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenAgriOS Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%">
+  <defs>
+    <linearGradient id="flowBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B132B"/>
+      <stop offset="50%" stop-color="#111C35"/>
+      <stop offset="100%" stop-color="#080E1E"/>
+    </linearGradient>
+    <linearGradient id="step1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#DC2626" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="step2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#D97706" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="step3Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="step4Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#7C3AED" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="step5Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#0891B2" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="step6Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#059669" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="flowShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="680" rx="16" fill="url(#flowBgGrad)"/>
+  <rect width="1196" height="676" x="2" y="2" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <g transform="translate(40, 26)">
+    <rect width="52" height="24" rx="6" fill="#059669" fill-opacity="0.2" stroke="#10B981" stroke-width="1"/>
+    <text x="26" y="16" font-family="system-ui, sans-serif" font-size=\"11\" font-weight="700" fill="#10B981" text-anchor="middle">DEMO</text>
+    
+    <text x="64" y="19" font-family="system-ui, sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" letter-spacing="-0.5">KỊCH BẢN ĐIỀU PHỐI &amp; PHỤC HỒI SỰ CỐ TỰ ĐỘNG</text>
+    <text x="64" y="40" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#94A3B8">Quy trình 6 bước cứu hộ ca gặt F01: Thuật toán không gian Haversine → Flowable BPMN 2.0 → Niêm phong kiểm toán SHA-256</text>
+  </g>
+
+  <!-- Timeline Flow Path Arrows between rows -->
+  <g stroke="#475569" stroke-width="2" stroke-dasharray="4,4" fill="none">
+    <path d="M 1030 205 C 1140 205, 1140 500, 1030 500" />
+  </g>
+
+  <!-- ==================== ROW 1: Steps 1, 2, 3 ==================== -->
+
+  <!-- STEP 1: INCIDENT DETECTED -->
+  <g transform="translate(40, 95)" filter="url(#flowShadow)">
+    <rect width="345" height="220" rx="12" fill="url(#step1Grad)" stroke="#EF4444" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#EF4444" fill-opacity="0.25" stroke="#EF4444" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#EF4444" text-anchor="middle">1</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#FCA5A5">BÁO CÁO SỰ CỐ HIỆN TRƯỜNG</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#EF4444">HARVESTER BREAKDOWN (M01)</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="313" height="146" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Vị trí:</text>
+    <text x="80" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">Thửa F01 (10.032, 105.783) - 1.2 ha</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Thiết bị:</text>
+    <text x="80" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#F87171">Máy M01 gãy lưỡi cắt (Tiến độ 35%)</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Bằng chứng:</text>
+    <text x="100" y="120" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">S3 Evidence Upload (SeaweedFS)</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Nguy cơ:</text>
+    <text x="85" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#FCA5A5">Mưa giông trong 3 giờ tới (Cần Thơ)</text>
+    <rect x="26" y="156" width="293" height="36" rx="6" fill="#7F1D1D" fill-opacity="0.3" stroke="#EF4444" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#FCA5A5">POST /api/v1/incidents</text>
+    <text x="34" y="185" font-family="monospace" font-size="9" fill="#CBD5E1">Status: HARVESTER_BREAKDOWN → SCHEDULE_BROKEN</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 395 205 L 430 205" stroke="#64748B" stroke-width="2.5"/>
+  <polygon points="430,201 440,205 430,209" fill="#64748B"/>
+
+  <!-- STEP 2: SPATIAL MATCHING ENGINE -->
+  <g transform="translate(445, 95)" filter="url(#flowShadow)">
+    <rect width="345" height="220" rx="12" fill="url(#step2Grad)" stroke="#F59E0B" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#F59E0B" fill-opacity="0.25" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#F59E0B" text-anchor="middle">2</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#FCD34D">ĐỊNH TUYẾN KHÔNG GIAN</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#F59E0B">SPATIAL RESCUE MATCHER</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="313" height="146" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Bán kính quét:</text>
+    <text x="115" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">5.0 km xung quanh thửa F01</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Công thức:</text>
+    <text x="95" y="100" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#FDE68A">Haversine Distance + Capacity Weight</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Ứng viên rảnh:</text>
+    <text x="115" y="120" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#CBD5E1">M02 (1.37 km), M03 (4.10 km)</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Bộ lọc Tenant:</text>
+    <text x="110" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#38BDF8">Chỉ máy thuộc HTX Cần Thơ 01</text>
+    <rect x="26" y="156" width="293" height="36" rx="6" fill="#78350F" fill-opacity="0.3" stroke="#F59E0B" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#FDE68A">Score = 45*(Dist) + 35*(Cap) + 20*(OpRating)</text>
+    <text x="34" y="185" font-family="monospace" font-size="9" fill="#CBD5E1">Evaluating Candidates: M02 vs M03...</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M 800 205 L 835 205" stroke="#64748B" stroke-width="2.5"/>
+  <polygon points="835,201 845,205 835,209" fill="#64748B"/>
+
+  <!-- STEP 3: CANDIDATE SCORING -->
+  <g transform="translate(850, 95)" filter="url(#flowShadow)">
+    <rect width="310" height="220" rx="12" fill="url(#step3Grad)" stroke="#3B82F6" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#3B82F6" fill-opacity="0.25" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#3B82F6" text-anchor="middle">3</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#93C5FD">CHỌN MÁY CỨU HỘ M02</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#60A5FA">OPTIMAL CANDIDATE MATCH</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="278" height="146" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Máy chọn:</text>
+    <text x="95" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#38BDF8">Harvester M02 (Lê Văn Hai)</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Điểm tin cậy:</text>
+    <text x="108" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#4ADE80">93.8 / 100 điểm</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Cự ly di chuyển:</text>
+    <text x="122" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">1.37 km (ETA: 12 phút)</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Năng suất gặt:</text>
+    <text x="115" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#CBD5E1">1.2 ha/h (Hoàn thành trong 45p)</text>
+    <rect x="26" y="156" width="258" height="36" rx="6" fill="#1E3A8A" fill-opacity="0.3" stroke="#3B82F6" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#93C5FD">Candidate: M02 | Score: 93.8</text>
+    <text x="34" y="185" font-family="monospace" font-size="9" fill="#4ADE80">Decision: PASS_THRESHOLD (&gt;80)</text>
+  </g>
+
+  <!-- ==================== ROW 2: Steps 6 <- 5 <- 4 ==================== -->
+
+  <!-- STEP 4: BPMN FLOWABLE WORKFLOW -->
+  <g transform="translate(850, 380)" filter="url(#flowShadow)">
+    <rect width="310" height="245" rx="12" fill="url(#step4Grad)" stroke="#8B5CF6" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#8B5CF6" fill-opacity="0.25" stroke="#8B5CF6" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#8B5CF6" text-anchor="middle">4</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#C4B5FD">QUY TRÌNH DUYỆT FLOWABLE</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#A78BFA">BPMN 2.0 REPLAN WORKFLOW</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="278" height="170" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Tiến trình BPMN:</text>
+    <text x="122" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">replan_rescue_workflow</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Người phê duyệt:</text>
+    <text x="125" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#FDE68A">Điều phối viên (Nguyễn Văn An)</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Lệnh điều động:</text>
+    <text x="122" y="120" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#CBD5E1">Hủy ASG-102 → Tạo ASG-102-R1</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Chế độ động cơ:</text>
+    <text x="122" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#A78BFA">FLOWABLE_PRODUCTION</text>
+    <rect x="26" y="156" width="258" height="60" rx="6" fill="#4C1D95" fill-opacity="0.3" stroke="#8B5CF6" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#C4B5FD">POST /api/v1/plans/replan</text>
+    <text x="34" y="187" font-family="monospace" font-size="9" fill="#FDE68A">Approved: true | Reason: EMERGENCY_RESCUE</text>
+    <text x="34" y="202" font-family="monospace" font-size="9" fill="#4ADE80">New Task Dispatched: ASG-102-R1</text>
+  </g>
+
+  <!-- Arrow 4 -> 5 -->
+  <path d="M 845 500 L 800 500" stroke="#64748B" stroke-width="2.5"/>
+  <polygon points="800,496 790,500 800,504" fill="#64748B"/>
+
+  <!-- STEP 5: FIELD DISPATCH & NOTIFICATION -->
+  <g transform="translate(445, 380)" filter="url(#flowShadow)">
+    <rect width="345" height="245" rx="12" fill="url(#step5Grad)" stroke="#06B6D4" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#06B6D4" fill-opacity="0.25" stroke="#06B6D4" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#06B6D4" text-anchor="middle">5</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#A5F3FC">THỰC ĐỊA &amp; THÔNG BÁO</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#22D3EE">DISPATCH &amp; REAL-TIME TRACKING</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="313" height="170" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Thông báo nông dân:</text>
+    <text x="145" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">SMS/App: M02 tới gặt lúc 14:15</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Lộ trình máy M02:</text>
+    <text x="135" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">GPS Tracker: 10.035, 105.789 → F01</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Tiến độ gặt cứu hộ:</text>
+    <text x="142" y="120" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#4ADE80">Hoàn tất 0.8 ha còn lại (15:00)</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Kết quả bảo vệ:</text>
+    <text x="128" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#67E8F9">100% lúa thu hoạch trước cơn mưa giông</text>
+    <rect x="26" y="156" width="293" height="60" rx="6" fill="#164E63" fill-opacity="0.3" stroke="#06B6D4" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#A5F3FC">Mobile Event: DRIVER_ARRIVED_FIELD</text>
+    <text x="34" y="187" font-family="monospace" font-size="9" fill="#CBD5E1">Yield Collected: 7.2 tons ST25 paddy</text>
+    <text x="34" y="202" font-family="monospace" font-size="9" fill="#4ADE80">Status: HARVEST_COMPLETE_SUCCESS</text>
+  </g>
+
+  <!-- Arrow 5 -> 6 -->
+  <path d="M 440 500 L 395 500" stroke="#64748B" stroke-width="2.5"/>
+  <polygon points="395,496 385,500 395,504" fill="#64748B"/>
+
+  <!-- STEP 6: IMMUTABLE AUDIT SEAL -->
+  <g transform="translate(40, 380)" filter="url(#flowShadow)">
+    <rect width="345" height="245" rx="12" fill="url(#step6Grad)" stroke="#10B981" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="16" fill="#10B981" fill-opacity="0.25" stroke="#10B981" stroke-width="1.5"/>
+    <text x="28" y="33" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#10B981" text-anchor="middle">6</text>
+    <text x="54" y="26" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#A7F3D0">NIÊM PHONG KIỂM TOÁN SHA-256</text>
+    <text x="54" y="41" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#34D399">IMMUTABLE AUDIT TRAIL</text>
+
+    <!-- Details Box -->
+    <rect x="16" y="58" width="313" height="170" rx="8" fill="#0F172A" fill-opacity="0.7" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Loại bản ghi:</text>
+    <text x="110" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="400" fill="#CBD5E1">Biên bản nghiệm thu ca gặt ASG-102-R1</text>
+    <text x="28" y="100" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Hash Chain:</text>
+    <text x="100" y="100" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#A7F3D0">SHA-256 block sealing (Bất biến)</text>
+    <text x="28" y="120" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Chữ ký điện tử:</text>
+    <text x="122" y="120" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#CBD5E1">Nông dân + Lái máy + Điều phối HTX</text>
+    <text x="28" y="140" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0">• Lưu trữ an toàn:</text>
+    <text x="120" y="140" font-family="system-ui, sans-serif" font-size="10" font-weight="400" fill="#6EE7B7">PostgreSQL 16 RLS + SeaweedFS S3</text>
+    <rect x="26" y="156" width="293" height="60" rx="6" fill="#064E3B" fill-opacity="0.3" stroke="#10B981" stroke-width="0.6"/>
+    <text x="34" y="172" font-family="monospace" font-size="9" fill="#A7F3D0">Block #482 Sealed | PrevHash: 8b7e21a...</text>
+    <text x="34" y="187" font-family="monospace" font-size="9" fill="#CBD5E1">CurrHash: f9204a8e312b918731... (VERIFIED)</text>
+    <text x="34" y="202" font-family="monospace" font-size="9" fill="#4ADE80">Audit Status: TAMPER_PROOF_CONFIRMED</text>
+  </g>
+
+  <!-- Footer Stats -->
+  <g transform="translate(40, 642)">
+    <text x="0" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#64748B">* Kịch bản thử nghiệm thành công 100% trong bộ kiểm thử nghiệm thu tự động AcceptanceTestRunner (Suite #4, #5, #6).</text>
+    <text x="1120" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#10B981" text-anchor="end">OpenAgriOS Platform 2026</text>
+  </g>
+</svg>
