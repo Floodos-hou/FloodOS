@@ -1,0 +1,242 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenAgriOS Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%">
+  <defs>
+    <linearGradient id="secBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080E1E"/>
+      <stop offset="50%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#090D1A"/>
+    </linearGradient>
+    <linearGradient id="gwGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#1D4ED8" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="idGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#6D28D9" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="rlsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#B45309" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="secShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="680" rx="16" fill="url(#secBgGrad)"/>
+  <rect width="1196" height="676" x="2" y="2" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Header Banner -->
+  <g transform="translate(40, 26)">
+    <rect width="78" height="24" rx="6" fill="#10B981" fill-opacity="0.2" stroke="#10B981" stroke-width="1"/>
+    <text x="39" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#10B981" text-anchor="middle">SECURITY</text>
+    
+    <text x="90" y="19" font-family="system-ui, sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" letter-spacing="-0.5">KIẾN TRÚC BẢO MẬT ZERO-TRUST &amp; CÔ LẬP ĐA THUÊ BAO (RLS)</text>
+    <text x="90" y="40" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#94A3B8">Chứng minh toàn diện: Xác thực OIDC / RFC 7662 → RBAC PaaS → PostgreSQL 16 RLS → Bất biến SHA-256</text>
+  </g>
+
+  <!-- ==================== LEFT COLUMN: CLIENTS & GATEWAY ==================== -->
+
+  <!-- ACTORS / CLIENTS -->
+  <g transform="translate(40, 85)" filter="url(#secShadow)">
+    <rect width="240" height="260" rx="12" fill="#1E293B" fill-opacity="0.6" stroke="#475569" stroke-width="1.2"/>
+    <text x="20" y="30" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#94A3B8">ACTORS / CLIENT APPS</text>
+    <text x="20" y="46" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#64748B">PKCE Flow &amp; Bearer Tokens</text>
+
+    <!-- Actor 1 -->
+    <rect x="14" y="60" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
+    <circle cx="34" cy="86" r="12" fill="#3B82F6" fill-opacity="0.2"/>
+    <text x="34" y="90" font-family="system-ui, sans-serif" font-size="11" fill="#60A5FA" text-anchor="middle">👤</text>
+    <text x="56" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Điều phối viên HTX</text>
+    <text x="56" y="96" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: COORDINATOR | HTX_CT_01</text>
+
+    <!-- Actor 2 -->
+    <rect x="14" y="122" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
+    <circle cx="34" cy="148" r="12" fill="#10B981" fill-opacity="0.2"/>
+    <text x="34" y="152" font-family="system-ui, sans-serif" font-size="11" fill="#34D399" text-anchor="middle">🚜</text>
+    <text x="56" y="142" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Lái máy gặt / Thiết bị</text>
+    <text x="56" y="158" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: OPERATOR | HTX_CT_01</text>
+
+    <!-- Actor 3 -->
+    <rect x="14" y="184" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
+    <circle cx="34" cy="210" r="12" fill="#F59E0B" fill-opacity="0.2"/>
+    <text x="34" y="214" font-family="system-ui, sans-serif" font-size="11" fill="#FBBF24" text-anchor="middle">🌾</text>
+    <text x="56" y="204" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Nông dân / Thanh tra viên</text>
+    <text x="56" y="220" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: FARMER / AUDITOR</text>
+  </g>
+
+  <!-- KEYCLOAK OIDC IDP -->
+  <g transform="translate(40, 365)" filter="url(#secShadow)">
+    <rect width="240" height="260" rx="12" fill="url(#idGrad)" stroke="#8B5CF6" stroke-width="1.5"/>
+    <rect x="16" y="14" width="208" height="26" rx="6" fill="#8B5CF6" fill-opacity="0.2"/>
+    <text x="24" y="32" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#C4B5FD">KEYCLOAK OIDC (Port :8080)</text>
+
+    <rect x="14" y="50" width="212" height="195" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="24" y="74" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Realm:</text>
+    <text x="75" y="74" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#A78BFA">openagrios</text>
+    
+    <text x="24" y="96" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Public Client:</text>
+    <text x="110" y="96" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#93C5FD">agriops-web (PKCE)</text>
+    
+    <text x="24" y="118" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Confidential Client:</text>
+    <text x="24" y="134" font-family="monospace" font-size="10" fill="#FDE68A">agriops-gateway (Secret)</text>
+    
+    <text x="24" y="156" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Token Introspection:</text>
+    <text x="24" y="172" font-family="monospace" font-size="10" fill="#4ADE80">RFC 7662 (/token/introspect)</text>
+    
+    <rect x="22" y="186" width="196" height="48" rx="6" fill="#3B0764" fill-opacity="0.4" stroke="#8B5CF6" stroke-width="0.6"/>
+    <text x="30" y="202" font-family="system-ui, sans-serif" font-size="9" font-weight="700" fill="#C4B5FD">Strict Security Guard:</text>
+    <text x="30" y="215" font-family="system-ui, sans-serif" font-size="8.5" fill="#E2E8F0">Reject Forged RS256 / Expired (401)</text>
+    <text x="30" y="226" font-family="system-ui, sans-serif" font-size="8.5" fill="#F87171">No Silent Fallback to Mock in Prod</text>
+  </g>
+
+  <!-- ==================== MIDDLE COLUMN: APISIX ZERO-TRUST GATEWAY ==================== -->
+
+  <g transform="translate(310, 85)" filter="url(#secShadow)">
+    <rect width="270" height="540" rx="12" fill="url(#gwGrad)" stroke="#3B82F6" stroke-width="1.5"/>
+    <rect x="18" y="16" width="234" height="28" rx="6" fill="#3B82F6" fill-opacity="0.2"/>
+    <text x="28" y="35" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#60A5FA">APACHE APISIX GATEWAY</text>
+    <text x="28" y="60" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#94A3B8">Edge Ingress Proxy (Port :9080)</text>
+
+    <!-- Plugin 1: Rate Limiting -->
+    <rect x="16" y="80" width="238" height="85" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="104" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#93C5FD">🛡️ PLUGIN: limit-count</text>
+    <text x="28" y="122" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Rate: 100 requests / min / IP</text>
+    <text x="28" y="138" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• DoS &amp; Brute-force Mitigation</text>
+    <text x="28" y="154" font-family="monospace" font-size="9" fill="#F87171">HTTP 429 Too Many Requests</text>
+
+    <!-- Plugin 2: OpenID Connect -->
+    <rect x="16" y="180" width="238" height="150" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="204" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#93C5FD">🔑 PLUGIN: openid-connect</text>
+    <text x="28" y="222" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Client ID: <tspan font-family="monospace" fill="#FDE68A">agriops-gateway</tspan></text>
+    <text x="28" y="238" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Introspect: <tspan font-family="monospace" fill="#A78BFA">:8080/token/introspect</tspan></text>
+    <text x="28" y="254" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Injects Upstream Headers:</text>
+    <rect x="26" y="262" width="218" height="58" rx="6" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
+    <text x="34" y="278" font-family="monospace" font-size="8.5" fill="#38BDF8">X-User-Id: u-coordinator-01</text>
+    <text x="34" y="292" font-family="monospace" font-size="8.5" fill="#34D399">X-Org-Id: HTX_CT_01</text>
+    <text x="34" y="306" font-family="monospace" font-size="8.5" fill="#FBBF24">X-User-Roles: COORDINATOR</text>
+
+    <!-- Plugin 3: Upstream Routing -->
+    <rect x="16" y="345" width="238" height="85" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="369" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#93C5FD">⚡ UPSTREAM ROUTING</text>
+    <text x="28" y="388" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Route: <tspan font-family="monospace" fill="#93C5FD">/api/v1/*</tspan> → Core API (:8000)</text>
+    <text x="28" y="404" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Route: <tspan font-family="monospace" fill="#A78BFA">/process-api/*</tspan> → Flowable (:8081)</text>
+    <text x="28" y="420" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Route: <tspan font-family="monospace" fill="#34D399">/storage/*</tspan> → Seaweed S3 (:9000)</text>
+
+    <!-- Plugin 4: Zero-Trust Verdict -->
+    <rect x="16" y="445" width="238" height="80" rx="8" fill="#1E3A8A" fill-opacity="0.3" stroke="#3B82F6" stroke-width="0.8"/>
+    <text x="28" y="468" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#93C5FD">ZERO-TRUST VERDICT:</text>
+    <text x="28" y="484" font-family="system-ui, sans-serif" font-size="9.5" fill="#E2E8F0">Mọi request không hợp lệ bị chặn ngay</text>
+    <text x="28" y="498" font-family="system-ui, sans-serif" font-size="9.5" fill="#E2E8F0">tại mép mạng Gateway (HTTP 401/403).</text>
+    <text x="28" y="512" font-family="system-ui, sans-serif" font-size="9" font-weight="600" fill="#4ADE80">Mã nguồn Backend được bảo vệ 100%.</text>
+  </g>
+
+  <!-- ==================== THIRD COLUMN: CORE PAAS ENGINE ==================== -->
+
+  <g transform="translate(610, 85)" filter="url(#secShadow)">
+    <rect width="270" height="540" rx="12" fill="url(#coreGrad)" stroke="#10B981" stroke-width="1.5"/>
+    <rect x="18" y="16" width="234" height="28" rx="6" fill="#10B981" fill-opacity="0.2"/>
+    <text x="28" y="35" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#34D399">OPENAGRIOS CORE PAAS</text>
+    <text x="28" y="60" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#94A3B8">OpenAgriOsServer (:8000)</text>
+
+    <!-- Tenant Context Resolver -->
+    <rect x="16" y="80" width="238" height="110" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="104" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#A7F3D0">🏢 TENANT CONTEXT RESOLVER</text>
+    <text x="28" y="122" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Phân giải danh tính từ JWT Claims:</text>
+    <text x="28" y="138" font-family="monospace" font-size="9.5" fill="#38BDF8">  org_id = token.get("org_id")</text>
+    <text x="28" y="152" font-family="monospace" font-size="9.5" fill="#FBBF24">  roles = token.get("roles")</text>
+    <text x="28" y="168" font-family="system-ui, sans-serif" font-size="9.5" fill="#E2E8F0">• Gán ThreadLocal SecurityContext</text>
+    <text x="28" y="182" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Phục vụ mọi transaction trong phiên</text>
+
+    <!-- RBAC Guard -->
+    <rect x="16" y="202" width="238" height="105" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="226" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#A7F3D0">👮 BỘ LỌC PHÂN QUYỀN RBAC</text>
+    <text x="28" y="244" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• <tspan font-weight="700" fill="#FDE68A">COORDINATOR</tspan>: Điều phối, duyệt Replan</text>
+    <text x="28" y="260" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• <tspan font-weight="700" fill="#38BDF8">OPERATOR</tspan>: Nhận lệnh, báo sự cố F01</text>
+    <text x="28" y="276" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• <tspan font-weight="700" fill="#34D399">FARMER</tspan>: Theo dõi tiến độ thửa của mình</text>
+    <text x="28" y="292" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• <tspan font-weight="700" fill="#C4B5FD">AUDITOR</tspan>: Kiểm tra tính bất biến sổ cái</text>
+
+    <!-- Fog of War Isolation -->
+    <rect x="16" y="320" width="238" height="95" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="28" y="344" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#A7F3D0">🌫️ FOG OF WAR (MÀN SƯƠNG BẢO MẬT)</text>
+    <text x="28" y="362" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• Che giấu hoàn toàn dữ liệu máy móc,</text>
+    <text x="28" y="376" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">thửa ruộng giữa các HTX độc lập.</text>
+    <text x="28" y="392" font-family="monospace" font-size="9" fill="#F87171">HTX_CT_01 ⊄ HTX_ST_02 (ZERO LEAK)</text>
+    <text x="28" y="406" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Ngăn chặn lộ bí mật vị trí &amp; sản lượng</text>
+
+    <!-- S3 Storage Hash Sealing -->
+    <rect x="16" y="428" width="238" height="98" rx="8" fill="#064E3B" fill-opacity="0.3" stroke="#10B981" stroke-width="0.8"/>
+    <text x="28" y="452" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700" fill="#A7F3D0">📦 S3 EVIDENCE INTEGRITY</text>
+    <text x="28" y="470" font-family="system-ui, sans-serif" font-size="9.5" fill="#E2E8F0">• SeaweedFS S3 Read-Back Persistence</text>
+    <text x="28" y="486" font-family="monospace" font-size="8.5" fill="#A7F3D0">readEvidenceObject(orgId, bucket...)</text>
+    <text x="28" y="500" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">• Kiểm tra tính toàn vẹn byte ảnh hiện trường</text>
+    <text x="28" y="514" font-family="system-ui, sans-serif" font-size="9" font-weight="600" fill="#34D399">HTTP 200 OK / Content-Type: image/jpeg</text>
+  </g>
+
+  <!-- ==================== FOURTH COLUMN: POSTGRESQL 16 RLS & AUDIT CHAIN ==================== -->
+
+  <g transform="translate(910, 85)" filter="url(#secShadow)">
+    <rect width="250" height="540" rx="12" fill="url(#rlsGrad)" stroke="#F59E0B" stroke-width="1.5"/>
+    <rect x="18" y="16" width="214" height="28" rx="6" fill="#F59E0B" fill-opacity="0.2"/>
+    <text x="28" y="35" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FCD34D">POSTGRESQL 16 &amp; RLS</text>
+    <text x="28" y="60" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#94A3B8">Cơ sở Dữ liệu Đa Thuê bao</text>
+
+    <!-- Session Variables Injection -->
+    <rect x="14" y="80" width="222" height="120" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="24" y="102" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700" fill="#FDE68A">⚡ SQL SESSION POLICIES</text>
+    <text x="24" y="120" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">Thực thi tại mỗi kết nối DB:</text>
+    <rect x="20" y="126" width="210" height="66" rx="5" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
+    <text x="26" y="142" font-family="monospace" font-size="8" fill="#FCD34D">SET LOCAL app.current_org_id</text>
+    <text x="26" y="154" font-family="monospace" font-size="8" fill="#4ADE80">  = 'HTX_CT_01';</text>
+    <text x="26" y="168" font-family="monospace" font-size="8" fill="#FCD34D">SET LOCAL app.current_user_role</text>
+    <text x="26" y="180" font-family="monospace" font-size="8" fill="#38BDF8">  = 'COORDINATOR';</text>
+
+    <!-- RLS Policy Engine -->
+    <rect x="14" y="210" width="222" height="145" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
+    <text x="24" y="232" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700" fill="#FDE68A">🔒 ROW-LEVEL SECURITY</text>
+    <text x="24" y="250" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">Áp dụng cho mọi bảng nghiệp vụ:</text>
+    <text x="24" y="266" font-family="system-ui, sans-serif" font-size="8.5" fill="#94A3B8">• fields, machines, shifts, incidents</text>
+    <rect x="20" y="274" width="210" height="72" rx="5" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
+    <text x="26" y="290" font-family="monospace" font-size="8" fill="#93C5FD">CREATE POLICY tenant_isolation</text>
+    <text x="26" y="302" font-family="monospace" font-size="8" fill="#93C5FD">  ON fields USING (</text>
+    <text x="26" y="316" font-family="monospace" font-size="8" fill="#34D399">    org_id = current_setting(</text>
+    <text x="26" y="328" font-family="monospace" font-size="8" fill="#34D399">      'app.current_org_id')</text>
+    <text x="26" y="340" font-family="monospace" font-size="8" fill="#93C5FD">  );</text>
+
+    <!-- SHA-256 Audit Chain -->
+    <rect x="14" y="365" width="222" height="160" rx="8" fill="#78350F" fill-opacity="0.25" stroke="#F59E0B" stroke-width="0.8"/>
+    <text x="24" y="388" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700" fill="#FDE68A">⛓️ BẢN GHI BẤT BIẾN SHA-256</text>
+    <text x="24" y="406" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">Chuỗi băm tuần tự chống sửa đổi:</text>
+    <rect x="20" y="414" width="210" height="102" rx="5" fill="#0F172A" stroke="#334155" stroke-width="0.6"/>
+    <text x="26" y="430" font-family="monospace" font-size="8" fill="#A78BFA">Block #481: PrevHash [6f4a...]</text>
+    <text x="26" y="444" font-family="monospace" font-size="8" fill="#60A5FA">   ↓ Event: M01_BROKEN</text>
+    <text x="26" y="458" font-family="monospace" font-size="8" fill="#A78BFA">Block #482: PrevHash [8b7e...]</text>
+    <text x="26" y="472" font-family="monospace" font-size="8" fill="#60A5FA">   ↓ Event: M02_REPLAN_APPROVED</text>
+    <text x="26" y="486" font-family="monospace" font-size="8" fill="#34D399">Block #483: Sealed Hash Chain</text>
+    <text x="26" y="502" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="#4ADE80">✓ Sổ cái kiểm toán toàn vẹn</text>
+  </g>
+
+  <!-- Connective Arrows -->
+  <g stroke="#64748B" stroke-width="2" fill="none">
+    <!-- Clients to APISIX -->
+    <path d="M 280 215 L 310 215"/>
+    <!-- Keycloak to APISIX -->
+    <path d="M 280 495 L 310 495"/>
+    <!-- APISIX to Core -->
+    <path d="M 580 355 L 610 355"/>
+    <!-- Core to Postgres -->
+    <path d="M 880 355 L 910 355"/>
+  </g>
+
+  <!-- Footer Stats -->
+  <g transform="translate(40, 642)">
+    <text x="0" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#64748B">* Kiểm thử nghiệm thu tự động AcceptanceTestRunner xác nhận 100% token giả mạo, hết hạn hoặc sai audience đều bị từ chối 401 Unauthorized.</text>
+    <text x="1120" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#10B981" text-anchor="end">OpenAgriOS Platform 2026</text>
+  </g>
+</svg>

@@ -36,6 +36,10 @@ Server sẽ lắng nghe tại cổng `8000` (truy cập `http://localhost:8000/a
 
 ---
 
+<p align="center">
+  <img src="assets/incident_recovery_flow.svg" alt="Kịch bản Điều phối & Phục hồi Sự cố Tự động" width="100%">
+</p>
+
 ## 3. Chạy Bộ Kiểm Thử Tự Động (Acceptance Test Suite)
 
 Trong một cửa sổ dòng lệnh khác, thực thi:
@@ -50,7 +54,7 @@ RUNNING OPENAGRIOS INTEGRATION TEST SUITE (JAVA 21)
 ============================================================================
 [PASS] Core Platform Health & BPMN 2.0 XML Definitions verified.
 [PASS] OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.
-[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, and verified Keycloak production failure without mock fallback (HTTP 401).
+[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, expired token, wrong audience, and verified Keycloak production failure without mock fallback (HTTP 401).
 [PASS] Multi-Tenant RLS & Field-Level Visibility verified: [F01, F03, F07] unmasked, 7 masked.
 [PASS] Zero-Trust RBAC Guard verified (HTTP 403 Forbidden on unauthorized dispatch).
 [PASS] Time-Window Conflict Engine verified (HTTP 409: MACHINE_TIME_OVERLAP).
