@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fail-fast configuration check: Invalid `OPENAGRIOS_AUTH_MODE` environment variable values throw an immediate `IllegalStateException`.
   - Added test cases in `AcceptanceTestRunner` Suite 4 verifying rejection of forged RS256 tokens and mock fallback prevention.
 
+### Strict Integration, Real Persistence & Fail-Fast Hardening (Update 2)
+- **Keycloak OIDC Confidential Client Introspection & PKCE Standard**:
+  - Configured `DEFAULT_INTROSPECTION_CLIENT_ID` (`agriops-gateway`) and `DEFAULT_INTROSPECTION_CLIENT_SECRET` (`agriops-gateway-secret-2026`).
+  - RFC 7662 token introspection now sends HTTP Basic authentication credentials alongside form parameters, fulfilling Keycloak requirements for confidential client introspection.
+  - Implemented `exchangeAuthorizationCodeWithPkce()` and exposed public endpoint `POST /api/v1/auth/pkce/token` for OAuth 2.0 / OIDC Authorization Code + PKCE token exchange.
+  - Formally deprecated `tryLiveKeycloakLogin()` with JavaDoc guidance citing **RFC 9700** (deprecating ROPC grant for web clients).
+- **PostgreSQL 16 Real JDBC Persistence & Truthful Storage Reporting**:
+  - Expanded `PostgreSqlDataService` with live JDBC connectivity check (`isConnectionLive()`), schema initialization DDL (`initSchema()`), and multi-tenant RLS CRUD methods (`syncField`, `syncMachine`, `syncShift`, `syncIncident`, `syncAuditBlock`).
+  - Integrated `PostgreSqlDataService` into `AgriDataStore`: `getStorageEngineMode()` now dynamically checks live JDBC connectivity, returning truthful connection status (`POSTGRESQL_16_JDBC_RLS (Active JDBC Pool... Status: CONNECTED)` vs `IN_MEMORY_MAP_WITH_POSTGRES_RLS_COMPILER (PostgreSQL unreachable: fallback active)`).
+- **Elimination of Silent Fallbacks in Production Services**:
+  - `BpmnWorkflowEngine`: Configured dynamic credentials (`FLOWABLE_REST_USER`, `FLOWABLE_REST_PASSWORD`). Under `FLOWABLE_PRODUCTION` mode, connection or HTTP errors fail fast and throw exceptions instead of silently switching to embedded mock.
+  - `SeaweedS3StorageService`: Configured dynamic credentials (`S3_ACCESS_KEY`, `S3_SECRET_KEY`). Under `S3_PRODUCTION` mode, S3 PUT/GET errors fail fast and throw exceptions. Live S3 uploads now persist metadata JSON (`.meta.json`) directly into the object store alongside the payload.
+
 ### Integration & Security Hardening
 - **Zero-Trust Token Rejection & Strict Identity**:
   - Validated strict rejection of expired tokens and tokens with incorrect audience (`aud != openagrios-api`).

@@ -12,6 +12,8 @@ Tài liệu đặc tả toàn bộ các điểm cuối REST API của hệ thố
 | `GET` | `/openapi.json` | Public (Mọi người) | OpenAPI 3.0 JSON Specification | `200 OK` |
 | `GET` | `/api/v1/health` | Public (Mọi người) | Kiểm tra trạng thái sức khỏe các dịch vụ Core & BPMN | `200 OK` |
 | `GET` | `/api/v1/auth/accounts` | Public (Mọi người) | Danh sách tài khoản demo và vai trò Keycloak OIDC | `200 OK` |
+| `GET` | `/api/v1/auth/pkce/authorize-url` | Public (Mọi người) | Khởi tạo phiên PKCE OAuth2/OIDC, sinh `code_challenge` SHA-256 | `200 OK` |
+| `POST` | `/api/v1/auth/pkce/token` | Public (Mọi người) | Trao đổi `code` và `code_verifier` lấy Access Token chuẩn RFC 7636 & RFC 9700 | `200 OK` / `400 Bad Request` |
 | `POST` | `/api/v1/auth/login` | Public (Mọi người) | Đăng nhập OIDC SSO, nhận JWT Bearer Token | `200 OK` / `401 Unauthorized` |
 | `GET` | `/api/v1/auth/userinfo` | Bearer Token | Lấy thông tin định danh người dùng từ Token | `200 OK` / `401 Unauthorized` |
 | `GET` | `/api/v1/state` | Bearer Token | Lấy bức tranh trạng thái vận hành theo bộ lọc RLS | `200 OK` / `401 Unauthorized` |
