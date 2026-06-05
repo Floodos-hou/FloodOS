@@ -219,6 +219,8 @@ public final class SeaweedS3StorageService {
 
 
     private final String s3Endpoint;
+    private final String s3AccessKey;
+    private final String s3SecretKey;
 
 
 
@@ -282,26 +284,21 @@ public final class SeaweedS3StorageService {
 
 
 
-    public SeaweedS3StorageService(String s3Endpoint) {
+        public SeaweedS3StorageService(String s3Endpoint) {
+        this(
+                s3Endpoint,
+                System.getenv().getOrDefault("S3_ACCESS_KEY", "openagrios-s3-access"),
+                System.getenv().getOrDefault("S3_SECRET_KEY", "openagrios-s3-secret")
+        );
+    }
 
-
-
+    public SeaweedS3StorageService(String s3Endpoint, String s3AccessKey, String s3SecretKey) {
         this.s3Endpoint = s3Endpoint != null ? s3Endpoint.replaceAll("/+$", "") : "http://localhost:9000";
-
-
-
+        this.s3AccessKey = (s3AccessKey != null && !s3AccessKey.isBlank()) ? s3AccessKey : "openagrios-s3-access";
+        this.s3SecretKey = (s3SecretKey != null && !s3SecretKey.isBlank()) ? s3SecretKey : "openagrios-s3-secret";
         this.httpClient = HttpClient.newBuilder()
-
-
-
                 .connectTimeout(Duration.ofMillis(1200))
-
-
-
                 .build();
-
-
-
     }
 
 
@@ -470,137 +467,64 @@ public final class SeaweedS3StorageService {
 
 
 
+        String storageMode = System.getenv().getOrDefault("OPENAGRIOS_STORAGE_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_AUTH_MODE"))
+                        ? "S3_PRODUCTION"
+                        : "EMBEDDED_DEV_MOCK");
+
         // Attempt live HTTP PUT to SeaweedFS S3 REST API endpoint
-
-
-
         try {
-
-
-
             String pathUrl = s3Endpoint + "/" + bucket + "/" + orgId.toLowerCase(Locale.ROOT) + "/" + folder + "/" + recordId + "/" + filename;
-
-
-
             byte[] bodyBytes = (dataUrl != null && !dataUrl.isBlank())
-
-
-
                     ? dataUrl.getBytes(StandardCharsets.UTF_8)
-
-
-
                     : ("OpenAgriOS S3 Evidence Record: " + filename + " | Org: " + orgId + " | TS: " + timestamp).getBytes(StandardCharsets.UTF_8);
 
-
-
-
-
-
-
             HttpRequest req = HttpRequest.newBuilder()
-
-
-
                     .uri(URI.create(pathUrl))
-
-
-
                     .timeout(Duration.ofMillis(1200))
-
-
-
                     .header("Content-Type", mimeType != null ? mimeType : "application/octet-stream")
-
-
-
                     .PUT(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
-
-
-
                     .build();
 
-
-
-
-
-
-
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-
-
-
             if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-
-
-
                 backend = "SEAWEEDFS_S3_LIVE";
-
-
-
                 liveConnected = true;
-
-
-
                 Optional<String> remoteEtag = resp.headers().firstValue("ETag");
-
-
-
                 if (remoteEtag.isPresent()) {
-
-
-
                     etag = remoteEtag.get().replace("\"", "");
-
-
-
                 }
-
-
-
+                // Persist metadata object alongside data in S3
+                try {
+                    String metaUrl = pathUrl + ".meta.json";
+                    String metaJson = String.format("{\"object_key\":\"%s\",\"etag\":\"%s\",\"size_bytes\":%d,\"uploaded_by\":\"%s\",\"created_at\":\"%s\"}",
+                            objKey, etag, sizeBytes, uploadedBy, timestamp);
+                    HttpRequest metaReq = HttpRequest.newBuilder()
+                            .uri(URI.create(metaUrl))
+                            .timeout(Duration.ofMillis(800))
+                            .header("Content-Type", "application/json")
+                            .PUT(HttpRequest.BodyPublishers.ofString(metaJson))
+                            .build();
+                    httpClient.send(metaReq, HttpResponse.BodyHandlers.discarding());
+                } catch (Exception ignored) {}
+            } else if ("S3_PRODUCTION".equalsIgnoreCase(storageMode)) {
+                throw new IllegalStateException("S3_PRODUCTION error: SeaweedFS S3 responded with HTTP "
+                        + resp.statusCode() + " at " + pathUrl + ". Silent fallback to mock is prohibited in production.");
             }
-
-
-
-        } catch (Exception ignored) {
-
-
-
-            // Live S3 endpoint offline in standalone testing; gracefully defaults to EMBEDDED_DEV_MOCK
-
-
-
+        } catch (Exception e) {
+            if ("S3_PRODUCTION".equalsIgnoreCase(storageMode)) {
+                throw new IllegalStateException("S3_PRODUCTION connection error to SeaweedFS S3 at "
+                        + s3Endpoint + ": " + e.getMessage() + ". Silent fallback to mock is prohibited in production.", e);
+            }
+            // Standalone development/testing mode: fallback to embedded MD5 ETag
             backend = "EMBEDDED_DEV_MOCK";
-
-
-
             liveConnected = false;
-
-
-
         }
 
-
-
-
-
-
-
         S3ObjectMeta meta = new S3ObjectMeta(
-
-
-
                 objKey, orgId, bucket, filename, mimeType, sizeBytes, etag, uploadedBy, dataUrl, timestamp,
-
-
-
                 backend, liveConnected
-
-
-
         );
-
-
 
         objects.put(objKey, meta);
 
