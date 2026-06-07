@@ -77,6 +77,11 @@ public final class ImmutableAuditLedger {
     }
 
     private final List<AuditRecord> ledger = new ArrayList<>();
+    private PostgreSqlDataService postgreSqlDataService;
+
+    public void setPostgreSqlDataService(PostgreSqlDataService postgreSqlDataService) {
+        this.postgreSqlDataService = postgreSqlDataService;
+    }
 
     public synchronized void clear() {
         ledger.clear();
@@ -142,6 +147,15 @@ public final class ImmutableAuditLedger {
                 prevHash, recordHash, ts
         );
         ledger.add(rec);
+
+        if (postgreSqlDataService != null && postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncAuditRecord(
+                    organizationId, actorRole, eventId, correlationId,
+                    entityType, entityId, action, actorUserId, actorRole,
+                    beforeJson, afterJson, prevHash, recordHash
+            );
+        }
+
         return rec;
     }
 

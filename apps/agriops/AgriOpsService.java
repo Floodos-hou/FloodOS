@@ -393,7 +393,7 @@ public final class AgriOpsService {
                 field.areaHa, reqStart, reqEnd, "HIGH", "PENDING_SCHEDULE",
                 prcId, corrId, notes, ts
         );
-        store.serviceRequests.put(reqId, sr);
+        store.persistServiceRequest(sr, auth.role());
 
         store.bpmnEngine.startInstance(
                 prcId, auth.organizationId(), "service_request_lifecycle", reqId,
@@ -485,13 +485,15 @@ public final class AgriOpsService {
                 startTime, endTime, "CONFIRMED", null, null,
                 reqRow.correlationId, auth.userId(), ts
         );
-        store.assignments.put(asgId, asg);
+        store.persistAssignment(asg, auth.role());
 
         String oldReqStatus = reqRow.status;
         reqRow.status = "SCHEDULED";
+        store.persistServiceRequest(reqRow, auth.role());
         FieldPlot f = store.fields.get(reqRow.fieldId);
         if (f != null && "READY_HARVEST".equals(f.readinessStatus)) {
             f.readinessStatus = "SCHEDULED";
+            store.persistField(f, auth.role());
         }
 
         Map<String, Object> after = new LinkedHashMap<>();
@@ -592,7 +594,8 @@ public final class AgriOpsService {
                 downtimeHrs, s3Obj.objectKey(), s3Obj.etag(), repId, "usr_repair_01",
                 "OPEN_REPLANNING", prcId, impactedIds, allCandidates, null, primaryCorrId, ts
         );
-        store.incidents.put(incId, incident);
+        store.persistIncident(incident, auth.role());
+        store.persistMachine(machine, auth.role());
 
         // 6.5. Start Tier 1 BPMN 2.0 incident_replan_workflow
         store.bpmnEngine.startInstance(
@@ -761,6 +764,7 @@ public final class AgriOpsService {
         if (oldAsg != null) {
             oldAsg.status = "SUPERSEDED";
             oldAsg.supersededByAssignmentId = newAsgId;
+            store.persistAssignment(oldAsg, auth.role());
         }
 
         DispatchAssignment newAsg = new DispatchAssignment(
@@ -774,19 +778,28 @@ public final class AgriOpsService {
                 "CONFIRMED", oldAsgId, null,
                 inc.correlationId, auth.userId(), ts
         );
-        store.assignments.put(newAsgId, newAsg);
+        store.persistAssignment(newAsg, auth.role());
 
         ServiceRequest sr = store.serviceRequests.get(newAsg.requestId);
-        if (sr != null) sr.status = "RESCHEDULED";
+        if (sr != null) {
+            sr.status = "RESCHEDULED";
+            store.persistServiceRequest(sr, auth.role());
+        }
         FieldPlot fp = store.fields.get(newAsg.fieldId);
-        if (fp != null) fp.readinessStatus = "SCHEDULED";
+        if (fp != null) {
+            fp.readinessStatus = "SCHEDULED";
+            store.persistField(fp, auth.role());
+        }
         HarvesterMachine rescueM = store.machines.get(newAsg.machineId);
         if (rescueM != null) {
             rescueM.status = "MOVING";
             rescueM.telemetryUpdatedAt = ts;
+            store.persistMachine(rescueM, auth.role());
         }
 
         inc.status = "REPLAN_APPROVED";
+        inc.selectedOption = chosen;
+        store.persistIncident(inc, auth.role());
         inc.selectedOption = chosen;
 
         // Advance Tier 1 BPMN Instance
@@ -850,6 +863,7 @@ public final class AgriOpsService {
         String diagnosis = String.valueOf(body.getOrDefault("diagnosis", "Đã thay mới dây curoa buồng đập Bando & căn chỉnh cụm puly"));
         String oldStatus = inc.status;
         inc.status = "UNDER_REPAIR";
+        store.persistIncident(inc, auth.role());
 
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("repair_ticket_id", inc.repairTicketId);
@@ -928,12 +942,17 @@ public final class AgriOpsService {
         ServiceRequest sr = store.serviceRequests.get(asg.requestId);
         if (sr != null) sr.status = "COMPLETED";
 
+        if (m != null) store.persistMachine(m, auth.role());
+        if (field != null) store.persistField(field, auth.role());
+        store.persistAssignment(asg, auth.role());
+        if (sr != null) store.persistServiceRequest(sr, auth.role());
+
         WorkAcceptance acc = new WorkAcceptance(
                 accId, orgId, asgId, asg.requestId, areaHa,
                 s3Obj.objectKey(), "op_nam", auth.username(), "CONFIRMED",
                 notes, asg.correlationId, ts, ts
         );
-        store.acceptances.put(accId, acc);
+        store.persistWorkAcceptance(acc, auth.role());
 
         store.bpmnEngine.completeActiveTenantInstances(
                 orgId, "endReplan", "Đã nghiệm thu & Đóng băng Sổ cái Audit SHA-256", ts
