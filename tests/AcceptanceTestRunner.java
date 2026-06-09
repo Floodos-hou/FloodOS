@@ -313,8 +313,16 @@ public final class AcceptanceTestRunner {
             Map<String, Object> pgRls = pgService.testConnectionAndApplyRls("HTX_CANTHO_01", "COORDINATOR");
 
             check(pgRls.containsKey("compiled_rls_sql"), "PostgreSQL RLS SQL check failed");
+            check(String.valueOf(pgRls.get("compiled_rls_sql")).contains("SET LOCAL app.current_org_id = 'HTX_CANTHO_01'"), "RLS SQL must set app.current_org_id");
+            check(String.valueOf(pgRls.get("compiled_rls_sql")).contains("SET LOCAL app.current_user_role = 'COORDINATOR'"), "RLS SQL must set app.current_user_role");
             String storageMode = server.getAgriOpsService().getStore().getStorageEngineMode();
             check(storageMode != null && !storageMode.isBlank(), "Storage engine mode must be reported truthfully");
+
+            // 3.2. Verify Schema Harmonization & Direct RLS Persistence with infra/db/schema.sql
+            check(server.getAgriOpsService().getStore().postgreSqlDataService != null, "PostgreSQL service must be initialized");
+            check(server.getAgriOpsService().getStore().fields.containsKey("F01"), "Field F01 must exist in store");
+            check(server.getAgriOpsService().getStore().machines.containsKey("M01"), "Machine M01 must exist in store");
+            check(server.getAgriOpsService().getStore().assignments.containsKey("ASG-101"), "Assignment ASG-101 must exist in store");
 
 
 
@@ -431,6 +439,8 @@ public final class AcceptanceTestRunner {
             ));
 
             check(resAcc.status() == 200 && "ACC-ASG-102-R1".equals(resAcc.body().get("acceptance_id")), "Confirm acceptance failed");
+            check(server.getAgriOpsService().getStore().acceptances.containsKey("ACC-ASG-102-R1"), "Work acceptance must be persisted in store");
+            check(server.getAgriOpsService().getStore().incidents.containsKey(incId), "Incident must be persisted in store");
 
 
 

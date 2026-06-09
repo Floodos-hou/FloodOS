@@ -89,11 +89,10 @@ public final class AgriDataStore {
     ) {
 
         this.auditLedger = auditLedger;
-
         this.s3Storage = s3Storage;
-
         this.bpmnEngine = bpmnEngine;
         this.postgreSqlDataService = new PostgreSqlDataService();
+        this.auditLedger.setPostgreSqlDataService(this.postgreSqlDataService);
         if (this.postgreSqlDataService.isConfigured() && this.postgreSqlDataService.isConnectionLive()) {
             this.postgreSqlDataService.initSchema();
         }
@@ -340,13 +339,35 @@ public final class AgriDataStore {
         asgAfter.put("window", "13:00-17:00 20/11");
 
         auditLedger.appendRecord(
-
                 "HTX_CANTHO_01", "CORR-GOLDEN-F03", "Assignment", "ASG-102",
-
                 "CONFIRM_INITIAL_SCHEDULE", "coord_htx01", "COORDINATOR", asgBefore, asgAfter, 200
-
         );
 
+        // If PostgreSQL is live, synchronize seeded state to PostgreSQL
+        if (postgreSqlDataService.isConnectionLive()) {
+            for (Organization o : organizations.values()) {
+                postgreSqlDataService.syncOrganization(o.organizationId(), o.name(), o.orgType(), o.province(), o.status());
+            }
+            for (UserAccount u : usersByUsername.values()) {
+                postgreSqlDataService.syncUser(u.userId(), u.username(), u.fullName(), u.organizationId(), u.role(), "", "ACTIVE");
+            }
+            for (FieldPlot f : fields.values()) {
+                String polyJson = f.polygon != null ? org.openagrios.core.dataservices.JsonCodec.toCanonicalJson(java.util.Map.of("type", "Polygon", "coordinates", f.polygon)) : "{}";
+                postgreSqlDataService.syncField(f.organizationId, "COORDINATOR", f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.centerLat, f.centerLng, polyJson);
+            }
+            for (HarvesterMachine m : machines.values()) {
+                postgreSqlDataService.syncMachine(m.organizationId, "COORDINATOR", m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+            }
+            for (OperatorProfile op : operators.values()) {
+                postgreSqlDataService.syncOperator(op.organizationId(), "COORDINATOR", op.operatorId(), op.userId(), op.fullName(), op.rating(), op.status());
+            }
+            for (ServiceRequest r : serviceRequests.values()) {
+                postgreSqlDataService.syncServiceRequest(r.organizationId, "COORDINATOR", r.requestId, r.fieldId, r.requesterUserId, r.areaHa, r.requestedStart, r.requestedEnd, r.priority, r.status, r.bpmnProcessId, r.correlationId, r.notes);
+            }
+            for (DispatchAssignment a : assignments.values()) {
+                postgreSqlDataService.syncAssignment(a.organizationId, "COORDINATOR", a.assignmentId, a.requestId, a.fieldId, a.machineId, a.operatorId, a.startTime, a.endTime, a.status, a.replacesAssignmentId, a.supersededByAssignmentId, null, a.correlationId, a.createdBy);
+            }
+        }
     }
 
 
@@ -381,5 +402,63 @@ public final class AgriDataStore {
 
     private void addAssignment(DispatchAssignment a) { assignments.put(a.assignmentId, a); }
 
+    // ========================================================================
+    // PERSISTENT DATA MUTATORS (SYNCHRONIZES IN-MEMORY MAP + POSTGRESQL 16 JDBC)
+    // ========================================================================
+
+    public synchronized void persistField(FieldPlot f, String role) {
+        fields.put(f.fieldId, f);
+        if (postgreSqlDataService.isConnectionLive()) {
+            String polyJson = f.polygon != null ? org.openagrios.core.dataservices.JsonCodec.toCanonicalJson(java.util.Map.of("type", "Polygon", "coordinates", f.polygon)) : "{}";
+            postgreSqlDataService.syncField(f.organizationId, role, f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.centerLat, f.centerLng, polyJson);
+        }
+    }
+
+    public synchronized void persistMachine(HarvesterMachine m, String role) {
+        machines.put(m.machineId, m);
+        if (postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncMachine(m.organizationId, role, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+        }
+    }
+
+    public synchronized void persistServiceRequest(ServiceRequest r, String role) {
+        serviceRequests.put(r.requestId, r);
+        if (postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncServiceRequest(r.organizationId, role, r.requestId, r.fieldId, r.requesterUserId, r.areaHa, r.requestedStart, r.requestedEnd, r.priority, r.status, r.bpmnProcessId, r.correlationId, r.notes);
+        }
+    }
+
+    public synchronized void persistAssignment(DispatchAssignment a, String role) {
+        assignments.put(a.assignmentId, a);
+        if (postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncAssignment(a.organizationId, role, a.assignmentId, a.requestId, a.fieldId, a.machineId, a.operatorId, a.startTime, a.endTime, a.status, a.replacesAssignmentId, a.supersededByAssignmentId, null, a.correlationId, a.createdBy);
+        }
+    }
+
+    public synchronized void persistIncident(MachineIncident inc, String role) {
+        incidents.put(inc.incidentId, inc);
+        if (postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncIncident(inc.organizationId, role, inc.incidentId, inc.machineId, inc.reportedByUserId, inc.severity, inc.incidentType, inc.description, inc.estimatedDowntimeHours, inc.evidenceObjectKey, inc.evidenceEtag, inc.repairTicketId, inc.assignedRepairUserId, inc.status, inc.bpmnProcessId, inc.correlationId);
+        }
+    }
+
+    public synchronized void persistWorkAcceptance(WorkAcceptance acc, String role) {
+        acceptances.put(acc.acceptanceId(), acc);
+        if (postgreSqlDataService.isConnectionLive()) {
+            postgreSqlDataService.syncWorkAcceptance(acc.organizationId(), role, acc.acceptanceId(), acc.assignmentId(), acc.requestId(), acc.completedAreaHa(), acc.evidenceObjectKey(), acc.operatorSubmittedBy(), acc.farmerConfirmedBy(), acc.confirmationStatus(), acc.notes(), acc.correlationId());
+        }
+    }
+
+    public synchronized List<Map<String, Object>> queryDatabaseFieldsWithRls(String orgId, String role) {
+        return postgreSqlDataService.queryWithRls(orgId, role, "fields");
+    }
+
+    public synchronized List<Map<String, Object>> queryDatabaseAssignmentsWithRls(String orgId, String role) {
+        return postgreSqlDataService.queryWithRls(orgId, role, "assignments");
+    }
+
+    public synchronized List<Map<String, Object>> queryDatabaseIncidentsWithRls(String orgId, String role) {
+        return postgreSqlDataService.queryWithRls(orgId, role, "incidents");
+    }
 }
 

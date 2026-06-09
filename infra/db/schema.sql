@@ -239,3 +239,32 @@ CREATE POLICY tenant_isolation_assignments ON assignments
 
 CREATE POLICY tenant_isolation_incidents ON incidents
     USING (organization_id = current_setting('app.current_org_id', true));
+
+ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_audit ON audit_records
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
+
+-- ============================================================================
+-- BOOTSTRAP SEED DATA (Idempotent: ON CONFLICT DO NOTHING)
+-- ============================================================================
+INSERT INTO organizations (organization_id, name, org_type, province, status) VALUES
+('HTX_CANTHO_01', 'HTX Nông nghiệp Số Thới Lai — Cần Thơ', 'COOPERATIVE', 'Cần Thơ', 'ACTIVE'),
+('HTX_SOCTRANG_02', 'HTX Lúa Chất lượng cao Mỹ Xuyên — Sóc Trăng', 'COOPERATIVE', 'Sóc Trăng', 'ACTIVE')
+ON CONFLICT (organization_id) DO NOTHING;
+
+INSERT INTO users (user_id, username, full_name, organization_id, role, phone, status) VALUES
+('usr_farmer_ba', 'farmer_ba', 'Bác Ba Nguyễn Văn', 'HTX_CANTHO_01', 'FARMER', '0901234567', 'ACTIVE'),
+('usr_farmer_tam', 'farmer_tam', 'Chú Tám Lê Văn', 'HTX_CANTHO_01', 'FARMER', '0901234568', 'ACTIVE'),
+('usr_coord_01', 'coord_htx01', 'Chị Lan (Điều phối viên HTX Cần Thơ 01)', 'HTX_CANTHO_01', 'COORDINATOR', '0901234569', 'ACTIVE'),
+('usr_op_minh', 'op_minh', 'Anh Minh (Lái máy M01)', 'HTX_CANTHO_01', 'OPERATOR', '0901234570', 'ACTIVE'),
+('usr_op_nam', 'op_nam', 'Anh Nam (Lái máy M02 - Cứu viện)', 'HTX_CANTHO_01', 'OPERATOR', '0901234571', 'ACTIVE'),
+('usr_op_hai', 'op_hai', 'Anh Hải (Lái máy M03)', 'HTX_CANTHO_01', 'OPERATOR', '0901234572', 'ACTIVE'),
+('usr_op_son', 'op_son', 'Anh Sơn (Lái máy M04)', 'HTX_CANTHO_01', 'OPERATOR', '0901234573', 'ACTIVE'),
+('usr_owner_tu', 'owner_tu', 'Chú Tư Võ Văn (Chủ máy M01, M02)', 'HTX_CANTHO_01', 'MACHINE_OWNER', '0901234574', 'ACTIVE'),
+('usr_repair_01', 'repair_01', 'Đội Sửa chữa Cơ khí R01', 'HTX_CANTHO_01', 'REPAIR_TEAM', '0901234575', 'ACTIVE'),
+('usr_coord_02', 'coord_htx02', 'Anh Hùng (Điều phối viên HTX Sóc Trăng 02)', 'HTX_SOCTRANG_02', 'COORDINATOR', '0901234576', 'ACTIVE')
+ON CONFLICT (user_id) DO NOTHING;

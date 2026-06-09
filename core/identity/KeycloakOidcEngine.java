@@ -1502,12 +1502,13 @@ public final class KeycloakOidcEngine {
 
             String authHeader = null;
             if (clientId != null && clientSecret != null && !clientSecret.isBlank()) {
-                // RFC 7662: HTTP Basic Authentication using confidential client credentials
+                // RFC 7662 & RFC 6749 Section 2.3.1: HTTP Basic Authentication (client_secret_basic).
+                // RFC 6749 strictly mandates: "The client MUST NOT use more than one authentication method in each request."
+                // Therefore, client_secret MUST NOT be included in the request body when using HTTP Basic header.
                 String creds = clientId + ":" + clientSecret;
                 authHeader = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
-                formBody += "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
-                        + "&client_secret=" + URLEncoder.encode(clientSecret, StandardCharsets.UTF_8);
             } else if (clientId != null) {
+                // Public client identification (client_id only, no secret)
                 formBody += "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8);
             }
 

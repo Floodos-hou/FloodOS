@@ -441,12 +441,10 @@ java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.tests.AcceptanceT
 
 
 > [!CAUTION]
-
-> **CẢNH BÁO AN NINH BẮT BUỘC (SECURITY NOTICE):**
-
-> Toàn bộ danh sách tài khoản và mật khẩu mặc định (`123456`) dưới đây được thiết kế **DUY NHẤT cho môi trường thử nghiệm cục bộ (Local Development & CI Acceptance Testing)**.
-
-> **TUYỆT ĐỐI KHÔNG SỬ DỤNG** các tài khoản và mật khẩu này khi triển khai hệ thống lên môi trường mạng công khai (Production). Khi đưa vào vận hành thực tế, biến môi trường `OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION` phải được kích hoạt để toàn bộ tài khoản được quản trị tập trung thông qua bảng điều khiển Keycloak Realm Admin và cấp phát qua giao thức OIDC Authorization Code + PKCE.
+> **CẢNH BÁO AN NINH VÀ BẢO MẬT (SECURITY & CREDENTIALS ADVISORY):**
+> 1. Toàn bộ danh sách tài khoản và mật khẩu mặc định (123456) trong tài liệu này được thiết kế **DUY NHẤT cho môi trường thử nghiệm cục bộ (Local Development & CI Acceptance Testing)**.
+> 2. Các giá trị bí mật mặc định như Gateway Client Secret (griops-gateway-secret-2026) và mật khẩu cơ sở dữ liệu (openagrios_dev_only) trong kho mã nguồn công khai là dữ liệu mẫu (fixtures) phục vụ khởi chạy nhanh trên máy nhà phát triển.
+> 3. **TUYỆT ĐỐI KHÔNG SỬ DỤNG** các tài khoản, mật khẩu và secret mẫu này khi triển khai lên môi trường mạng công khai hoặc môi trường thực tế (Staging/Production). Quản trị viên bắt buộc phải nạp các bí mật sản xuất thông qua biến môi trường (.env, KEYCLOAK_INTROSPECTION_CLIENT_SECRET) hoặc hệ thống quản lý bí mật bảo mật (HashiCorp Vault, Kubernetes Secrets).
 
 
 
