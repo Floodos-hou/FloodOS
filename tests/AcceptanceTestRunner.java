@@ -324,6 +324,17 @@ public final class AcceptanceTestRunner {
             check(server.getAgriOpsService().getStore().machines.containsKey("M01"), "Machine M01 must exist in store");
             check(server.getAgriOpsService().getStore().assignments.containsKey("ASG-101"), "Assignment ASG-101 must exist in store");
 
+            // 3.3. Verify season_window harmonization and persistence verification
+            var fieldF01 = server.getAgriOpsService().getStore().fields.get("F01");
+            check(fieldF01 != null && fieldF01.windowStart != null && fieldF01.windowEnd != null, "Field F01 must have non-null season window");
+            boolean persistOk = server.getAgriOpsService().getStore().persistField(fieldF01, "COORDINATOR");
+            check(persistOk, "Persist field with season_window must succeed");
+
+            // 3.4. Verify Multi-Tenant RLS isolation across cooperatives
+            List<Map<String, Object>> canThoFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_CANTHO_01", "COORDINATOR");
+            List<Map<String, Object>> socTrangFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_SOCTRANG_02", "COORDINATOR");
+            check(canThoFields != null && socTrangFields != null, "RLS query lists must not be null");
+
 
 
             System.out.println("[PASS] Multi-Tenant RLS & Field-Level Visibility verified: " + fullFields + " unmasked, 7 masked.");

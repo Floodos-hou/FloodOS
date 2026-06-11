@@ -30,8 +30,8 @@ public final class PostgreSqlDataService {
     public PostgreSqlDataService() {
         this(
                 System.getenv().getOrDefault("DATABASE_URL", ""),
-                System.getenv().getOrDefault("POSTGRES_USER", "openagrios"),
-                System.getenv().getOrDefault("POSTGRES_PASSWORD", "openagrios_dev_only")
+                System.getenv().getOrDefault("POSTGRES_APP_USER", System.getenv().getOrDefault("POSTGRES_USER", "openagrios_app")),
+                System.getenv().getOrDefault("POSTGRES_APP_PASSWORD", System.getenv().getOrDefault("POSTGRES_PASSWORD", "openagrios_app_dev_only"))
         );
     }
 
@@ -117,8 +117,8 @@ public final class PostgreSqlDataService {
                 area_ha NUMERIC(8,2) NOT NULL,
                 readiness_status VARCHAR(32) NOT NULL DEFAULT 'READY_HARVEST',
                 harvest_progress_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
-                season_window TSTZRANGE,
-                boundary_geojson JSONB,
+                season_window TSTZRANGE NOT NULL,
+                boundary_geojson JSONB NOT NULL,
                 center_lat DOUBLE PRECISION NOT NULL,
                 center_lng DOUBLE PRECISION NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -239,11 +239,21 @@ public final class PostgreSqlDataService {
             );
 
             ALTER TABLE fields ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE fields FORCE ROW LEVEL SECURITY;
             ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE machines FORCE ROW LEVEL SECURITY;
+            ALTER TABLE operators ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE operators FORCE ROW LEVEL SECURITY;
             ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE service_requests FORCE ROW LEVEL SECURITY;
             ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE assignments FORCE ROW LEVEL SECURITY;
             ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE incidents FORCE ROW LEVEL SECURITY;
+            ALTER TABLE work_acceptances ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE work_acceptances FORCE ROW LEVEL SECURITY;
             ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
              Statement stmt = conn.createStatement()) {
@@ -355,15 +365,18 @@ public final class PostgreSqlDataService {
     public boolean syncField(
             String orgId, String role, String fieldId, String ownerUserId, String name,
             String hamlet, String crop, double areaHa, String readinessStatus,
-            double harvestProgressPct, double centerLat, double centerLng,
-            String boundaryGeoJson
+            double harvestProgressPct, String windowStart, String windowEnd,
+            double centerLat, double centerLng, String boundaryGeoJson
     ) {
         if (!isConnectionLive()) return false;
+        String wStart = (windowStart != null && !windowStart.isBlank()) ? windowStart : "2026-11-20T07:00:00Z";
+        String wEnd = (windowEnd != null && !windowEnd.isBlank()) ? windowEnd : "2026-11-20T12:00:00Z";
         String sql = """
             INSERT INTO fields (
                 field_id, organization_id, owner_user_id, name, hamlet, crop,
-                area_ha, readiness_status, harvest_progress_pct, center_lat, center_lng, boundary_geojson
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
+                area_ha, readiness_status, harvest_progress_pct, season_window,
+                center_lat, center_lng, boundary_geojson
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, tstzrange(?::TIMESTAMPTZ, ?::TIMESTAMPTZ, '[)'), ?, ?, CAST(? AS JSONB))
             ON CONFLICT (field_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 hamlet = EXCLUDED.hamlet,
@@ -371,6 +384,7 @@ public final class PostgreSqlDataService {
                 area_ha = EXCLUDED.area_ha,
                 readiness_status = EXCLUDED.readiness_status,
                 harvest_progress_pct = EXCLUDED.harvest_progress_pct,
+                season_window = EXCLUDED.season_window,
                 center_lat = EXCLUDED.center_lat,
                 center_lng = EXCLUDED.center_lng,
                 boundary_geojson = EXCLUDED.boundary_geojson,
@@ -392,9 +406,11 @@ public final class PostgreSqlDataService {
                 ps.setDouble(7, areaHa);
                 ps.setString(8, readinessStatus != null ? readinessStatus : "READY_HARVEST");
                 ps.setDouble(9, harvestProgressPct);
-                ps.setDouble(10, centerLat);
-                ps.setDouble(11, centerLng);
-                ps.setString(12, (boundaryGeoJson != null && !boundaryGeoJson.isBlank()) ? boundaryGeoJson : "{}");
+                ps.setString(10, wStart);
+                ps.setString(11, wEnd);
+                ps.setDouble(12, centerLat);
+                ps.setDouble(13, centerLng);
+                ps.setString(14, (boundaryGeoJson != null && !boundaryGeoJson.isBlank()) ? boundaryGeoJson : "{}");
                 ps.executeUpdate();
             }
             conn.commit();
@@ -402,6 +418,15 @@ public final class PostgreSqlDataService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public boolean syncField(
+            String orgId, String role, String fieldId, String ownerUserId, String name,
+            String hamlet, String crop, double areaHa, String readinessStatus,
+            double harvestProgressPct, double centerLat, double centerLng,
+            String boundaryGeoJson
+    ) {
+        return syncField(orgId, role, fieldId, ownerUserId, name, hamlet, crop, areaHa, readinessStatus, harvestProgressPct, "2026-11-20T07:00:00Z", "2026-11-20T12:00:00Z", centerLat, centerLng, boundaryGeoJson);
     }
 
     /**
