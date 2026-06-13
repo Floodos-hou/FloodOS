@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fail-fast configuration check: Invalid `OPENAGRIOS_AUTH_MODE` environment variable values throw an immediate `IllegalStateException`.
   - Added test cases in `AcceptanceTestRunner` Suite 4 verifying rejection of forged RS256 tokens and mock fallback prevention.
 
+### Docker Compose Fix, Mandatory Season Window & Hardened Non-Superuser RLS (Update 4)
+- **Deployment-Critical Compose Fix (`compose.yaml`)**:
+  - Restored superuser password `POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}` in `postgres` container service, eliminating startup termination on clean volumes.
+  - Relocated and configured `KEYCLOAK_INTROSPECTION_CLIENT_ID` and `KEYCLOAK_INTROSPECTION_CLIENT_SECRET` specifically on `core-api`.
+- **Mandatory Season Window (`season_window TSTZRANGE NOT NULL`)**:
+  - Synchronized `season_window TSTZRANGE NOT NULL` in both `infra/db/schema.sql` and `PostgreSqlDataService.java`.
+  - Added `windowStart` and `windowEnd` timestamp range parameters to `syncField()` to prevent NOT NULL database constraint rejections.
+  - Added fail-fast validation in `AgriDataStore.persistField()`.
+- **Hardened Multi-Tenant RLS & Non-Superuser Application Role**:
+  - Enforced `FORCE ROW LEVEL SECURITY` across all 8 multi-tenant entity tables (`fields`, `machines`, `operators`, `service_requests`, `assignments`, `incidents`, `work_acceptances`, `audit_records`) to prevent table owners from bypassing RLS policies.
+  - Added explicit RLS isolation policies for `operators` and `work_acceptances`.
+  - Provisioned dedicated application database role `openagrios_app` (`NOSUPERUSER NOBYPASSRLS`) in `schema.sql` and configured `core-api` to connect with it.
+
 ### Database Schema Harmonization, Business Entity Persistence & RFC 6749 Single Auth (Update 3)
 - **Database Schema Harmonization (infra/db/schema.sql & PostgreSqlDataService)**:
   - Unified table and column names across `PostgreSqlDataService.java` and `infra/db/schema.sql`: `fields` (`field_id`, `organization_id`, `owner_user_id`, `crop`, `area_ha`, `readiness_status`, `harvest_progress_pct`, `center_lat`, `center_lng`, `boundary_geojson`), `machines` (`machine_id`, `organization_id`, `owner_user_id`, `capacity_ha_per_hr`), `assignments` (`assignment_id`, `organization_id`), `incidents` (`incident_id`, `organization_id`), and `audit_records` (`seq_no`, `event_id`, `organization_id`, `correlation_id`).

@@ -213,16 +213,39 @@ FOR EACH ROW EXECUTE FUNCTION prevent_audit_mutation();
 -- ============================================================================
 -- ROW-LEVEL SECURITY (RLS) — ĐA THUÊ ƯỚC (MULTI-TENANCY) & FOG OF WAR
 -- ============================================================================
+-- Enable and FORCE Row-Level Security on ALL entity tables (enforces policies even on table owner)
 ALTER TABLE fields ENABLE ROW LEVEL SECURITY;
-ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fields FORCE ROW LEVEL SECURITY;
 
+ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE machines FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE operators ENABLE ROW LEVEL SECURITY;
+ALTER TABLE operators FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_requests FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignments FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incidents FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE work_acceptances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_acceptances FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
+
+-- Tenant Isolation Policies
 CREATE POLICY tenant_isolation_fields ON fields
     USING (organization_id = current_setting('app.current_org_id', true));
 
 CREATE POLICY tenant_isolation_machines ON machines
+    USING (organization_id = current_setting('app.current_org_id', true));
+
+CREATE POLICY tenant_isolation_operators ON operators
     USING (organization_id = current_setting('app.current_org_id', true));
 
 CREATE POLICY tenant_isolation_requests ON service_requests
@@ -240,13 +263,30 @@ CREATE POLICY tenant_isolation_assignments ON assignments
 CREATE POLICY tenant_isolation_incidents ON incidents
     USING (organization_id = current_setting('app.current_org_id', true));
 
-ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_acceptances ON work_acceptances
+    USING (organization_id = current_setting('app.current_org_id', true));
 
 CREATE POLICY tenant_isolation_audit ON audit_records
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
+
+-- ============================================================================
+-- DEDICATED APPLICATION ROLE (NON-SUPERUSER & NOBYPASSRLS)
+-- ============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openagrios_app') THEN
+        CREATE ROLE openagrios_app WITH LOGIN PASSWORD 'openagrios_app_dev_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA public TO openagrios_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO openagrios_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO openagrios_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO openagrios_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO openagrios_app;
 
 -- ============================================================================
 -- BOOTSTRAP SEED DATA (Idempotent: ON CONFLICT DO NOTHING)

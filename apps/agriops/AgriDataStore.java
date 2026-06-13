@@ -353,7 +353,7 @@ public final class AgriDataStore {
             }
             for (FieldPlot f : fields.values()) {
                 String polyJson = f.polygon != null ? org.openagrios.core.dataservices.JsonCodec.toCanonicalJson(java.util.Map.of("type", "Polygon", "coordinates", f.polygon)) : "{}";
-                postgreSqlDataService.syncField(f.organizationId, "COORDINATOR", f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.centerLat, f.centerLng, polyJson);
+                postgreSqlDataService.syncField(f.organizationId, "COORDINATOR", f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.windowStart, f.windowEnd, f.centerLat, f.centerLng, polyJson);
             }
             for (HarvesterMachine m : machines.values()) {
                 postgreSqlDataService.syncMachine(m.organizationId, "COORDINATOR", m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
@@ -406,47 +406,89 @@ public final class AgriDataStore {
     // PERSISTENT DATA MUTATORS (SYNCHRONIZES IN-MEMORY MAP + POSTGRESQL 16 JDBC)
     // ========================================================================
 
-    public synchronized void persistField(FieldPlot f, String role) {
+    public synchronized boolean persistField(FieldPlot f, String role) {
         fields.put(f.fieldId, f);
         if (postgreSqlDataService.isConnectionLive()) {
             String polyJson = f.polygon != null ? org.openagrios.core.dataservices.JsonCodec.toCanonicalJson(java.util.Map.of("type", "Polygon", "coordinates", f.polygon)) : "{}";
-            postgreSqlDataService.syncField(f.organizationId, role, f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.centerLat, f.centerLng, polyJson);
+            boolean synced = postgreSqlDataService.syncField(
+                    f.organizationId, role, f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop,
+                    f.areaHa, f.readinessStatus, f.harvestProgressPct, f.windowStart, f.windowEnd,
+                    f.centerLat, f.centerLng, polyJson
+            );
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist field " + f.fieldId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
     }
 
-    public synchronized void persistMachine(HarvesterMachine m, String role) {
+    public synchronized boolean persistMachine(HarvesterMachine m, String role) {
         machines.put(m.machineId, m);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncMachine(m.organizationId, role, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+            boolean synced = postgreSqlDataService.syncMachine(m.organizationId, role, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist machine " + m.machineId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
     }
 
-    public synchronized void persistServiceRequest(ServiceRequest r, String role) {
+    public synchronized boolean persistServiceRequest(ServiceRequest r, String role) {
         serviceRequests.put(r.requestId, r);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncServiceRequest(r.organizationId, role, r.requestId, r.fieldId, r.requesterUserId, r.areaHa, r.requestedStart, r.requestedEnd, r.priority, r.status, r.bpmnProcessId, r.correlationId, r.notes);
+            boolean synced = postgreSqlDataService.syncServiceRequest(r.organizationId, role, r.requestId, r.fieldId, r.requesterUserId, r.areaHa, r.requestedStart, r.requestedEnd, r.priority, r.status, r.bpmnProcessId, r.correlationId, r.notes);
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist service request " + r.requestId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
     }
 
-    public synchronized void persistAssignment(DispatchAssignment a, String role) {
+    public synchronized boolean persistAssignment(DispatchAssignment a, String role) {
         assignments.put(a.assignmentId, a);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncAssignment(a.organizationId, role, a.assignmentId, a.requestId, a.fieldId, a.machineId, a.operatorId, a.startTime, a.endTime, a.status, a.replacesAssignmentId, a.supersededByAssignmentId, null, a.correlationId, a.createdBy);
+            boolean synced = postgreSqlDataService.syncAssignment(a.organizationId, role, a.assignmentId, a.requestId, a.fieldId, a.machineId, a.operatorId, a.startTime, a.endTime, a.status, a.replacesAssignmentId, a.supersededByAssignmentId, null, a.correlationId, a.createdBy);
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist assignment " + a.assignmentId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
     }
 
-    public synchronized void persistIncident(MachineIncident inc, String role) {
+    public synchronized boolean persistIncident(MachineIncident inc, String role) {
         incidents.put(inc.incidentId, inc);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncIncident(inc.organizationId, role, inc.incidentId, inc.machineId, inc.reportedByUserId, inc.severity, inc.incidentType, inc.description, inc.estimatedDowntimeHours, inc.evidenceObjectKey, inc.evidenceEtag, inc.repairTicketId, inc.assignedRepairUserId, inc.status, inc.bpmnProcessId, inc.correlationId);
+            boolean synced = postgreSqlDataService.syncIncident(inc.organizationId, role, inc.incidentId, inc.machineId, inc.reportedByUserId, inc.severity, inc.incidentType, inc.description, inc.estimatedDowntimeHours, inc.evidenceObjectKey, inc.evidenceEtag, inc.repairTicketId, inc.assignedRepairUserId, inc.status, inc.bpmnProcessId, inc.correlationId);
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist incident " + inc.incidentId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
     }
 
-    public synchronized void persistWorkAcceptance(WorkAcceptance acc, String role) {
+    public synchronized boolean persistWorkAcceptance(WorkAcceptance acc, String role) {
         acceptances.put(acc.acceptanceId(), acc);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncWorkAcceptance(acc.organizationId(), role, acc.acceptanceId(), acc.assignmentId(), acc.requestId(), acc.completedAreaHa(), acc.evidenceObjectKey(), acc.operatorSubmittedBy(), acc.farmerConfirmedBy(), acc.confirmationStatus(), acc.notes(), acc.correlationId());
+            boolean synced = postgreSqlDataService.syncWorkAcceptance(acc.organizationId(), role, acc.acceptanceId(), acc.assignmentId(), acc.requestId(), acc.completedAreaHa(), acc.evidenceObjectKey(), acc.operatorSubmittedBy(), acc.farmerConfirmedBy(), acc.confirmationStatus(), acc.notes(), acc.correlationId());
+            if (!synced && "POSTGRESQL_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_STORAGE_MODE"))) {
+                throw new IllegalStateException("Failed to persist work acceptance " + acc.acceptanceId() + " to PostgreSQL in POSTGRESQL_PRODUCTION mode");
+            }
+            return synced;
         }
+        return true;
+    }
+
+    public synchronized List<Map<String, Object>> queryDatabaseOperatorsWithRls(String orgId, String role) {
+        return postgreSqlDataService.queryWithRls(orgId, role, "operators");
+    }
+
+    public synchronized List<Map<String, Object>> queryDatabaseAcceptancesWithRls(String orgId, String role) {
+        return postgreSqlDataService.queryWithRls(orgId, role, "work_acceptances");
     }
 
     public synchronized List<Map<String, Object>> queryDatabaseFieldsWithRls(String orgId, String role) {

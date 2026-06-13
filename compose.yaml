@@ -54,9 +54,7 @@ services:
 
 
 
-      POSTGRES_PASSWORD: 
-      KEYCLOAK_INTROSPECTION_CLIENT_ID: 
-      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${POSTGRES_PASSWORD:-openagrios_dev_only}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
 
 
 
@@ -420,11 +418,19 @@ services:
 
 
 
-      POSTGRES_USER: ${POSTGRES_USER:-openagrios}
+      POSTGRES_USER: ${POSTGRES_APP_USER:-openagrios_app}
 
 
 
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
+      POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD:-openagrios_app_dev_only}
+
+
+
+      KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
+
+
+
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
 
 
 
