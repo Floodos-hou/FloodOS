@@ -22,6 +22,7 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 
 import java.net.URI;
@@ -33,6 +34,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 import java.time.Duration;
 
@@ -188,6 +190,7 @@ public final class BpmnWorkflowEngine {
 
 
 
+    private final File bpmnDir;
     private final String flowableRestUrl;
     private final String flowableUser;
     private final String flowablePassword;
@@ -195,6 +198,8 @@ public final class BpmnWorkflowEngine {
     private final HttpClient httpClient;
 
     private final Map<String, Object> definitions;
+    private final Map<String, File> bpmnFiles = new LinkedHashMap<>();
+    private final Set<String> deployedDefinitions = Collections.synchronizedSet(new HashSet<>());
 
     private final Map<String, BpmnProcessInstance> instances = new LinkedHashMap<>();
 
@@ -240,13 +245,14 @@ public final class BpmnWorkflowEngine {
     }
 
     public BpmnWorkflowEngine(File bpmnDir, String flowableRestUrl, String flowableUser, String flowablePassword) {
-        this.definitions = loadBpmnDefinitions(bpmnDir);
+        this.bpmnDir = bpmnDir;
         this.flowableRestUrl = flowableRestUrl != null ? flowableRestUrl.replaceAll("/+$", "") : "http://localhost:8081/flowable-rest";
         this.flowableUser = (flowableUser != null && !flowableUser.isBlank()) ? flowableUser : "rest-admin";
         this.flowablePassword = (flowablePassword != null && !flowablePassword.isBlank()) ? flowablePassword : "test";
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(1200))
+                .connectTimeout(Duration.ofSeconds(5))
                 .build();
+        this.definitions = loadBpmnDefinitions(bpmnDir);
     }
 
 
@@ -275,9 +281,10 @@ public final class BpmnWorkflowEngine {
 
 
 
-    private static Map<String, Object> loadBpmnDefinitions(File bpmnDir) {
+    private Map<String, Object> loadBpmnDefinitions(File bpmnDir) {
 
         Map<String, Object> defs = new LinkedHashMap<>();
+        if (bpmnDir == null) return defs;
 
         Map<String, File> files = new LinkedHashMap<>();
 
@@ -303,7 +310,7 @@ public final class BpmnWorkflowEngine {
 
                 if (!f.exists()) continue;
 
-
+                bpmnFiles.put(key, f);
 
                 Document doc = factory.newDocumentBuilder().parse(f);
 
@@ -314,6 +321,10 @@ public final class BpmnWorkflowEngine {
 
 
                 Element proc = (Element) processes.item(0);
+                String procId = proc.getAttribute("id");
+                if (procId != null && !procId.isBlank()) {
+                    bpmnFiles.put(procId, f);
+                }
 
                 List<Map<String, Object>> steps = new ArrayList<>();
 
@@ -353,13 +364,16 @@ public final class BpmnWorkflowEngine {
 
                 Map<String, Object> procMap = new LinkedHashMap<>();
 
-                procMap.put("process_id", proc.getAttribute("id"));
+                procMap.put("process_id", procId);
 
                 procMap.put("name", proc.getAttribute("name"));
 
                 procMap.put("steps", steps);
 
                 defs.put(key, procMap);
+                if (procId != null && !procId.isBlank() && !defs.containsKey(procId)) {
+                    defs.put(procId, procMap);
+                }
 
             }
 
@@ -371,6 +385,75 @@ public final class BpmnWorkflowEngine {
 
         return defs;
 
+    }
+
+    /**
+     * Auto-deploys a BPMN 2.0 definition XML to Flowable REST API v7.0.0
+     * using standard multipart/form-data POST /service/repository/deployments.
+     */
+    public synchronized boolean deployProcessDefinition(String definitionKey) {
+        if (deployedDefinitions.contains(definitionKey)) {
+            return true;
+        }
+        File f = bpmnFiles.get(definitionKey);
+        if (f == null || !f.exists()) {
+            return false;
+        }
+        try {
+            String deployUrl = flowableRestUrl + "/service/repository/deployments";
+            String creds = flowableUser + ":" + flowablePassword;
+            String basicAuth = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
+            String boundary = "----OpenAgriOsBpmnBoundary" + System.currentTimeMillis();
+            byte[] fileBytes = Files.readAllBytes(f.toPath());
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            String header = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; filename=\"" + f.getName() + "\"\r\n"
+                    + "Content-Type: text/xml\r\n\r\n";
+            String footer = "\r\n--" + boundary + "--\r\n";
+            baos.write(header.getBytes(StandardCharsets.UTF_8));
+            baos.write(fileBytes);
+            baos.write(footer.getBytes(StandardCharsets.UTF_8));
+
+            HttpRequest deployReq = HttpRequest.newBuilder()
+                    .uri(URI.create(deployUrl))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Authorization", basicAuth)
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(baos.toByteArray()))
+                    .build();
+
+            HttpResponse<String> deployResp = httpClient.send(deployReq, HttpResponse.BodyHandlers.ofString());
+            if (deployResp.statusCode() == 200 || deployResp.statusCode() == 201) {
+                deployedDefinitions.add(definitionKey);
+                deployedDefinitions.add(f.getName());
+                return true;
+            }
+        } catch (Exception e) {
+            // Container offline or starting up
+        }
+        return false;
+    }
+
+    private HttpResponse<String> sendFlowableRequestWithRetry(HttpRequest req, boolean isProduction) throws Exception {
+        int maxAttempts = isProduction ? 6 : 1;
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        throw lastException;
     }
 
 
@@ -428,8 +511,15 @@ public final class BpmnWorkflowEngine {
                         ? "FLOWABLE_PRODUCTION"
                         : "EMBEDDED_DEV_MOCK");
 
+        boolean isProduction = "FLOWABLE_PRODUCTION".equalsIgnoreCase(workflowMode);
+
         // Attempt live call to Flowable REST API v7.0.0
         try {
+            // Auto-deploy BPMN XML to Flowable repository if not yet registered
+            if (!deployedDefinitions.contains(definitionKey)) {
+                deployProcessDefinition(definitionKey);
+            }
+
             String url = flowableRestUrl + "/service/runtime/process-instances";
             String creds = flowableUser + ":" + flowablePassword;
             String basicAuth = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
@@ -446,7 +536,7 @@ public final class BpmnWorkflowEngine {
 
                     .uri(URI.create(url))
 
-                    .timeout(Duration.ofMillis(1200))
+                    .timeout(Duration.ofSeconds(10))
 
                     .header("Authorization", basicAuth)
 
@@ -458,17 +548,33 @@ public final class BpmnWorkflowEngine {
 
 
 
-                        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = sendFlowableRequestWithRetry(req, isProduction);
             if (resp.statusCode() == 200 || resp.statusCode() == 201) {
                 Map<String, Object> resMap = JsonCodec.parseObject(resp.body());
                 flowableId = String.valueOf(resMap.getOrDefault("id", "flowable-" + processInstanceId));
                 runtimeMode = "FLOWABLE_REST_ENGINE_V7 (Live Container)";
-            } else if ("FLOWABLE_PRODUCTION".equalsIgnoreCase(workflowMode)) {
+            } else if (resp.statusCode() == 400 && resp.body().contains("No process definition found")) {
+                // If definition was not found, deploy and retry once
+                if (deployProcessDefinition(definitionKey)) {
+                    HttpResponse<String> retryResp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                    if (retryResp.statusCode() == 200 || retryResp.statusCode() == 201) {
+                        Map<String, Object> resMap = JsonCodec.parseObject(retryResp.body());
+                        flowableId = String.valueOf(resMap.getOrDefault("id", "flowable-" + processInstanceId));
+                        runtimeMode = "FLOWABLE_REST_ENGINE_V7 (Live Container)";
+                    } else if (isProduction) {
+                        throw new IllegalStateException("FLOWABLE_PRODUCTION error: Flowable REST API responded with HTTP "
+                                + retryResp.statusCode() + " at " + url + ": " + retryResp.body() + ". Silent fallback to mock is prohibited in production.");
+                    }
+                } else if (isProduction) {
+                    throw new IllegalStateException("FLOWABLE_PRODUCTION error: Flowable REST API responded with HTTP "
+                            + resp.statusCode() + " at " + url + ": " + resp.body() + ". Silent fallback to mock is prohibited in production.");
+                }
+            } else if (isProduction) {
                 throw new IllegalStateException("FLOWABLE_PRODUCTION error: Flowable REST API responded with HTTP "
                         + resp.statusCode() + " at " + url + ": " + resp.body() + ". Silent fallback to mock is prohibited in production.");
             }
         } catch (Exception e) {
-            if ("FLOWABLE_PRODUCTION".equalsIgnoreCase(workflowMode)) {
+            if (isProduction) {
                 throw new IllegalStateException("FLOWABLE_PRODUCTION connection failure to Flowable REST at "
                         + flowableRestUrl + ": " + e.getMessage() + ". Silent fallback to mock is prohibited in production.", e);
             }

@@ -32,7 +32,7 @@ jobs:
         find core apps tests -name "*.java" > sources.txt
         javac -encoding UTF-8 -d target/classes @sources.txt
 
-    - name: Run Integration & Acceptance Tests (10/10 Suites)
+    - name: Run In-Process Integration & Acceptance Tests (10/10 Suites)
       run: |
         java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
 
@@ -40,3 +40,17 @@ jobs:
       run: |
         docker compose -f compose.yaml config --quiet
         echo "Docker Compose stack configuration validated successfully!"
+
+    - name: Validate Production Compose Override Specification
+      run: |
+        POSTGRES_PASSWORD=ci_test_pg_pw \
+        POSTGRES_APP_PASSWORD=ci_test_app_pw \
+        KEYCLOAK_ADMIN_PASSWORD=ci_test_kc_pw \
+        KEYCLOAK_INTROSPECTION_CLIENT_SECRET=ci_test_secret \
+        docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+        echo "Production Docker Compose override validated successfully!"
+
+    - name: Run Full-Stack Container Integration Tests
+      run: |
+        chmod +x tests/e2e_full_stack_test.sh
+        bash tests/e2e_full_stack_test.sh

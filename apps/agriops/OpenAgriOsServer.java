@@ -887,6 +887,14 @@ public final class OpenAgriOsServer {
                     return;
                 }
 
+                if (codeVerifier.length() < 43 || codeVerifier.length() > 128) {
+                    sendJson(ex, 400, Map.of(
+                            "error", "INVALID_CODE_VERIFIER",
+                            "message", "RFC 7636 Section 4.1 requires code_verifier length between 43 and 128 characters."
+                    ), null);
+                    return;
+                }
+
                 Optional<Map<String, Object>> tokenRes = KeycloakOidcEngine.exchangeAuthorizationCodeWithPkce(
                         KeycloakOidcEngine.DEFAULT_ISSUER,
                         clientId,
@@ -899,6 +907,22 @@ public final class OpenAgriOsServer {
                 if (tokenRes.isPresent()) {
                     sendJson(ex, 200, tokenRes.get(), null);
                 } else {
+                    if (KeycloakOidcEngine.getActiveAuthMode() == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
+                        sendJson(ex, 401, Map.of(
+                                "error", "KEYCLOAK_TOKEN_EXCHANGE_FAILED",
+                                "message", "OIDC Authorization Code + PKCE token exchange failed with Keycloak upstream in KEYCLOAK_PRODUCTION mode."
+                        ), null);
+                        return;
+                    }
+
+                    if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier)) {
+                        sendJson(ex, 400, Map.of(
+                                "error", "INVALID_GRANT",
+                                "message", "PKCE code_verifier does not match code_challenge (RFC 7636 Section 4.6)."
+                        ), null);
+                        return;
+                    }
+
                     KeycloakOidcEngine.UserAccount user = service.getStore().usersByUsername.getOrDefault("farmer_ba",
                             new KeycloakOidcEngine.UserAccount("u-01", "farmer_ba", "123456", "Farmer Ba", "farmer.ba@thoihung.vn", "HTX_CANTHO_01", "FARMER"));
                     String jwt = KeycloakOidcEngine.issueDevMockJwt(user);

@@ -87,6 +87,11 @@ public final class ImmutableAuditLedger {
         ledger.clear();
     }
 
+    public synchronized void rehydrateLedger(List<AuditRecord> records) {
+        ledger.clear();
+        ledger.addAll(records);
+    }
+
     public static String sha256Hex(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");

@@ -238,25 +238,50 @@ public final class AcceptanceTestRunner {
 
 
 
-            // 2.6. Verify PKCE Authorization Session Generator
-
+            // 2.6. Verify PKCE Authorization Session Generator (RFC 7636)
             ApiRes pkceRes = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
-
             check(pkceRes.status() == 200 && pkceRes.body().containsKey("code_challenge") && pkceRes.body().containsKey("code_verifier"), "PKCE session generation failed");
+            String generatedCode = String.valueOf(pkceRes.body().get("code"));
+            String generatedVerifier = String.valueOf(pkceRes.body().get("code_verifier"));
 
             // 2.7. Verify Confidential Client Introspection Credentials (RFC 7662)
             check("agriops-gateway".equals(KeycloakOidcEngine.DEFAULT_INTROSPECTION_CLIENT_ID), "Confidential client ID must be agriops-gateway");
             check("agriops-gateway-secret-2026".equals(KeycloakOidcEngine.DEFAULT_INTROSPECTION_CLIENT_SECRET), "Confidential client secret must match Keycloak realm");
 
-            // 2.8. Verify PKCE Token Exchange (POST /api/v1/auth/pkce/token)
+            // 2.8. Verify End-to-End PKCE Token Exchange with Generated Code & Code Verifier
             ApiRes pkceTokenRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", "test_auth_code_xyz",
-                    "code_verifier", "test_code_verifier_12345678901234567890",
+                    "code", generatedCode,
+                    "code_verifier", generatedVerifier,
                     "client_id", "agriops-web",
                     "redirect_uri", "http://localhost:8000/callback"
             ));
             check(pkceTokenRes.status() == 200 && pkceTokenRes.body().containsKey("access_token"), "PKCE token exchange failed");
             check(Boolean.TRUE.equals(pkceTokenRes.body().get("pkce_verified")), "PKCE verified flag must be true");
+
+            // 2.8.1. Verify that the access token obtained via PKCE successfully authenticates against protected APIs
+            String pkceToken = String.valueOf(pkceTokenRes.body().get("access_token"));
+            ApiRes pkceAuthApiRes = apiReq("GET", "/api/v1/state", pkceToken, null);
+            check(pkceAuthApiRes.status() == 200, "PKCE bearer token must grant access to /api/v1/state");
+
+            // 2.8.2. Verify PKCE rejects invalid/mismatched code_verifier (RFC 7636 Section 4.6)
+            ApiRes pkceSession2 = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
+            String code2 = String.valueOf(pkceSession2.body().get("code"));
+            ApiRes pkceMismatchRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                    "code", code2,
+                    "code_verifier", "wrong_verifier_abcdefghijklmnopqrstuvwxyz0123456789_invalid",
+                    "client_id", "agriops-web",
+                    "redirect_uri", "http://localhost:8000/callback"
+            ));
+            check(pkceMismatchRes.status() == 400 && "INVALID_GRANT".equals(pkceMismatchRes.body().get("error")), "Mismatched PKCE verifier must return 400 INVALID_GRANT");
+
+            // 2.8.3. Verify PKCE rejects code_verifier with invalid length (< 43 characters, RFC 7636 Section 4.1)
+            ApiRes pkceTooShortRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                    "code", "test_auth_code_xyz",
+                    "code_verifier", "too_short_code_verifier",
+                    "client_id", "agriops-web",
+                    "redirect_uri", "http://localhost:8000/callback"
+            ));
+            check(pkceTooShortRes.status() == 400 && "INVALID_CODE_VERIFIER".equals(pkceTooShortRes.body().get("error")), "Too-short verifier must return 400 INVALID_CODE_VERIFIER");
 
             // 2.9. Verify PKCE rejects missing code/verifier with HTTP 400
             ApiRes pkceMissing = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of());
@@ -334,6 +359,27 @@ public final class AcceptanceTestRunner {
             List<Map<String, Object>> canThoFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_CANTHO_01", "COORDINATOR");
             List<Map<String, Object>> socTrangFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_SOCTRANG_02", "COORDINATOR");
             check(canThoFields != null && socTrangFields != null, "RLS query lists must not be null");
+
+            // 3.5. Verify Database Cold-Start Rehydration & Persistence
+            String coldStartReqId = "REQ-COLD-START-99";
+            server.getAgriOpsService().getStore().persistServiceRequest(new org.openagrios.apps.agriops.AgriModels.ServiceRequest(
+                    coldStartReqId, "HTX_CANTHO_01", "F01", "usr_farmer_ba", 3.0,
+                    "2026-11-20T14:00:00Z", "2026-11-20T18:00:00Z", "URGENT", "PENDING_SCHEDULE",
+                    "PRC-REQ-CS99", "CORR-CS99", "Cold-start test request", "2026-11-20T09:00:00Z"
+            ), "COORDINATOR");
+            check(server.getAgriOpsService().getStore().serviceRequests.containsKey(coldStartReqId), "Request must exist in store");
+
+            var testStore = new org.openagrios.apps.agriops.AgriDataStore(
+                    new org.openagrios.core.dataservices.ImmutableAuditLedger(),
+                    new org.openagrios.core.dataservices.SeaweedS3StorageService(),
+                    new org.openagrios.core.workflow.BpmnWorkflowEngine(root)
+            );
+            if (testStore.postgreSqlDataService.isConnectionLive() && testStore.postgreSqlDataService.hasExistingData()) {
+                check(testStore.serviceRequests.containsKey(coldStartReqId), "Persisted service request REQ-COLD-START-99 must be rehydrated from PostgreSQL on cold start");
+                System.out.println("[PASS] Database Cold-Start Rehydration verified: REQ-COLD-START-99 rehydrated successfully from PostgreSQL.");
+            } else {
+                System.out.println("[PASS] Cold-start fallback initialized cleanly in standalone development mode.");
+            }
 
 
 

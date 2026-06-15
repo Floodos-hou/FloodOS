@@ -95,9 +95,14 @@ public final class AgriDataStore {
         this.auditLedger.setPostgreSqlDataService(this.postgreSqlDataService);
         if (this.postgreSqlDataService.isConfigured() && this.postgreSqlDataService.isConnectionLive()) {
             this.postgreSqlDataService.initSchema();
+            if (this.postgreSqlDataService.hasExistingData()) {
+                loadFromDatabase();
+            } else {
+                resetAndSeed();
+            }
+        } else {
+            resetAndSeed();
         }
-
-        resetAndSeed();
 
     }
 
@@ -501,6 +506,217 @@ public final class AgriDataStore {
 
     public synchronized List<Map<String, Object>> queryDatabaseIncidentsWithRls(String orgId, String role) {
         return postgreSqlDataService.queryWithRls(orgId, role, "incidents");
+    }
+
+    /**
+     * Cold-start rehydration: restores domain entities and audit ledger
+     * directly from PostgreSQL 16 (Single Source of Truth).
+     */
+    public synchronized boolean loadFromDatabase() {
+        if (!postgreSqlDataService.isConnectionLive()) {
+            return false;
+        }
+
+        organizations.clear();
+        usersByUsername.clear();
+        fields.clear();
+        machines.clear();
+        operators.clear();
+        serviceRequests.clear();
+        assignments.clear();
+        incidents.clear();
+        acceptances.clear();
+        auditLedger.clear();
+
+        // 1. Organizations
+        List<Map<String, Object>> orgRows = postgreSqlDataService.queryAll("organizations");
+        for (Map<String, Object> r : orgRows) {
+            String orgId = String.valueOf(r.get("organization_id"));
+            String name = String.valueOf(r.get("name"));
+            String type = String.valueOf(r.get("org_type"));
+            String province = r.get("province") != null ? String.valueOf(r.get("province")) : "Cần Thơ";
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "ACTIVE";
+            addOrg(new Organization(orgId, name, type, province, status));
+        }
+
+        // 2. Users
+        List<Map<String, Object>> userRows = postgreSqlDataService.queryAll("users");
+        for (Map<String, Object> r : userRows) {
+            String userId = String.valueOf(r.get("user_id"));
+            String username = String.valueOf(r.get("username"));
+            String fullName = String.valueOf(r.get("full_name"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String role = String.valueOf(r.get("role"));
+            String email = username + "@openagrios.vn";
+            addUser(new UserAccount(userId, username, "123456", fullName, email, orgId, role));
+        }
+
+        // 3. Fields
+        List<Map<String, Object>> fieldRows = postgreSqlDataService.queryAll("fields");
+        for (Map<String, Object> r : fieldRows) {
+            String fId = String.valueOf(r.get("field_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String ownerId = String.valueOf(r.get("owner_user_id"));
+            String name = String.valueOf(r.get("name"));
+            String hamlet = r.get("hamlet") != null ? String.valueOf(r.get("hamlet")) : "";
+            String crop = r.get("crop") != null ? String.valueOf(r.get("crop")) : "Lúa OM18";
+            double area = r.get("area_ha") instanceof Number n ? n.doubleValue() : 2.0;
+            String status = r.get("readiness_status") != null ? String.valueOf(r.get("readiness_status")) : "READY_HARVEST";
+            double prog = r.get("harvest_progress_pct") instanceof Number n ? n.doubleValue() : 0.0;
+            String wStart = r.get("window_start") != null ? String.valueOf(r.get("window_start")) : "2026-11-20T07:00:00Z";
+            String wEnd = r.get("window_end") != null ? String.valueOf(r.get("window_end")) : "2026-11-20T17:00:00Z";
+            double lat = r.get("center_lat") instanceof Number n ? n.doubleValue() : 10.06;
+            double lng = r.get("center_lng") instanceof Number n ? n.doubleValue() : 105.55;
+
+            String ownerName = ownerId;
+            for (UserAccount u : usersByUsername.values()) {
+                if (u.userId().equals(ownerId)) {
+                    ownerName = u.fullName();
+                    break;
+                }
+            }
+            List<List<List<Double>>> poly = SpatialMatchingEngine.makeGeoJsonPolygon(lat, lng, 0.0028, 0.0036);
+            fields.put(fId, new FieldPlot(fId, orgId, ownerId, ownerName, name, hamlet, crop, area, status, prog, wStart, wEnd, lat, lng, poly));
+        }
+
+        // 4. Machines
+        List<Map<String, Object>> machineRows = postgreSqlDataService.queryAll("machines");
+        for (Map<String, Object> r : machineRows) {
+            String mId = String.valueOf(r.get("machine_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String ownerId = String.valueOf(r.get("owner_user_id"));
+            String name = String.valueOf(r.get("name"));
+            String type = r.get("machine_type") != null ? String.valueOf(r.get("machine_type")) : "COMBINE_HARVESTER";
+            String model = r.get("model") != null ? String.valueOf(r.get("model")) : "Kubota DC-70 Plus";
+            double cap = r.get("capacity_ha_per_hr") instanceof Number n ? n.doubleValue() : 0.65;
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "IDLE";
+            double fuel = r.get("fuel_pct") instanceof Number n ? n.doubleValue() : 100.0;
+            double health = r.get("health_pct") instanceof Number n ? n.doubleValue() : 100.0;
+            double lat = r.get("current_lat") instanceof Number n ? n.doubleValue() : 10.06;
+            double lng = r.get("current_lng") instanceof Number n ? n.doubleValue() : 105.55;
+            String opId = r.get("assigned_operator_id") != null ? String.valueOf(r.get("assigned_operator_id")) : null;
+            String telem = r.get("telemetry_updated_at") != null ? String.valueOf(r.get("telemetry_updated_at")) : simTime;
+            machines.put(mId, new HarvesterMachine(mId, orgId, ownerId, name, type, model, cap, status, fuel, health, lat, lng, opId, telem));
+        }
+
+        // 5. Operators
+        List<Map<String, Object>> opRows = postgreSqlDataService.queryAll("operators");
+        for (Map<String, Object> r : opRows) {
+            String opId = String.valueOf(r.get("operator_id"));
+            String uId = String.valueOf(r.get("user_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String fName = String.valueOf(r.get("full_name"));
+            double rating = r.get("rating") instanceof Number n ? n.doubleValue() : 4.8;
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "AVAILABLE";
+            operators.put(opId, new OperatorProfile(opId, uId, orgId, fName, List.of("COMBINE_HARVESTER"), rating, status));
+        }
+
+        // 6. Service Requests
+        List<Map<String, Object>> reqRows = postgreSqlDataService.queryAll("service_requests");
+        for (Map<String, Object> r : reqRows) {
+            String reqId = String.valueOf(r.get("request_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String fId = String.valueOf(r.get("field_id"));
+            String reqUser = String.valueOf(r.get("requester_user_id"));
+            double area = r.get("area_ha") instanceof Number n ? n.doubleValue() : 2.0;
+            String reqStart = String.valueOf(r.get("requested_start"));
+            String reqEnd = String.valueOf(r.get("requested_end"));
+            String priority = r.get("priority") != null ? String.valueOf(r.get("priority")) : "NORMAL";
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "PENDING_SCHEDULE";
+            String bpmnId = r.get("bpmn_process_id") != null ? String.valueOf(r.get("bpmn_process_id")) : null;
+            String corrId = r.get("correlation_id") != null ? String.valueOf(r.get("correlation_id")) : "CORR-" + reqId;
+            String notes = r.get("notes") != null ? String.valueOf(r.get("notes")) : "";
+            String created = r.get("created_at") != null ? String.valueOf(r.get("created_at")) : simTime;
+            serviceRequests.put(reqId, new ServiceRequest(reqId, orgId, fId, reqUser, area, reqStart, reqEnd, priority, status, bpmnId, corrId, notes, created));
+        }
+
+        // 7. Assignments
+        List<Map<String, Object>> asgRows = postgreSqlDataService.queryAll("assignments");
+        for (Map<String, Object> r : asgRows) {
+            String asgId = String.valueOf(r.get("assignment_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String reqId = String.valueOf(r.get("request_id"));
+            String fId = String.valueOf(r.get("field_id"));
+            String mId = String.valueOf(r.get("machine_id"));
+            String opId = String.valueOf(r.get("operator_id"));
+            String sTime = String.valueOf(r.get("start_time"));
+            String eTime = String.valueOf(r.get("end_time"));
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "CONFIRMED";
+            String replaces = r.get("replaces_assignment_id") != null ? String.valueOf(r.get("replaces_assignment_id")) : null;
+            String superseded = r.get("superseded_by_assignment_id") != null ? String.valueOf(r.get("superseded_by_assignment_id")) : null;
+            String corrId = r.get("correlation_id") != null ? String.valueOf(r.get("correlation_id")) : "CORR-" + asgId;
+            String createdBy = r.get("created_by") != null ? String.valueOf(r.get("created_by")) : "usr_coord_01";
+            String created = r.get("created_at") != null ? String.valueOf(r.get("created_at")) : simTime;
+            assignments.put(asgId, new DispatchAssignment(asgId, orgId, reqId, fId, mId, opId, sTime, eTime, status, replaces, superseded, corrId, createdBy, created));
+        }
+
+        // 8. Incidents
+        List<Map<String, Object>> incRows = postgreSqlDataService.queryAll("incidents");
+        for (Map<String, Object> r : incRows) {
+            String incId = String.valueOf(r.get("incident_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String mId = String.valueOf(r.get("machine_id"));
+            String repUser = String.valueOf(r.get("reported_by_user_id"));
+            String sev = r.get("severity") != null ? String.valueOf(r.get("severity")) : "HIGH";
+            String incType = r.get("incident_type") != null ? String.valueOf(r.get("incident_type")) : "BREAKDOWN";
+            String desc = r.get("description") != null ? String.valueOf(r.get("description")) : "";
+            double down = r.get("estimated_downtime_hours") instanceof Number n ? n.doubleValue() : 24.0;
+            String objKey = r.get("evidence_object_key") != null ? String.valueOf(r.get("evidence_object_key")) : null;
+            String etag = r.get("evidence_etag") != null ? String.valueOf(r.get("evidence_etag")) : null;
+            String ticket = String.valueOf(r.get("repair_ticket_id"));
+            String repTech = r.get("assigned_repair_user_id") != null ? String.valueOf(r.get("assigned_repair_user_id")) : null;
+            String status = r.get("status") != null ? String.valueOf(r.get("status")) : "OPEN_REPLANNING";
+            String bpmnId = r.get("bpmn_process_id") != null ? String.valueOf(r.get("bpmn_process_id")) : null;
+            String corrId = r.get("correlation_id") != null ? String.valueOf(r.get("correlation_id")) : "CORR-" + incId;
+            String created = r.get("created_at") != null ? String.valueOf(r.get("created_at")) : simTime;
+            incidents.put(incId, new MachineIncident(incId, orgId, mId, repUser, sev, incType, desc, down, objKey, etag, ticket, repTech, status, bpmnId, List.of(), List.of(), null, corrId, created));
+        }
+
+        // 9. Work Acceptances
+        List<Map<String, Object>> accRows = postgreSqlDataService.queryAll("work_acceptances");
+        for (Map<String, Object> r : accRows) {
+            String accId = String.valueOf(r.get("acceptance_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String asgId = String.valueOf(r.get("assignment_id"));
+            String reqId = String.valueOf(r.get("request_id"));
+            double compArea = r.get("completed_area_ha") instanceof Number n ? n.doubleValue() : 0.0;
+            String objKey = r.get("evidence_object_key") != null ? String.valueOf(r.get("evidence_object_key")) : null;
+            String opSub = String.valueOf(r.get("operator_submitted_by"));
+            String farmConf = r.get("farmer_confirmed_by") != null ? String.valueOf(r.get("farmer_confirmed_by")) : null;
+            String confStatus = r.get("confirmation_status") != null ? String.valueOf(r.get("confirmation_status")) : "PENDING_FARMER";
+            String notes = r.get("notes") != null ? String.valueOf(r.get("notes")) : "";
+            String corrId = r.get("correlation_id") != null ? String.valueOf(r.get("correlation_id")) : "CORR-" + accId;
+            String confAt = r.get("confirmed_at") != null ? String.valueOf(r.get("confirmed_at")) : null;
+            String created = r.get("created_at") != null ? String.valueOf(r.get("created_at")) : simTime;
+            acceptances.put(accId, new WorkAcceptance(accId, orgId, asgId, reqId, compArea, objKey, opSub, farmConf, confStatus, notes, corrId, confAt, created));
+        }
+
+        // 10. Audit Records
+        List<Map<String, Object>> auditRows = postgreSqlDataService.queryAll("audit_records");
+        List<ImmutableAuditLedger.AuditRecord> recs = new ArrayList<>();
+        for (Map<String, Object> r : auditRows) {
+            int seq = r.get("seq_no") instanceof Number n ? n.intValue() : recs.size() + 1;
+            String evtId = String.valueOf(r.get("event_id"));
+            String orgId = String.valueOf(r.get("organization_id"));
+            String corrId = String.valueOf(r.get("correlation_id"));
+            String entType = String.valueOf(r.get("entity_type"));
+            String entId = String.valueOf(r.get("entity_id"));
+            String action = String.valueOf(r.get("action"));
+            String actUser = String.valueOf(r.get("actor_user_id"));
+            String actRole = String.valueOf(r.get("actor_role"));
+            int gwStatus = 200;
+            String bJson = r.get("before_state") != null ? String.valueOf(r.get("before_state")) : "{}";
+            String aJson = r.get("after_state") != null ? String.valueOf(r.get("after_state")) : "{}";
+            Map<String, Object> bMap = org.openagrios.core.dataservices.JsonCodec.parseObject(bJson);
+            Map<String, Object> aMap = org.openagrios.core.dataservices.JsonCodec.parseObject(aJson);
+            String prevH = String.valueOf(r.get("prev_hash"));
+            String recH = String.valueOf(r.get("record_hash"));
+            String created = String.valueOf(r.get("created_at"));
+            recs.add(new ImmutableAuditLedger.AuditRecord(seq, evtId, orgId, corrId, entType, entId, action, actUser, actRole, gwStatus, bMap, aMap, bJson, aJson, prevH, recH, created));
+        }
+        auditLedger.rehydrateLedger(recs);
+
+        return true;
     }
 }
 

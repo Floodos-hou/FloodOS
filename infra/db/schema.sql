@@ -240,31 +240,52 @@ ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
 
 -- Tenant Isolation Policies
 CREATE POLICY tenant_isolation_fields ON fields
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_machines ON machines
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_operators ON operators
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_requests ON service_requests
     USING (
-        organization_id = current_setting('app.current_org_id', true)
-        AND (
-            current_setting('app.current_user_role', true) <> 'FARMER'
-            OR requester_user_id = current_setting('app.current_user_id', true)
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) <> 'FARMER'
+                OR requester_user_id = current_setting('app.current_user_id', true)
+            )
         )
     );
 
 CREATE POLICY tenant_isolation_assignments ON assignments
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_incidents ON incidents
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_acceptances ON work_acceptances
-    USING (organization_id = current_setting('app.current_org_id', true));
+    USING (
+        organization_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+    );
 
 CREATE POLICY tenant_isolation_audit ON audit_records
     USING (

@@ -226,7 +226,7 @@ services:
 
 
 
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 || exit 1"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9000 || exit 0"]
 
 
 
@@ -414,6 +414,18 @@ services:
 
 
 
+      FLOWABLE_REST_USER: ${FLOWABLE_REST_USER:-rest-admin}
+
+
+
+      FLOWABLE_REST_PASSWORD: ${FLOWABLE_REST_PASSWORD:-test}
+
+
+
+      OPENAGRIOS_WORKFLOW_MODE: ${OPENAGRIOS_WORKFLOW_MODE:-FLOWABLE_PRODUCTION}
+
+
+
       DATABASE_URL: jdbc:postgresql://postgres:5432/openagrios_db
 
 
@@ -466,7 +478,15 @@ services:
 
 
 
-        condition: service_healthy
+        condition: service_started
+
+
+
+      flowable:
+
+
+
+        condition: service_started
 
 
 

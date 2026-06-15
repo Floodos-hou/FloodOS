@@ -812,6 +812,81 @@ public final class PostgreSqlDataService {
     }
 
     /**
+     * Checks if PostgreSQL already contains data (for cold-start rehydration).
+     */
+    public boolean hasExistingData() {
+        if (!isConnectionLive()) return false;
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+             Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(3);
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM fields")) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return false;
+    }
+
+    /**
+     * Queries all records of a table for cold-start platform rehydration using PLATFORM_ADMIN role.
+     */
+    public List<Map<String, Object>> queryAll(String tableName) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (!isConnectionLive()) return rows;
+
+        Set<String> allowedTables = Set.of(
+                "organizations", "users", "fields", "machines", "operators",
+                "service_requests", "assignments", "incidents", "work_acceptances", "audit_records"
+        );
+        if (!allowedTables.contains(tableName.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Disallowed table name: " + tableName);
+        }
+
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
+            conn.setAutoCommit(false);
+            try (Statement s = conn.createStatement()) {
+                s.execute("SET LOCAL app.current_user_role = 'PLATFORM_ADMIN';");
+            }
+            String sql;
+            if ("fields".equalsIgnoreCase(tableName)) {
+                sql = "SELECT field_id, organization_id, owner_user_id, name, hamlet, crop, area_ha, readiness_status, harvest_progress_pct, lower(season_window)::text AS window_start, upper(season_window)::text AS window_end, boundary_geojson::text AS boundary_geojson, center_lat, center_lng FROM fields";
+            } else if ("assignments".equalsIgnoreCase(tableName)) {
+                sql = "SELECT assignment_id, organization_id, request_id, field_id, machine_id, operator_id, start_time::text AS start_time, end_time::text AS end_time, status, replaces_assignment_id, superseded_by_assignment_id, bpmn_task_id, correlation_id, created_by, created_at::text AS created_at FROM assignments";
+            } else if ("service_requests".equalsIgnoreCase(tableName)) {
+                sql = "SELECT request_id, organization_id, field_id, requester_user_id, area_ha, requested_start::text AS requested_start, requested_end::text AS requested_end, priority, status, bpmn_process_id, correlation_id, notes, created_at::text AS created_at FROM service_requests";
+            } else if ("work_acceptances".equalsIgnoreCase(tableName)) {
+                sql = "SELECT acceptance_id, organization_id, assignment_id, request_id, completed_area_ha, evidence_object_key, operator_submitted_by, farmer_confirmed_by, confirmation_status, notes, correlation_id, confirmed_at::text AS confirmed_at, created_at::text AS created_at FROM work_acceptances";
+            } else if ("audit_records".equalsIgnoreCase(tableName)) {
+                sql = "SELECT seq_no, event_id, organization_id, correlation_id, entity_type, entity_id, action, actor_user_id, actor_role, before_state::text AS before_state, after_state::text AS after_state, prev_hash, record_hash, created_at::text AS created_at FROM audit_records ORDER BY seq_no ASC";
+            } else if ("incidents".equalsIgnoreCase(tableName)) {
+                sql = "SELECT incident_id, organization_id, machine_id, reported_by_user_id, severity, incident_type, description, estimated_downtime_hours, evidence_object_key, evidence_etag, repair_ticket_id, assigned_repair_user_id, status, bpmn_process_id, correlation_id, created_at::text AS created_at FROM incidents";
+            } else {
+                sql = "SELECT * FROM " + tableName;
+            }
+
+            try (Statement s = conn.createStatement();
+                 ResultSet rs = s.executeQuery(sql)) {
+                var meta = rs.getMetaData();
+                int colCount = meta.getColumnCount();
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    for (int i = 1; i <= colCount; i++) {
+                        row.put(meta.getColumnName(i).toLowerCase(Locale.ROOT), rs.getObject(i));
+                    }
+                    rows.add(row);
+                }
+            }
+            conn.commit();
+        } catch (Exception e) {
+            // Returns partial or empty on error
+        }
+        return rows;
+    }
+
+    /**
      * Legacy backward-compatibility adapters.
      */
     public boolean syncField(String orgId, String role, String id, String name, double areaHa, double lat, double lon, String cropType, String status) {

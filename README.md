@@ -366,15 +366,30 @@ Máy chủ sẽ khởi chạy tại cổng `8000`:
 
 ### 7.3. Cách 3: Khởi chạy Cụm Hạ tầng qua Docker Compose (Chính Thức)
 
-Sử dụng duy nhất tệp [`compose.yaml`](compose.yaml) để khởi động toàn bộ 6 dịch vụ hạ tầng gồm PostgreSQL, Keycloak, SeaweedFS, Flowable và APISIX:
-
-
+#### A. Khởi chạy Môi trường Phát triển (Local Development)
+Sử dụng tệp [`compose.yaml`](compose.yaml) với các giá trị mặc định cho môi trường thử nghiệm cục bộ:
 
 ```bash
-
 docker compose -f compose.yaml up -d
-
 ```
+
+#### B. Khởi chạy Môi trường Vận hành Sản xuất (Production Hardening)
+Bắt buộc áp dụng cấu hình tăng cường [`compose.prod.yaml`](compose.prod.yaml) và nạp tệp biến môi trường từ mẫu [`env.production.example`](.env.production.example). Cấu hình này kích hoạt cú pháp `${VAR:?error}` ngăn chặn tuyệt đối các mật khẩu mặc định, đóng các cổng nội bộ (PostgreSQL 5432, S3 9000, Flowable 8081) và chỉ mở cổng Gateway APISIX (9080/9443):
+
+```bash
+# 1. Khởi tạo tệp môi trường từ mẫu
+cp .env.production.example .env
+
+# 2. Sinh các chuỗi bí mật ngẫu nhiên 256-bit: openssl rand -hex 32
+# Điền các giá trị vào tệp .env
+
+# 3. Kiểm tra tính hợp lệ của cấu hình
+docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+
+# 4. Khởi chạy cụm dịch vụ sản xuất
+docker compose -f compose.yaml -f compose.prod.yaml up -d
+```
+Xem chi tiết kiến trúc Zero-Trust, phân quyền `openagrios_app` và quy trình bảo vệ bí mật tại [Tài liệu Hướng dẫn Bảo mật & Triển khai Production (`docs/security.md`)](docs/security.md).
 
 
 
@@ -436,7 +451,28 @@ java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.tests.AcceptanceT
 
 
 
-### 8.2. Danh sách Tài khoản Kiểm Thử (Mật khẩu Demo: `123456`)
+### 8.2. Kiểm thử Tự động Cụm Container Đầy đủ (Full-Stack Container E2E Test)
+Để kiểm thử tích hợp thực tế khi toàn bộ 6 container dịch vụ đang chạy (PostgreSQL 16, Keycloak 24, SeaweedFS S3, Flowable BPMN, APISIX Gateway và Core API), sử dụng kịch bản kiểm thử tự động:
+
+```bash
+bash tests/e2e_full_stack_test.sh
+```
+Kịch bản tự động thực hiện:
+1. Biên dịch và khởi chạy cụm container trong chế độ nền (`docker compose up -d --build`).
+2. Chờ toàn bộ các dịch vụ đạt trạng thái sẵn sàng (healthcheck polling loop).
+3. Kiểm tra tính hợp lệ của endpoint `/api/v1/health` và BPMN process definitions.
+4. Kiểm tra dữ liệu nạp vào PostgreSQL và cưỡng chế Row-Level Security (RLS).
+5. Kiểm chứng vai trò ứng dụng `openagrios_app` (`NOSUPERUSER, NOBYPASSRLS`).
+6. Kiểm tra khả năng định tuyến ngược qua APISIX Zero-Trust Gateway.
+7. Kiểm tra sinh phiên xác thực OIDC PKCE (RFC 7636).
+8. Tự động dọn dẹp tài nguyên và container khi kết thúc (`docker compose down -v`).
+
+### 8.3. Tái nạp Dữ liệu Khởi động Nguội (Cold-Start Rehydration & Database SSOT)
+Hệ thống sử dụng PostgreSQL 16 làm Nguồn Chân lý Duy nhất (Single Source of Truth - SSOT):
+- Khi ứng dụng khởi động lại (cold start), `AgriDataStore` phát hiện dữ liệu hiện có trong PostgreSQL và tự động kích hoạt `loadFromDatabase()`.
+- Toàn bộ các vùng canh tác, máy cơ giới, yêu cầu dịch vụ thu hoạch, lịch phân công và chuỗi kiểm toán SHA-256 đã tạo trước đó qua REST API được nạp lại nguyên vẹn vào bộ nhớ thay vì ghi đè bằng dữ liệu mẫu.
+
+### 8.4. Danh sách Tài khoản Kiểm Thử (Mật khẩu Demo: `123456`)
 
 
 
