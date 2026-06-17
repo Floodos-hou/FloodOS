@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha] - 2026-10-30
 
+### User-Level RLS (app.current_user_id), Production Storage Fail-Fast, PKCE State CSRF Protection & Live APISIX Golden Path (Update 6)
+- **Multi-Tenant & Multi-User Row-Level Security (`app.current_user_id` & `TenantRlsContext`)**:
+  - Propagated authenticated `userId` directly from `AuthContext` down through `AgriOpsService`, `AgriDataStore`, and `PostgreSqlDataService`.
+  - Enforced `SET LOCAL app.current_user_id = ?` alongside `app.current_org_id` and `app.current_user_role` in all JDBC transactions (`syncField`, `syncMachine`, `syncOperator`, `syncServiceRequest`, `syncAssignment`, `syncIncident`, `syncWorkAcceptance`, `syncAuditRecord`, and `queryWithRls`).
+  - Successfully verified user-level isolation within the same cooperative (`farmer_ba` vs `farmer_nam`) and multi-tenant isolation across cooperatives (`HTX_CANTHO_01` vs `HTX_SOCTRANG_02`).
+- **PostgreSQL Production Mode Hardening & Zero In-Memory Drift (`AgriDataStore` & `compose.yaml`)**:
+  - Explicitly declared `OPENAGRIOS_STORAGE_MODE: ${OPENAGRIOS_STORAGE_MODE:-POSTGRESQL_PRODUCTION}` under `core-api.environment` in `compose.yaml`.
+  - Re-architected `AgriDataStore.persist*`: when in production mode, immediately fail-fast (`IllegalStateException`) if PostgreSQL is unreachable or transaction sync fails. Domain entities are NEVER added to in-memory maps upon failure, guaranteeing single source of truth (SSOT).
+- **PKCE State Validation & RFC 9700 Password Grant Deprecation (`KeycloakOidcEngine` & `AgriOpsService`)**:
+  - Added anti-CSRF `state` parameter tracking and validation to `PkceSession` and `KeycloakOidcEngine.verifyPkceCodeChallenge(code, verifier, state)`.
+  - Formally marked `AgriOpsService.loginOidc(body)` as `@Deprecated(since = "0.2.0")` with RFC 9700 Security Best Practices warning in response payload.
+  - Implemented unified `AgriOpsService.exchangePkceToken(body)` handling both `KEYCLOAK_PRODUCTION` upstream calls and cryptographic `DEV_MOCK_STANDALONE` PKCE verification with audit logging.
+- **Live Integration Tests & APISIX Golden Path (`AcceptanceTestRunner` & `tests/e2e_full_stack_test.sh`)**:
+  - Added live integration test asserting `compiled_rls_sql` includes all 3 session variables (`app.current_org_id`, `app.current_user_role`, `app.current_user_id`).
+  - Added live integration test for PKCE CSRF rejection on state tampering.
+  - Added live integration test verifying fail-fast behavior and zero-leakage in production storage mode.
+  - Added Assertion 7 in `e2e_full_stack_test.sh`: Live Multi-Tenant & Multi-User RLS query execution on PostgreSQL container via `openagrios_app` non-superuser role.
+  - Added Assertion 8 in `e2e_full_stack_test.sh`: End-to-end Live Golden Path across APISIX Gateway (`:9080`), verifying PKCE session generation, token exchange, protected service request registration, and PostgreSQL row persistence.
+
 ### Full-Stack CI Testing, Cold-Start DB Rehydration, Production Hardening & PKCE Verification (Update 5)
 - **Full-Stack Container Testing in CI (`.github/workflows/ci.yml` & `tests/e2e_full_stack_test.sh`)**:
   - Extended GitHub Actions CI beyond static compilation and in-process tests: added automated container spinup with `docker compose up -d --build`.

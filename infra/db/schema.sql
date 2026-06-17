@@ -320,6 +320,7 @@ ON CONFLICT (organization_id) DO NOTHING;
 INSERT INTO users (user_id, username, full_name, organization_id, role, phone, status) VALUES
 ('usr_farmer_ba', 'farmer_ba', 'Bác Ba Nguyễn Văn', 'HTX_CANTHO_01', 'FARMER', '0901234567', 'ACTIVE'),
 ('usr_farmer_tam', 'farmer_tam', 'Chú Tám Lê Văn', 'HTX_CANTHO_01', 'FARMER', '0901234568', 'ACTIVE'),
+('usr_farmer_nam', 'farmer_nam', 'Anh Nam (Nông hộ F02)', 'HTX_CANTHO_01', 'FARMER', '0901234599', 'ACTIVE'),
 ('usr_coord_01', 'coord_htx01', 'Chị Lan (Điều phối viên HTX Cần Thơ 01)', 'HTX_CANTHO_01', 'COORDINATOR', '0901234569', 'ACTIVE'),
 ('usr_op_minh', 'op_minh', 'Anh Minh (Lái máy M01)', 'HTX_CANTHO_01', 'OPERATOR', '0901234570', 'ACTIVE'),
 ('usr_op_nam', 'op_nam', 'Anh Nam (Lái máy M02 - Cứu viện)', 'HTX_CANTHO_01', 'OPERATOR', '0901234571', 'ACTIVE'),

@@ -42,7 +42,7 @@
       "clientId": "agriops-web",
       "name": "AgriOps Multi-Role RTS Workspace",
       "enabled": true,
-      "publicClient": true,
+      "publicClient": false,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": [
@@ -66,8 +66,21 @@
             "claim.name": "organization_id",
             "jsonType.label": "String"
           }
+        },
+        {
+          "name": "agriops_web_audience_mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "agriops-web",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
         }
-      ]
+      ],
+      "secret": "agriops-client-secret-2026",
+      "clientAuthenticatorType": "client-secret"
     },
     {
       "clientId": "agriops-gateway",
@@ -98,12 +111,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "FARMER"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_farmer_ba"
     },
     {
       "username": "coord_htx01",
@@ -121,12 +137,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "COORDINATOR"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_coord_01"
     },
     {
       "username": "op_minh",
@@ -144,12 +163,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "OPERATOR"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_op_minh"
     },
     {
       "username": "op_nam",
@@ -167,12 +189,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "OPERATOR"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_op_nam"
     },
     {
       "username": "owner_tu",
@@ -190,12 +215,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "MACHINE_OWNER"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_owner_tu"
     },
     {
       "username": "repair_01",
@@ -213,12 +241,15 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "REPAIR_TEAM"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_repair_01"
     },
     {
       "username": "coord_htx02",
@@ -236,12 +267,76 @@
         {
           "type": "password",
           "value": "123456",
-          "temporary": false
+          "temporary": false,
+          "createdDate": 1700000000000
         }
       ],
       "realmRoles": [
         "COORDINATOR"
-      ]
+      ],
+      "requiredActions": [],
+      "id": "usr_coord_02"
+    },
+    {
+      "id": "usr_farmer_nam",
+      "username": "farmer_nam",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Anh Nam",
+      "lastName": "Trần Văn (Nông hộ F02)",
+      "email": "farmer_nam@htxcantho01.vn",
+      "attributes": {
+        "organization_id": [
+          "HTX_CANTHO_01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false,
+          "createdDate": 1700000000000
+        }
+      ],
+      "realmRoles": [
+        "FARMER"
+      ],
+      "requiredActions": []
+    }
+  ],
+  "verifyEmail": false,
+  "requiredActions": [
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 50
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 40
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 30
+    },
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 10
     }
   ]
 }

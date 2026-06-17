@@ -267,17 +267,19 @@ public final class PostgreSqlDataService {
     /**
      * Sets PostgreSQL multi-tenant session parameters and verifies RLS compilation.
      */
-    public Map<String, Object> testConnectionAndApplyRls(String orgId, String role) {
+        public Map<String, Object> testConnectionAndApplyRls(String orgId, String role) {
+        return testConnectionAndApplyRls(orgId, role, "admin");
+    }
+
+    public Map<String, Object> testConnectionAndApplyRls(String orgId, String role, String userId) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("database_url", dbUrl);
         result.put("driver_available", driverAvailable);
         result.put("target_org_id", orgId);
         result.put("target_role", role);
+        result.put("target_user_id", userId);
 
-        String rlsSql = String.format(
-                "SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                orgId.replace("'", "''"), role.replace("'", "''")
-        );
+        String rlsSql = TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId);
         result.put("compiled_rls_sql", rlsSql);
 
         if (!driverAvailable || dbUrl.isEmpty()) {
@@ -363,7 +365,7 @@ public final class PostgreSqlDataService {
      * Persists field entity with tenant RLS isolation and column names matching schema.sql.
      */
     public boolean syncField(
-            String orgId, String role, String fieldId, String ownerUserId, String name,
+            String orgId, String role, String userId, String fieldId, String ownerUserId, String name,
             String hamlet, String crop, double areaHa, String readinessStatus,
             double harvestProgressPct, String windowStart, String windowEnd,
             double centerLat, double centerLng, String boundaryGeoJson
@@ -393,8 +395,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : ownerUserId));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, fieldId);
@@ -419,6 +420,14 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncField(
+            String orgId, String role, String fieldId, String ownerUserId, String name,
+            String hamlet, String crop, double areaHa, String readinessStatus,
+            double harvestProgressPct, String windowStart, String windowEnd,
+            double centerLat, double centerLng, String boundaryGeoJson
+    ) {
+        return syncField(orgId, role, ownerUserId, fieldId, ownerUserId, name, hamlet, crop, areaHa, readinessStatus, harvestProgressPct, windowStart, windowEnd, centerLat, centerLng, boundaryGeoJson);
+    }
 
     public boolean syncField(
             String orgId, String role, String fieldId, String ownerUserId, String name,
@@ -433,7 +442,7 @@ public final class PostgreSqlDataService {
      * Persists machine entity with tenant RLS isolation and column names matching schema.sql.
      */
     public boolean syncMachine(
-            String orgId, String role, String machineId, String ownerUserId, String name,
+            String orgId, String role, String userId, String machineId, String ownerUserId, String name,
             String machineType, String model, double capacityHaPerHr, String status,
             double fuelPct, double healthPct, double currentLat, double currentLng
     ) {
@@ -458,8 +467,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : ownerUserId));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, machineId);
@@ -482,6 +490,13 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncMachine(
+            String orgId, String role, String machineId, String ownerUserId, String name,
+            String machineType, String model, double capacityHaPerHr, String status,
+            double fuelPct, double healthPct, double currentLat, double currentLng
+    ) {
+        return syncMachine(orgId, role, ownerUserId, machineId, ownerUserId, name, machineType, model, capacityHaPerHr, status, fuelPct, healthPct, currentLat, currentLng);
+    }
 
     /**
      * Persists operator entity.
@@ -496,8 +511,12 @@ public final class PostgreSqlDataService {
                 rating = EXCLUDED.rating,
                 status = EXCLUDED.status;
             """;
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
+            conn.setAutoCommit(false);
+            try (Statement s = conn.createStatement()) {
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId));
+            }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, operatorId);
             ps.setString(2, userId);
             ps.setString(3, orgId);
@@ -505,17 +524,22 @@ public final class PostgreSqlDataService {
             ps.setDouble(5, rating);
             ps.setString(6, status != null ? status : "AVAILABLE");
             ps.executeUpdate();
+            }
+            conn.commit();
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+    public boolean syncOperator(String orgId, String role, String operatorId, String opUserId, String fullName, double rating, String status, String callerUserId) {
+        return syncOperator(orgId, role, operatorId, opUserId, fullName, rating, status);
     }
 
     /**
      * Persists service request with tenant RLS isolation and column names matching schema.sql.
      */
     public boolean syncServiceRequest(
-            String orgId, String role, String requestId, String fieldId, String requesterUserId,
+            String orgId, String role, String userId, String requestId, String fieldId, String requesterUserId,
             double areaHa, String reqStart, String reqEnd, String priority, String status,
             String bpmnProcessId, String correlationId, String notes
     ) {
@@ -541,8 +565,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : requesterUserId));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, requestId);
@@ -565,12 +588,19 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncServiceRequest(
+            String orgId, String role, String requestId, String fieldId, String requesterUserId,
+            double areaHa, String reqStart, String reqEnd, String priority, String status,
+            String bpmnProcessId, String correlationId, String notes
+    ) {
+        return syncServiceRequest(orgId, role, requesterUserId, requestId, fieldId, requesterUserId, areaHa, reqStart, reqEnd, priority, status, bpmnProcessId, correlationId, notes);
+    }
 
     /**
      * Persists assignment entity (matching table 'assignments' in schema.sql).
      */
     public boolean syncAssignment(
-            String orgId, String role, String assignmentId, String requestId, String fieldId,
+            String orgId, String role, String userId, String assignmentId, String requestId, String fieldId,
             String machineId, String operatorId, String startTime, String endTime,
             String status, String replacesId, String supersededById, String bpmnTaskId,
             String correlationId, String createdBy
@@ -591,8 +621,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : createdBy));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, assignmentId);
@@ -617,12 +646,20 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncAssignment(
+            String orgId, String role, String assignmentId, String requestId, String fieldId,
+            String machineId, String operatorId, String startTime, String endTime,
+            String status, String replacesId, String supersededById, String bpmnTaskId,
+            String correlationId, String createdBy
+    ) {
+        return syncAssignment(orgId, role, createdBy, assignmentId, requestId, fieldId, machineId, operatorId, startTime, endTime, status, replacesId, supersededById, bpmnTaskId, correlationId, createdBy);
+    }
 
     /**
      * Persists incident record with tenant RLS isolation and column names matching schema.sql.
      */
     public boolean syncIncident(
-            String orgId, String role, String incidentId, String machineId, String reportedByUserId,
+            String orgId, String role, String userId, String incidentId, String machineId, String reportedByUserId,
             String severity, String incidentType, String description, double downtimeHours,
             String evidenceObjectKey, String evidenceEtag, String repairTicketId,
             String assignedRepairUserId, String status, String bpmnProcessId, String correlationId
@@ -648,8 +685,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : reportedByUserId));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, incidentId);
@@ -675,12 +711,20 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncIncident(
+            String orgId, String role, String incidentId, String machineId, String reportedByUserId,
+            String severity, String incidentType, String description, double downtimeHours,
+            String evidenceObjectKey, String evidenceEtag, String repairTicketId,
+            String assignedRepairUserId, String status, String bpmnProcessId, String correlationId
+    ) {
+        return syncIncident(orgId, role, reportedByUserId, incidentId, machineId, reportedByUserId, severity, incidentType, description, downtimeHours, evidenceObjectKey, evidenceEtag, repairTicketId, assignedRepairUserId, status, bpmnProcessId, correlationId);
+    }
 
     /**
      * Persists work acceptance record with tenant RLS isolation and column names matching schema.sql.
      */
     public boolean syncWorkAcceptance(
-            String orgId, String role, String acceptanceId, String assignmentId, String requestId,
+            String orgId, String role, String userId, String acceptanceId, String assignmentId, String requestId,
             double completedAreaHa, String evidenceObjectKey, String operatorSubmittedBy,
             String farmerConfirmedBy, String confirmationStatus, String notes, String correlationId
     ) {
@@ -701,8 +745,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : (farmerConfirmedBy != null ? farmerConfirmedBy : operatorSubmittedBy)));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, acceptanceId);
@@ -724,12 +767,19 @@ public final class PostgreSqlDataService {
             return false;
         }
     }
+    public boolean syncWorkAcceptance(
+            String orgId, String role, String acceptanceId, String assignmentId, String requestId,
+            double completedAreaHa, String evidenceObjectKey, String operatorSubmittedBy,
+            String farmerConfirmedBy, String confirmationStatus, String notes, String correlationId
+    ) {
+        return syncWorkAcceptance(orgId, role, farmerConfirmedBy != null ? farmerConfirmedBy : operatorSubmittedBy, acceptanceId, assignmentId, requestId, completedAreaHa, evidenceObjectKey, operatorSubmittedBy, farmerConfirmedBy, confirmationStatus, notes, correlationId);
+    }
 
     /**
      * Persists audit record (matching table 'audit_records' in schema.sql).
      */
     public boolean syncAuditRecord(
-            String orgId, String role, String eventId, String correlationId, String entityType,
+            String orgId, String role, String userId, String eventId, String correlationId, String entityType,
             String entityId, String action, String actorUserId, String actorRole,
             String beforeStateJson, String afterStateJson, String prevHash, String recordHash
     ) {
@@ -745,8 +795,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : actorUserId));
             }
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, eventId);
@@ -770,10 +819,22 @@ public final class PostgreSqlDataService {
         }
     }
 
+    public boolean syncAuditRecord(
+            String orgId, String role, String eventId, String correlationId, String entityType,
+            String entityId, String action, String actorUserId, String actorRole,
+            String beforeStateJson, String afterStateJson, String prevHash, String recordHash
+    ) {
+        return syncAuditRecord(orgId, role, actorUserId, eventId, correlationId, entityType, entityId, action, actorUserId, actorRole, beforeStateJson, afterStateJson, prevHash, recordHash);
+    }
+
     /**
      * Executes query with tenant RLS policy applied and returns rows.
      */
-    public List<Map<String, Object>> queryWithRls(String orgId, String role, String tableName) {
+        public List<Map<String, Object>> queryWithRls(String orgId, String role, String tableName) {
+        return queryWithRls(orgId, role, null, tableName);
+    }
+
+    public List<Map<String, Object>> queryWithRls(String orgId, String role, String userId, String tableName) {
         List<Map<String, Object>> rows = new ArrayList<>();
         if (!isConnectionLive()) return rows;
 
@@ -789,8 +850,7 @@ public final class PostgreSqlDataService {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
             try (Statement s = conn.createStatement()) {
-                s.execute(String.format("SET LOCAL app.current_org_id = '%s'; SET LOCAL app.current_user_role = '%s';",
-                        orgId.replace("'", "''"), role.replace("'", "''")));
+                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId));
             }
             try (Statement s = conn.createStatement();
                  ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {

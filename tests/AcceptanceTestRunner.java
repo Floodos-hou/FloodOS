@@ -15,6 +15,7 @@ import org.openagrios.core.dataservices.JsonCodec;
 import org.openagrios.core.identity.KeycloakOidcEngine;
 
 import org.openagrios.core.dataservices.PostgreSqlDataService;
+import org.openagrios.core.dataservices.TenantRlsContext;
 
 
 
@@ -274,6 +275,34 @@ public final class AcceptanceTestRunner {
             ));
             check(pkceMismatchRes.status() == 400 && "INVALID_GRANT".equals(pkceMismatchRes.body().get("error")), "Mismatched PKCE verifier must return 400 INVALID_GRANT");
 
+            // 2.8.3. Verify PKCE state validation and CSRF protection (RFC 6749 Section 10.12)
+            Map<String, Object> stateSession = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-secure-token-9988");
+            String stateCode = String.valueOf(stateSession.get("code"));
+            String stateVerifier = String.valueOf(stateSession.get("code_verifier"));
+
+            // Mismatched state must be rejected with 400 INVALID_GRANT
+            ApiRes csrfAttackRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                    "code", stateCode,
+                    "code_verifier", stateVerifier,
+                    "state", "forged-csrf-state-attacker",
+                    "client_id", "agriops-web",
+                    "redirect_uri", "http://localhost:8000/callback"
+            ));
+            check(csrfAttackRes.status() == 400 && "INVALID_GRANT".equals(csrfAttackRes.body().get("error")), "Tampered CSRF state must return 400 INVALID_GRANT");
+
+            // Correct state must succeed and verify state token
+            Map<String, Object> stateSession2 = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-valid-token-777");
+            String stateCode2 = String.valueOf(stateSession2.get("code"));
+            String stateVerifier2 = String.valueOf(stateSession2.get("code_verifier"));
+            ApiRes stateValidRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                    "code", stateCode2,
+                    "code_verifier", stateVerifier2,
+                    "state", "csrf-valid-token-777",
+                    "client_id", "agriops-web",
+                    "redirect_uri", "http://localhost:8000/callback"
+            ));
+            check(stateValidRes.status() == 200 && "csrf-valid-token-777".equals(stateValidRes.body().get("state")), "Valid PKCE state token exchange failed");
+
             // 2.8.3. Verify PKCE rejects code_verifier with invalid length (< 43 characters, RFC 7636 Section 4.1)
             ApiRes pkceTooShortRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
                     "code", "test_auth_code_xyz",
@@ -331,15 +360,20 @@ public final class AcceptanceTestRunner {
 
             check(stFields.size() == 1 && "F_ST01".equals(stFields.get(0).get("field_id")), "Tenant 2 RLS isolation failed");
 
-            // 3.1. Verify PostgreSQL RLS Data Service session compiler
-
+            // 3.1. Verify PostgreSQL RLS Data Service session compiler with app.current_user_id
             PostgreSqlDataService pgService = new PostgreSqlDataService();
-
-            Map<String, Object> pgRls = pgService.testConnectionAndApplyRls("HTX_CANTHO_01", "COORDINATOR");
-
+            Map<String, Object> pgRls = pgService.testConnectionAndApplyRls("HTX_CANTHO_01", "FARMER", "usr_farmer_ba");
             check(pgRls.containsKey("compiled_rls_sql"), "PostgreSQL RLS SQL check failed");
-            check(String.valueOf(pgRls.get("compiled_rls_sql")).contains("SET LOCAL app.current_org_id = 'HTX_CANTHO_01'"), "RLS SQL must set app.current_org_id");
-            check(String.valueOf(pgRls.get("compiled_rls_sql")).contains("SET LOCAL app.current_user_role = 'COORDINATOR'"), "RLS SQL must set app.current_user_role");
+            String compiledRls = String.valueOf(pgRls.get("compiled_rls_sql"));
+            check(compiledRls.contains("SET LOCAL app.current_org_id = 'HTX_CANTHO_01'"), "RLS SQL must set app.current_org_id");
+            check(compiledRls.contains("SET LOCAL app.current_user_role = 'FARMER'"), "RLS SQL must set app.current_user_role");
+            check(compiledRls.contains("SET LOCAL app.current_user_id = 'usr_farmer_ba'"), "RLS SQL must set app.current_user_id");
+
+            // 3.1.1. Verify multi-user isolation within the same cooperative
+            var baAuth = new KeycloakOidcEngine.AuthContext("usr_farmer_ba", "farmer_ba", "HTX_CANTHO_01", "FARMER");
+            var namAuth = new KeycloakOidcEngine.AuthContext("usr_farmer_nam", "farmer_nam", "HTX_CANTHO_01", "FARMER");
+            check("FULL".equals(TenantRlsContext.resolveFieldVisibility(baAuth, "usr_farmer_ba")), "Farmer Ba must have FULL visibility on own field");
+            check("FOG_OF_WAR".equals(TenantRlsContext.resolveFieldVisibility(namAuth, "usr_farmer_ba")), "Farmer Nam must see FOG_OF_WAR on Farmer Ba's field");
             String storageMode = server.getAgriOpsService().getStore().getStorageEngineMode();
             check(storageMode != null && !storageMode.isBlank(), "Storage engine mode must be reported truthfully");
 
@@ -382,6 +416,33 @@ public final class AcceptanceTestRunner {
             }
 
 
+
+            
+            // 3.6. Verify POSTGRESQL_PRODUCTION mode fail-fast and zero-in-memory-leakage
+            // When PostgreSQL is offline in production storage mode, persist* must fail fast and never retain entity in memory
+            var offlineProdStore = new org.openagrios.apps.agriops.AgriDataStore(
+                    new org.openagrios.core.dataservices.ImmutableAuditLedger(),
+                    new org.openagrios.core.dataservices.SeaweedS3StorageService(),
+                    new org.openagrios.core.workflow.BpmnWorkflowEngine(root)
+            );
+            boolean caughtFailFast = false;
+            try {
+                org.openagrios.apps.agriops.AgriDataStore.setStorageModeForTesting("POSTGRESQL_PRODUCTION");
+                offlineProdStore.persistServiceRequest(new org.openagrios.apps.agriops.AgriModels.ServiceRequest(
+                        "REQ-OFFLINE-TEST", "HTX_CANTHO_01", "F01", "usr_farmer_ba", 2.0,
+                        "2026-11-20T10:00:00Z", "2026-11-20T12:00:00Z", "URGENT", "PENDING_SCHEDULE",
+                        "PRC-REQ-OFFLINE", "CORR-OFFLINE", "Test request", "2026-11-20T08:00:00Z"
+                ), "FARMER", "usr_farmer_ba");
+            } catch (IllegalStateException expected) {
+                caughtFailFast = true;
+            } finally {
+                org.openagrios.apps.agriops.AgriDataStore.resetStorageModeForTesting();
+            }
+            if (!offlineProdStore.postgreSqlDataService.isConnectionLive()) {
+                check(caughtFailFast, "Offline PostgreSQL in production storage mode must fail-fast with IllegalStateException");
+                check(!offlineProdStore.serviceRequests.containsKey("REQ-OFFLINE-TEST"), "Failed entity must NEVER be placed into in-memory store in production mode");
+                System.out.println("[PASS] Production Storage Fail-Fast verified: blocked silent in-memory drift when PostgreSQL is unreachable.");
+            }
 
             System.out.println("[PASS] Multi-Tenant RLS & Field-Level Visibility verified: " + fullFields + " unmasked, 7 masked.");
 

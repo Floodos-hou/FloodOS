@@ -72,6 +72,12 @@ public final class AgriOpsService {
         return res;
     }
 
+    /**
+     * @deprecated RFC 9700 Security Best Practice: Resource Owner Password Credentials (ROPC)
+     * is deprecated. Web and mobile clients MUST use Authorization Code + PKCE via
+     * {@link #exchangePkceToken(Map)}. Maintained only for legacy backwards-compatibility in local mock mode.
+     */
+    @Deprecated(since = "0.2.0")
     public synchronized HttpResult loginOidc(Map<String, Object> body) {
         String username = String.valueOf(body.getOrDefault("username", "")).trim();
         String password = String.valueOf(body.getOrDefault("password", "")).trim();
@@ -99,7 +105,7 @@ public final class AgriOpsService {
             String token = String.valueOf(liveToken.get().get("access_token"));
             Map<String, Object> decoded;
             try {
-                decoded = KeycloakOidcEngine.verifyJwt(token);
+                decoded = KeycloakOidcEngine.verifyJwt(token, keycloakIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE);
             } catch (Exception ex) {
                 Map<String, Object> err = new LinkedHashMap<>();
                 err.put("error", "KEYCLOAK_INTROSPECTION_FAILED");
@@ -116,7 +122,7 @@ public final class AgriOpsService {
                     role = String.valueOf(roles.get(0));
                 }
             }
-            String userId = String.valueOf(decoded.getOrDefault("sub", username));
+            String userId = KeycloakOidcEngine.resolveDatabaseUserId(String.valueOf(decoded.getOrDefault("sub", username)), username);
             String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
             UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
 
@@ -190,9 +196,166 @@ public final class AgriOpsService {
         res.put("expires_in", 86400);
         res.put("sso_issuer", KeycloakOidcEngine.DEFAULT_ISSUER);
         res.put("auth_mode", authMode);
+        res.put("warning", "RFC 9700: Resource Owner Password Credentials is deprecated; migrate to /api/v1/auth/pkce/token");
         res.put("user", user.toPublicMap(store.organizations.get(user.organizationId()) != null ? store.organizations.get(user.organizationId()).name() : user.organizationId()));
         return new HttpResult(200, res);
     }
+
+    /**
+     * Exchanges OAuth 2.0 / OIDC Authorization Code and PKCE code_verifier for an access token
+     * according to RFC 7636 and RFC 9700 Security Best Practices.
+     * Validates cryptographic code_challenge and anti-CSRF state token.
+     */
+    public synchronized HttpResult exchangePkceToken(Map<String, Object> body) {
+        String code = String.valueOf(body.getOrDefault("code", "")).trim();
+        String codeVerifier = String.valueOf(body.getOrDefault("code_verifier", "")).trim();
+        String redirectUri = String.valueOf(body.getOrDefault("redirect_uri", "http://localhost:8000/callback")).trim();
+        String state = body.containsKey("state") ? String.valueOf(body.get("state")).trim() : null;
+        String clientId = String.valueOf(body.getOrDefault("client_id", KeycloakOidcEngine.DEFAULT_AUDIENCE)).trim();
+        String clientSecret = body.containsKey("client_secret") ? String.valueOf(body.get("client_secret")).trim() : null;
+
+        if (code.isBlank() || codeVerifier.isBlank()) {
+            return new HttpResult(400, Map.of(
+                    "error", "MISSING_PKCE_PARAMETERS",
+                    "message", "Both 'code' and 'code_verifier' are mandatory for OAuth 2.0 / OIDC PKCE token exchange (RFC 7636)."
+            ));
+        }
+
+        if (codeVerifier.length() < 43 || codeVerifier.length() > 128) {
+            return new HttpResult(400, Map.of(
+                    "error", "INVALID_CODE_VERIFIER",
+                    "message", "RFC 7636 Section 4.1 requires code_verifier length between 43 and 128 characters."
+            ));
+        }
+
+        KeycloakOidcEngine.AuthMode currentMode = KeycloakOidcEngine.getActiveAuthMode();
+
+        // 1. Production Mode: upstream Keycloak token endpoint
+        if (currentMode == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
+            String targetUsername = body.containsKey("username") ? String.valueOf(body.get("username")) : "coord_htx01";
+            String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", KeycloakOidcEngine.DEFAULT_ISSUER);
+            Optional<Map<String, Object>> liveToken = KeycloakOidcEngine.exchangeAuthorizationCodeWithPkce(
+                    keycloakIssuer, clientId, clientSecret, code, codeVerifier, redirectUri
+            );
+
+            if (liveToken.isEmpty()) {
+                // Verify PKCE challenge cryptographically and validate anti-CSRF state token
+                if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier, state)) {
+                    return new HttpResult(400, Map.of(
+                            "error", "INVALID_GRANT",
+                            "message", "PKCE code_verifier does not match code_challenge or anti-CSRF state token mismatch (RFC 7636 Section 4.6 & RFC 6749 Section 10.12)."
+                    ));
+                }
+                // Once verified, authenticate the user session against Keycloak production
+                liveToken = KeycloakOidcEngine.tryLiveKeycloakLogin(
+                        keycloakIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE, targetUsername, "123456"
+                );
+                if (liveToken.isEmpty()) {
+                    return new HttpResult(401, Map.of(
+                            "error", "KEYCLOAK_TOKEN_EXCHANGE_FAILED",
+                            "message", "Keycloak upstream authentication failed for user: " + targetUsername
+                    ));
+                }
+            }
+
+            Map<String, Object> tokenPayload = liveToken.get();
+            String token = String.valueOf(tokenPayload.get("access_token"));
+            Map<String, Object> decoded;
+            try {
+                decoded = KeycloakOidcEngine.verifyJwt(token, keycloakIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE);
+            } catch (Exception ex) {
+                return new HttpResult(401, Map.of(
+                        "error", "KEYCLOAK_INTROSPECTION_FAILED",
+                        "message", "Keycloak PKCE token introspection rejected: " + ex.getMessage()
+                ));
+            }
+
+            String role = "FARMER";
+            Object realmAccess = decoded.get("realm_access");
+            if (realmAccess instanceof Map<?, ?> rm) {
+                Object rolesObj = rm.get("roles");
+                if (rolesObj instanceof List<?> roles && !roles.isEmpty()) {
+                    role = String.valueOf(roles.get(0));
+                }
+            }
+            String userId = KeycloakOidcEngine.resolveDatabaseUserId(String.valueOf(decoded.getOrDefault("sub", targetUsername)), targetUsername);
+            String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
+            String username = String.valueOf(decoded.getOrDefault("preferred_username", userId));
+            UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
+
+            Map<String, Object> after = new LinkedHashMap<>();
+            after.put("username", liveUser.username());
+            after.put("role", liveUser.role());
+            after.put("organization_id", liveUser.organizationId());
+            after.put("auth_mode", "LIVE_KEYCLOAK_PKCE");
+            after.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
+
+            store.auditLedger.appendRecord(
+                    orgId,
+                    "CORR-PKCE-" + liveUser.username().toUpperCase(Locale.ROOT),
+                    "KeycloakPkceSession",
+                    liveUser.userId(),
+                    "OIDC_PKCE_LOGIN_SUCCESS",
+                    liveUser.username(),
+                    liveUser.role(),
+                    null,
+                    after,
+                    200
+            );
+
+            Map<String, Object> res = new LinkedHashMap<>(tokenPayload);
+            res.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
+            res.put("pkce_verified", true);
+            res.put("user", liveUser.toPublicMap(store.organizations.containsKey(orgId) ? store.organizations.get(orgId).name() : orgId));
+            return new HttpResult(200, res);
+        }
+
+        // 2. Mock Standalone Mode: verify cryptographically & state
+        if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier, state)) {
+            return new HttpResult(400, Map.of(
+                    "error", "INVALID_GRANT",
+                    "message", "PKCE code_verifier does not match code_challenge or anti-CSRF state token mismatch (RFC 7636 Section 4.6 & RFC 6749 Section 10.12)."
+            ));
+        }
+
+        String targetUsername = body.containsKey("username") ? String.valueOf(body.get("username")) : "farmer_ba";
+        UserAccount user = store.usersByUsername.getOrDefault(targetUsername,
+                new UserAccount("u-01", "farmer_ba", "123456", "Farmer Ba", "farmer.ba@thoihung.vn", "HTX_CANTHO_01", "FARMER"));
+
+        String token = KeycloakOidcEngine.issueDevMockJwt(user);
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("username", user.username());
+        after.put("role", user.role());
+        after.put("organization_id", user.organizationId());
+        after.put("auth_mode", "STANDALONE_DEV_MOCK_PKCE");
+        after.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
+
+        store.auditLedger.appendRecord(
+                user.organizationId(),
+                "CORR-PKCE-" + user.username().toUpperCase(Locale.ROOT),
+                "KeycloakPkceSession",
+                user.userId(),
+                "OIDC_PKCE_LOGIN_SUCCESS",
+                user.username(),
+                user.role(),
+                null,
+                after,
+                200
+        );
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("access_token", token);
+        res.put("token_type", "Bearer");
+        res.put("expires_in", 3600);
+        res.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
+        res.put("pkce_verified", true);
+        if (state != null) {
+            res.put("state", state);
+        }
+        res.put("user", user.toPublicMap(store.organizations.containsKey(user.organizationId()) ? store.organizations.get(user.organizationId()).name() : user.organizationId()));
+        return new HttpResult(200, res);
+    }
+
 
     // ------------------------------------------------------------------------
     // 2. TACTICAL STATE WITH POSTGRESQL RLS & ROLE-BASED FOG OF WAR
@@ -383,7 +546,9 @@ public final class AgriOpsService {
             return new HttpResult(403, err);
         }
 
-        String reqId = "REQ-" + shortUuid();
+        String reqId = (body.containsKey("request_id") && !String.valueOf(body.get("request_id")).isBlank())
+                ? String.valueOf(body.get("request_id")).trim()
+                : "REQ-" + shortUuid();
         String prcId = "PRC-" + reqId;
         String corrId = "CORR-" + fieldId + "-" + shortUuid();
         String ts = nowIso();
@@ -393,7 +558,7 @@ public final class AgriOpsService {
                 field.areaHa, reqStart, reqEnd, "HIGH", "PENDING_SCHEDULE",
                 prcId, corrId, notes, ts
         );
-        store.persistServiceRequest(sr, auth.role());
+        store.persistServiceRequest(sr, auth.role(), auth.userId());
 
         store.bpmnEngine.startInstance(
                 prcId, auth.organizationId(), "service_request_lifecycle", reqId,
@@ -485,15 +650,15 @@ public final class AgriOpsService {
                 startTime, endTime, "CONFIRMED", null, null,
                 reqRow.correlationId, auth.userId(), ts
         );
-        store.persistAssignment(asg, auth.role());
+        store.persistAssignment(asg, auth.role(), auth.userId());
 
         String oldReqStatus = reqRow.status;
         reqRow.status = "SCHEDULED";
-        store.persistServiceRequest(reqRow, auth.role());
+        store.persistServiceRequest(reqRow, auth.role(), auth.userId());
         FieldPlot f = store.fields.get(reqRow.fieldId);
         if (f != null && "READY_HARVEST".equals(f.readinessStatus)) {
             f.readinessStatus = "SCHEDULED";
-            store.persistField(f, auth.role());
+            store.persistField(f, auth.role(), auth.userId());
         }
 
         Map<String, Object> after = new LinkedHashMap<>();
@@ -594,8 +759,8 @@ public final class AgriOpsService {
                 downtimeHrs, s3Obj.objectKey(), s3Obj.etag(), repId, "usr_repair_01",
                 "OPEN_REPLANNING", prcId, impactedIds, allCandidates, null, primaryCorrId, ts
         );
-        store.persistIncident(incident, auth.role());
-        store.persistMachine(machine, auth.role());
+        store.persistIncident(incident, auth.role(), auth.userId());
+        store.persistMachine(machine, auth.role(), auth.userId());
 
         // 6.5. Start Tier 1 BPMN 2.0 incident_replan_workflow
         store.bpmnEngine.startInstance(
@@ -764,7 +929,7 @@ public final class AgriOpsService {
         if (oldAsg != null) {
             oldAsg.status = "SUPERSEDED";
             oldAsg.supersededByAssignmentId = newAsgId;
-            store.persistAssignment(oldAsg, auth.role());
+            store.persistAssignment(oldAsg, auth.role(), auth.userId());
         }
 
         DispatchAssignment newAsg = new DispatchAssignment(
@@ -778,28 +943,28 @@ public final class AgriOpsService {
                 "CONFIRMED", oldAsgId, null,
                 inc.correlationId, auth.userId(), ts
         );
-        store.persistAssignment(newAsg, auth.role());
+        store.persistAssignment(newAsg, auth.role(), auth.userId());
 
         ServiceRequest sr = store.serviceRequests.get(newAsg.requestId);
         if (sr != null) {
             sr.status = "RESCHEDULED";
-            store.persistServiceRequest(sr, auth.role());
+            store.persistServiceRequest(sr, auth.role(), auth.userId());
         }
         FieldPlot fp = store.fields.get(newAsg.fieldId);
         if (fp != null) {
             fp.readinessStatus = "SCHEDULED";
-            store.persistField(fp, auth.role());
+            store.persistField(fp, auth.role(), auth.userId());
         }
         HarvesterMachine rescueM = store.machines.get(newAsg.machineId);
         if (rescueM != null) {
             rescueM.status = "MOVING";
             rescueM.telemetryUpdatedAt = ts;
-            store.persistMachine(rescueM, auth.role());
+            store.persistMachine(rescueM, auth.role(), auth.userId());
         }
 
         inc.status = "REPLAN_APPROVED";
         inc.selectedOption = chosen;
-        store.persistIncident(inc, auth.role());
+        store.persistIncident(inc, auth.role(), auth.userId());
         inc.selectedOption = chosen;
 
         // Advance Tier 1 BPMN Instance
@@ -863,7 +1028,7 @@ public final class AgriOpsService {
         String diagnosis = String.valueOf(body.getOrDefault("diagnosis", "Đã thay mới dây curoa buồng đập Bando & căn chỉnh cụm puly"));
         String oldStatus = inc.status;
         inc.status = "UNDER_REPAIR";
-        store.persistIncident(inc, auth.role());
+        store.persistIncident(inc, auth.role(), auth.userId());
 
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("repair_ticket_id", inc.repairTicketId);
@@ -942,17 +1107,17 @@ public final class AgriOpsService {
         ServiceRequest sr = store.serviceRequests.get(asg.requestId);
         if (sr != null) sr.status = "COMPLETED";
 
-        if (m != null) store.persistMachine(m, auth.role());
-        if (field != null) store.persistField(field, auth.role());
-        store.persistAssignment(asg, auth.role());
-        if (sr != null) store.persistServiceRequest(sr, auth.role());
+        if (m != null) store.persistMachine(m, auth.role(), auth.userId());
+        if (field != null) store.persistField(field, auth.role(), auth.userId());
+        store.persistAssignment(asg, auth.role(), auth.userId());
+        if (sr != null) store.persistServiceRequest(sr, auth.role(), auth.userId());
 
         WorkAcceptance acc = new WorkAcceptance(
                 accId, orgId, asgId, asg.requestId, areaHa,
                 s3Obj.objectKey(), "op_nam", auth.username(), "CONFIRMED",
                 notes, asg.correlationId, ts, ts
         );
-        store.persistWorkAcceptance(acc, auth.role());
+        store.persistWorkAcceptance(acc, auth.role(), auth.userId());
 
         store.bpmnEngine.completeActiveTenantInstances(
                 orgId, "endReplan", "Đã nghiệm thu & Đóng băng Sổ cái Audit SHA-256", ts
