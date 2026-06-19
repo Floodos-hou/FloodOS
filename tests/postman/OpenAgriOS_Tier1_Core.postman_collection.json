@@ -6,13 +6,56 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
-    { "key": "farmer_token", "value": "", "type": "string" },
-    { "key": "coord_token", "value": "", "type": "string" },
-    { "key": "op_token", "value": "", "type": "string" },
-    { "key": "repair_token", "value": "", "type": "string" },
-    { "key": "st_coord_token", "value": "", "type": "string" },
-    { "key": "top_option_id", "value": "OPT-M02-OP-02-ASG-102", "type": "string" }
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "farmer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "coord_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "op_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "repair_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "st_coord_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "top_option_id",
+      "value": "OPT-M02-OP-02-ASG-102",
+      "type": "string"
+    },
+    {
+      "key": "pkce_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pkce_code_verifier",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pkce_state",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -23,7 +66,15 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            }
           },
           "event": [
             {
@@ -47,7 +98,17 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
           },
           "event": [
             {
@@ -71,11 +132,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "url": { "raw": "{{base_url}}/api/v1/sim/reset", "host": ["{{base_url}}"], "path": ["api", "v1", "sim", "reset"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sim/reset",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sim",
+                "reset"
+              ]
+            }
           }
         }
       ]
@@ -84,20 +165,144 @@
       "name": "02. Keycloak OIDC SSO Login",
       "item": [
         {
+          "name": "2.1. GET /api/v1/auth/pkce/authorize-url — Khởi tạo phiên PKCE & State (RFC 7636)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('pkce_code', json.code);",
+                  "pm.collectionVariables.set('pkce_code_verifier', json.code_verifier);",
+                  "pm.collectionVariables.set('pkce_state', json.state);",
+                  "pm.test('Khởi tạo phiên PKCE thành công', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    pm.expect(json.code_challenge).to.be.a('string');",
+                  "    pm.expect(json.code_verifier).to.be.a('string');",
+                  "    pm.expect(json.code).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/pkce/authorize-url?state=csrf-pm-state-999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "pkce",
+                "authorize-url"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "csrf-pm-state-999"
+                }
+              ]
+            },
+            "description": "Tạo phiên OAuth 2.0 PKCE và mã anti-CSRF state token."
+          }
+        },
+        {
+          "name": "2.2. POST /api/v1/auth/pkce/token — Đổi Authorization Code lấy Live JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('coord_token', json.access_token);",
+                  "pm.test('Đổi mã PKCE lấy Live JWT Token thành công', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    pm.expect(json.access_token).to.be.a('string');",
+                  "    pm.expect(json.pkce_verified).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"code\": \"{{pkce_code}}\",\n    \"code_verifier\": \"{{pkce_code_verifier}}\",\n    \"state\": \"{{pkce_state}}\",\n    \"username\": \"coord_htx01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/pkce/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "pkce",
+                "token"
+              ]
+            },
+            "description": "Trao đổi Authorization Code và code_verifier đã được mã hoá S256 để nhận Live Keycloak Bearer Token."
+          }
+        },
+        {
           "name": "2.1. GET /api/v1/auth/accounts — Danh sách Tài khoản Keycloak Realm",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/auth/accounts", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "accounts"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "accounts"
+              ]
+            }
           }
         },
         {
           "name": "2.2. POST Login: Nông hộ Bác Ba (farmer_ba -> Lưu {{farmer_token}})",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"farmer_ba\",\n  \"password\": \"123456\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"farmer_ba\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
           },
           "event": [
             {
@@ -120,9 +325,28 @@
           "name": "2.3. POST Login: Điều phối viên Chị Lan (coord_htx01 -> Lưu {{coord_token}})",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"coord_htx01\",\n  \"password\": \"123456\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"coord_htx01\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
           },
           "event": [
             {
@@ -144,9 +368,28 @@
           "name": "2.4. POST Login: Người vận hành Anh Minh (op_minh -> Lưu {{op_token}})",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"op_minh\",\n  \"password\": \"123456\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"op_minh\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
           },
           "event": [
             {
@@ -166,9 +409,28 @@
           "name": "2.5. POST Login: Đội sửa chữa (repair_01 -> Lưu {{repair_token}})",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"repair_01\",\n  \"password\": \"123456\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"repair_01\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
           },
           "event": [
             {
@@ -187,9 +449,28 @@
           "name": "2.6. POST Login: HTX Sóc Trăng 02 (coord_htx02 -> Lưu {{st_coord_token}})",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"coord_htx02\",\n  \"password\": \"123456\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"coord_htx02\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
           },
           "event": [
             {
@@ -216,8 +497,23 @@
           "name": "3.1. GET /api/v1/state (Role FARMER) — Quyền hiển thị vùng ruộng theo chủ sở hữu",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{farmer_token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/state", "host": ["{{base_url}}"], "path": ["api", "v1", "state"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{farmer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/state",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "state"
+              ]
+            }
           },
           "event": [
             {
@@ -239,8 +535,23 @@
           "name": "3.2. GET /api/v1/state (Tenant HTX_SOCTRANG_02) — Cách ly dữ liệu giữa các HTX",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{st_coord_token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/state", "host": ["{{base_url}}"], "path": ["api", "v1", "state"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{st_coord_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/state",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "state"
+              ]
+            }
           },
           "event": [
             {
@@ -263,14 +574,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{farmer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"request_id\": \"REQ-04\",\n  \"machine_id\": \"M02\",\n  \"operator_id\": \"OP-02\",\n  \"start_time\": \"2026-11-20T13:00:00Z\",\n  \"end_time\": \"2026-11-20T17:00:00Z\"\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/assignments", "host": ["{{base_url}}"], "path": ["api", "v1", "assignments"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments"
+              ]
+            }
           },
           "event": [
             {
@@ -297,14 +624,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{farmer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"field_id\": \"F07\",\n  \"requested_start\": \"2026-11-21T13:00:00Z\",\n  \"requested_end\": \"2026-11-21T17:00:00Z\",\n  \"notes\": \"Đặt lịch thu hoạch lúa Đông Xuân OM18 tại Gò Tháp Mười\"\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/requests", "host": ["{{base_url}}"], "path": ["api", "v1", "requests"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requests"
+              ]
+            }
           }
         },
         {
@@ -312,14 +655,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"request_id\": \"REQ-04\",\n  \"machine_id\": \"M01\",\n  \"operator_id\": \"OP-01\",\n  \"start_time\": \"2026-11-20T08:00:00Z\",\n  \"end_time\": \"2026-11-20T11:30:00Z\"\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/assignments", "host": ["{{base_url}}"], "path": ["api", "v1", "assignments"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments"
+              ]
+            }
           },
           "event": [
             {
@@ -346,14 +705,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{op_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{op_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"machine_id\": \"M01\",\n  \"severity\": \"CRITICAL\",\n  \"incident_type\": \"Đứt dây curoa buồng đập & Kẹt trục cuốn\",\n  \"description\": \"Máy M01 hỏng tại F01, cần dừng 24h để thay dây curoa.\",\n  \"estimated_downtime_hours\": 24,\n  \"evidence_filename\": \"minh_chung_dut_curoa_M01.jpg\",\n  \"force_no_option\": false\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/incidents", "host": ["{{base_url}}"], "path": ["api", "v1", "incidents"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/incidents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents"
+              ]
+            }
           },
           "event": [
             {
@@ -378,8 +753,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{coord_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -387,8 +768,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/incidents/INC-2026-001/approve-replan",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "incidents", "INC-2026-001", "approve-replan"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "INC-2026-001",
+                "approve-replan"
+              ]
             }
           },
           "event": [
@@ -413,8 +802,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{repair_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{repair_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -422,8 +817,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/incidents/INC-2026-001/repair",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "incidents", "INC-2026-001", "repair"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "INC-2026-001",
+                "repair"
+              ]
             }
           }
         }
@@ -437,25 +840,54 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{farmer_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{farmer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignment_id\": \"ASG-102-R1\",\n  \"action\": \"FARMER_CONFIRM\",\n  \"notes\": \"Bác Ba xác nhận máy M02 đã thu hoạch sạch 2.2 ha tại Kênh Xáng Ô Môn.\"\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/acceptances", "host": ["{{base_url}}"], "path": ["api", "v1", "acceptances"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/acceptances",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "acceptances"
+              ]
+            }
           }
         },
         {
           "name": "6.2. GET /api/v1/audit/lineage/CORR-GOLDEN-F03 — Truy vết Phả hệ Dữ liệu",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/audit/lineage/CORR-GOLDEN-F03",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "audit", "lineage", "CORR-GOLDEN-F03"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "lineage",
+                "CORR-GOLDEN-F03"
+              ]
             }
           },
           "event": [
@@ -478,19 +910,47 @@
           "name": "6.3. GET /api/v1/audit/verify — Kiểm chứng toàn vẹn Sổ cái Bất biến SHA-256",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/audit/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "audit", "verify"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "verify"
+              ]
+            }
           }
         },
         {
           "name": "6.4. GET /api/v1/digital-twin/entities — Xuất thực thể Bản sao số chuẩn ETSI NGSI-LD",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{coord_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/digital-twin/entities",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "digital-twin", "entities"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "digital-twin",
+                "entities"
+              ]
             }
           }
         }
