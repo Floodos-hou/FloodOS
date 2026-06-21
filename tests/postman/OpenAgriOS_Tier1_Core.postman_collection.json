@@ -55,6 +55,11 @@
       "key": "pkce_state",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "pkce_code_challenge",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -165,21 +170,21 @@
       "name": "02. Keycloak OIDC SSO Login",
       "item": [
         {
-          "name": "2.1. GET /api/v1/auth/pkce/authorize-url — Khởi tạo phiên PKCE & State (RFC 7636)",
+          "name": "2.1. GET /api/v1/auth/pkce/authorize-url — Khởi tạo tham số PKCE (RFC 7636)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('pkce_code', json.code);",
+                  "pm.collectionVariables.set('pkce_code_challenge', json.code_challenge);",
                   "pm.collectionVariables.set('pkce_code_verifier', json.code_verifier);",
                   "pm.collectionVariables.set('pkce_state', json.state);",
-                  "pm.test('Khởi tạo phiên PKCE thành công', () => {",
+                  "if (json.code) { pm.collectionVariables.set('pkce_code', json.code); }",
+                  "pm.test('Khởi tạo tham số PKCE thành công', () => {",
                   "    pm.expect(pm.response.code).to.eql(200);",
                   "    pm.expect(json.code_challenge).to.be.a('string');",
                   "    pm.expect(json.code_verifier).to.be.a('string');",
-                  "    pm.expect(json.code).to.be.a('string');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -212,7 +217,53 @@
           }
         },
         {
-          "name": "2.2. POST /api/v1/auth/pkce/token — Đổi Authorization Code lấy Live JWT Token",
+          "name": "2.2. POST /api/v1/auth/pkce/authorize-code — Lấy Authorization Code từ Keycloak (RFC 7636)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('pkce_code', json.code);",
+                  "pm.test('Lấy mã Keycloak Authorization Code thành công', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    pm.expect(json.code).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"coord_htx01\",\n    \"password\": \"123456\",\n    \"code_challenge\": \"{{pkce_code_challenge}}\",\n    \"state\": \"{{pkce_state}}\",\n    \"redirect_uri\": \"http://localhost:8000/callback\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/pkce/authorize-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "pkce",
+                "authorize-code"
+              ]
+            },
+            "description": "Lấy mã Authorization Code thật từ Keycloak Realm (RFC 7636) cho tài khoản Điều phối viên HTX."
+          }
+        },
+        {
+          "name": "2.3. POST /api/v1/auth/pkce/token — Đổi Authorization Code lấy Live JWT Token",
           "event": [
             {
               "listen": "test",
@@ -240,7 +291,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"code\": \"{{pkce_code}}\",\n    \"code_verifier\": \"{{pkce_code_verifier}}\",\n    \"state\": \"{{pkce_state}}\",\n    \"username\": \"coord_htx01\"\n}"
+              "raw": "{\n    \"code\": \"{{pkce_code}}\",\n    \"code_verifier\": \"{{pkce_code_verifier}}\",\n    \"state\": \"{{pkce_state}}\",\n    \"redirect_uri\": \"http://localhost:8000/callback\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/pkce/token",
@@ -259,7 +310,7 @@
           }
         },
         {
-          "name": "2.1. GET /api/v1/auth/accounts — Danh sách Tài khoản Keycloak Realm",
+          "name": "2.4. GET /api/v1/auth/accounts — Danh sách Tài khoản Keycloak Realm",
           "request": {
             "method": "GET",
             "header": [],

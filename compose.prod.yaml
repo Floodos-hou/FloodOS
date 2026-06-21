@@ -28,6 +28,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-openagrios}
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?CRITICAL POSTGRES_PASSWORD must be explicitly provided in production}"
       POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
+      POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
 
   keycloak:
     restart: always

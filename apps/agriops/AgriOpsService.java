@@ -206,6 +206,70 @@ public final class AgriOpsService {
      * according to RFC 7636 and RFC 9700 Security Best Practices.
      * Validates cryptographic code_challenge and anti-CSRF state token.
      */
+    /**
+     * Programmatically acquires an Authorization Code for PKCE flow (RFC 7636).
+     * In KEYCLOAK_PRODUCTION: completes Keycloak login flow and returns genuine Keycloak code.
+     * In DEV_MOCK_STANDALONE: validates store credentials and issues mock code bound to code_challenge.
+     */
+    public synchronized HttpResult acquirePkceAuthCode(Map<String, Object> body) {
+        String username = String.valueOf(body.getOrDefault("username", "")).trim();
+        String password = String.valueOf(body.getOrDefault("password", "")).trim();
+        String codeChallenge = String.valueOf(body.getOrDefault("code_challenge", "")).trim();
+        String state = body.containsKey("state") ? String.valueOf(body.get("state")).trim() : null;
+        String redirectUri = String.valueOf(body.getOrDefault("redirect_uri", "http://localhost:8000/callback")).trim();
+        String clientId = String.valueOf(body.getOrDefault("client_id", KeycloakOidcEngine.DEFAULT_AUDIENCE)).trim();
+
+        if (username.isBlank() || password.isBlank() || codeChallenge.isBlank()) {
+            return new HttpResult(400, Map.of(
+                    "error", "MISSING_PARAMETERS",
+                    "message", "Fields 'username', 'password', and 'code_challenge' are mandatory for authorization code acquisition."
+            ));
+        }
+
+        KeycloakOidcEngine.AuthMode currentMode = KeycloakOidcEngine.getActiveAuthMode();
+        if (currentMode == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
+            String issuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", KeycloakOidcEngine.DEFAULT_ISSUER);
+            Optional<String> liveCode = KeycloakOidcEngine.acquireLiveKeycloakAuthCode(
+                    issuer, clientId, username, password, redirectUri, codeChallenge, state
+            );
+            if (liveCode.isEmpty()) {
+                return new HttpResult(401, Map.of(
+                        "error", "KEYCLOAK_AUTH_FAILED",
+                        "message", "Keycloak login authentication failed for user: " + username
+                ));
+            }
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("code", liveCode.get());
+            if (state != null) {
+                res.put("state", state);
+            }
+            res.put("client_id", clientId);
+            res.put("auth_mode", "KEYCLOAK_PRODUCTION");
+            return new HttpResult(200, res);
+        }
+
+        // DEV_MOCK_STANDALONE: verify user credentials from store and issue mock code
+        UserAccount user = store.usersByUsername.get(username);
+        if (user == null || !user.password().equals(password)) {
+            return new HttpResult(401, Map.of(
+                    "error", "INVALID_CREDENTIALS",
+                    "message", "Invalid username or password in standalone mock mode"
+            ));
+        }
+        String authCode = "code-" + UUID.randomUUID().toString().replace("-", "");
+        KeycloakOidcEngine.pendingPkceSessions.put(authCode, new KeycloakOidcEngine.PkceSession(
+                authCode, codeChallenge, "S256", clientId, redirectUri, state, Instant.now()
+        ));
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("code", authCode);
+        if (state != null) {
+            res.put("state", state);
+        }
+        res.put("client_id", clientId);
+        res.put("auth_mode", "DEV_MOCK_STANDALONE");
+        return new HttpResult(200, res);
+    }
+
     public synchronized HttpResult exchangePkceToken(Map<String, Object> body) {
         String code = String.valueOf(body.getOrDefault("code", "")).trim();
         String codeVerifier = String.valueOf(body.getOrDefault("code_verifier", "")).trim();
@@ -232,33 +296,22 @@ public final class AgriOpsService {
 
         // 1. Production Mode: upstream Keycloak token endpoint
         if (currentMode == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
-            String targetUsername = body.containsKey("username") ? String.valueOf(body.get("username")) : "coord_htx01";
             String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", KeycloakOidcEngine.DEFAULT_ISSUER);
-            Optional<Map<String, Object>> liveToken = KeycloakOidcEngine.exchangeAuthorizationCodeWithPkce(
+            KeycloakOidcEngine.KeycloakExchangeResult result = KeycloakOidcEngine.exchangeAuthorizationCodeWithPkceDetailed(
                     keycloakIssuer, clientId, clientSecret, code, codeVerifier, redirectUri
             );
 
-            if (liveToken.isEmpty()) {
-                // Verify PKCE challenge cryptographically and validate anti-CSRF state token
-                if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier, state)) {
-                    return new HttpResult(400, Map.of(
-                            "error", "INVALID_GRANT",
-                            "message", "PKCE code_verifier does not match code_challenge or anti-CSRF state token mismatch (RFC 7636 Section 4.6 & RFC 6749 Section 10.12)."
-                    ));
-                }
-                // Once verified, authenticate the user session against Keycloak production
-                liveToken = KeycloakOidcEngine.tryLiveKeycloakLogin(
-                        keycloakIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE, targetUsername, "123456"
-                );
-                if (liveToken.isEmpty()) {
-                    return new HttpResult(401, Map.of(
-                            "error", "KEYCLOAK_TOKEN_EXCHANGE_FAILED",
-                            "message", "Keycloak upstream authentication failed for user: " + targetUsername
-                    ));
-                }
+            if (!result.success()) {
+                int status = result.statusCode() == 400 ? 400 : 401;
+                String err = result.error() != null ? result.error() : "KEYCLOAK_TOKEN_EXCHANGE_FAILED";
+                String msg = result.errorDescription() != null ? result.errorDescription() : "Keycloak upstream authorization code exchange failed (RFC 7636).";
+                return new HttpResult(status, Map.of(
+                        "error", err,
+                        "message", msg
+                ));
             }
 
-            Map<String, Object> tokenPayload = liveToken.get();
+            Map<String, Object> tokenPayload = result.data();
             String token = String.valueOf(tokenPayload.get("access_token"));
             Map<String, Object> decoded;
             try {
@@ -278,9 +331,10 @@ public final class AgriOpsService {
                     role = String.valueOf(roles.get(0));
                 }
             }
-            String userId = KeycloakOidcEngine.resolveDatabaseUserId(String.valueOf(decoded.getOrDefault("sub", targetUsername)), targetUsername);
+            String username = String.valueOf(decoded.getOrDefault("preferred_username", "coord_htx01"));
+            String sub = String.valueOf(decoded.getOrDefault("sub", username));
+            String userId = KeycloakOidcEngine.resolveDatabaseUserId(sub, username);
             String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
-            String username = String.valueOf(decoded.getOrDefault("preferred_username", userId));
             UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
 
             Map<String, Object> after = new LinkedHashMap<>();

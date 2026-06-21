@@ -199,51 +199,76 @@ fi
 # Assertion 8: End-to-end Live Golden Path via APISIX Gateway (:9080) & Full PKCE Flow (RFC 7636 & RFC 9700)
 echo "Executing Live Golden Path across APISIX Gateway (:9080) with Full RFC 7636 PKCE Flow..."
 
-# 1. Step 1: Initialize PKCE Session with anti-CSRF State Token through APISIX Gateway
+# 1. Step 1: Initialize PKCE Parameters with anti-CSRF State Token through APISIX Gateway
 PKCE_STATE="csrf-token-$(date +%s)-$$"
-echo " -> Step 1: Initializing PKCE session with anti-CSRF state: $PKCE_STATE..."
+echo " -> Step 1: Initializing PKCE parameters with anti-CSRF state: $PKCE_STATE..."
 PKCE_GW_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE")
 
 CODE_CHALLENGE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_challenge":"\([^"]*\)".*/\1/p')
 CODE_VERIFIER=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_verifier":"\([^"]*\)".*/\1/p')
-AUTH_CODE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
 RETURNED_STATE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
 
-if [ -n "$CODE_CHALLENGE" ] && [ -n "$CODE_VERIFIER" ] && [ -n "$AUTH_CODE" ]; then
-    echo "    [OK] PKCE session created: auth_code=$AUTH_CODE, challenge_method=S256, state=$RETURNED_STATE"
+if [ -n "$CODE_CHALLENGE" ] && [ -n "$CODE_VERIFIER" ]; then
+    echo "    [OK] PKCE parameters generated: challenge_method=S256, state=$RETURNED_STATE"
 else
     echo "PKCE session response: $PKCE_GW_RESP"
-    echo "[FAIL] Assertion 8: Failed to initialize PKCE session via APISIX Gateway."
+    echo "[FAIL] Assertion 8: Failed to initialize PKCE parameters via APISIX Gateway."
     exit 1
 fi
 
-# 2. Step 2: Verify PKCE Security Guard: Tampered / Mismatched code_verifier must be rejected (RFC 7636 Section 4.6)
-echo " -> Step 2: Testing PKCE Security Guard (Anti-Tampering & Anti-CSRF)..."
+echo " -> Step 2: Acquiring genuine Keycloak Authorization Code (RFC 7636)..."
+AUTH_CODE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
+AUTH_CODE=$(echo "$AUTH_CODE_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+
+if [ -n "$AUTH_CODE" ]; then
+    echo "    [OK] Acquired genuine Keycloak Authorization Code: $AUTH_CODE"
+else
+    echo "Keycloak auth code acquisition response: $AUTH_CODE_RESP"
+    echo "[FAIL] Assertion 8: Failed to acquire genuine Keycloak authorization code."
+    exit 1
+fi
+
+# 2. Step 3: Verify PKCE Security Guard: Tampered / Mismatched code_verifier must be rejected by Keycloak (RFC 7636 Section 4.6)
+echo " -> Step 3: Testing PKCE Security Guard against Keycloak (Anti-Tampering & Anti-CSRF)..."
 TAMPERED_VERIFIER="tampered_code_verifier_1234567890123456789012345678901234567890"
 TAMPERED_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
     -H "Content-Type: application/json" \
     -d "{\"code\":\"$AUTH_CODE\",\"code_verifier\":\"$TAMPERED_VERIFIER\",\"state\":\"$PKCE_STATE\"}")
 
-if echo "$TAMPERED_RESP" | grep -q "INVALID_GRANT"; then
-    echo "    [OK] PKCE Anti-Tampering verified: Mismatched verifier was strictly rejected with HTTP 400 INVALID_GRANT."
+if echo "$TAMPERED_RESP" | grep -q -E "INVALID_GRANT|KEYCLOAK_TOKEN_EXCHANGE_FAILED"; then
+    echo "    [OK] PKCE Anti-Tampering verified: Keycloak upstream strictly rejected mismatched verifier."
 else
     echo "Tampered verifier response: $TAMPERED_RESP"
-    echo "[FAIL] Assertion 8: PKCE failed to reject tampered code_verifier."
+    echo "[FAIL] Assertion 8: Keycloak failed to reject tampered code_verifier."
     exit 1
 fi
 
-# 3. Step 3: Re-create a fresh PKCE Session for actual token exchange
-PKCE_STATE_VALID="csrf-valid-$(date +%s)"
+# 3. Step 4: Re-create a fresh PKCE Session & acquire a fresh Keycloak Authorization Code
+# (RFC 7636 Section 4.6: Authorization codes are single-use; the previous code was consumed or invalidated)
+PKCE_STATE_VALID="csrf-valid-$(date +%s)-$$"
 PKCE_FRESH_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE_VALID")
-AUTH_CODE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+CODE_CHALLENGE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"code_challenge":"\([^"]*\)".*/\1/p')
 CODE_VERIFIER_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"code_verifier":"\([^"]*\)".*/\1/p')
 AUTH_STATE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
 
-# 4. Step 4: Exchange Authorization Code + valid code_verifier for Live Keycloak Token via APISIX Gateway
-echo " -> Step 3: Exchanging valid Authorization Code + PKCE code_verifier for Live Keycloak Token..."
+AUTH_CODE_FRESH_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
+AUTH_CODE_VALID=$(echo "$AUTH_CODE_FRESH_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+
+if [ -z "$AUTH_CODE_VALID" ]; then
+    echo "Keycloak auth code acquisition response: $AUTH_CODE_FRESH_RESP"
+    echo "[FAIL] Assertion 8: Failed to acquire fresh Keycloak authorization code."
+    exit 1
+fi
+
+# 4. Step 5: Exchange genuine Authorization Code + valid code_verifier for Live Keycloak Token via APISIX Gateway
+echo " -> Step 4: Exchanging genuine Keycloak Authorization Code + valid code_verifier for Live Bearer Token..."
 TOKEN_EXCHANGE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
     -H "Content-Type: application/json" \
-    -d "{\"code\":\"$AUTH_CODE_VALID\",\"code_verifier\":\"$CODE_VERIFIER_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"username\":\"coord_htx01\"}")
+    -d "{\"code\":\"$AUTH_CODE_VALID\",\"code_verifier\":\"$CODE_VERIFIER_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
 
 ACCESS_TOKEN=$(echo "$TOKEN_EXCHANGE_RESP" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 if [ -z "$ACCESS_TOKEN" ]; then
