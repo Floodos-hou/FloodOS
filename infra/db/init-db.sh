@@ -20,6 +20,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
             ALTER ROLE "$APP_USER" WITH PASSWORD '$APP_PASS';
         END IF;
     END \$\$;
+
+    GRANT ALL ON SCHEMA public TO "$APP_USER";
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO "$APP_USER";
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO "$APP_USER";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$APP_USER";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$APP_USER";
 EOSQL
 
 echo ">>> [OpenAgriOS DB Init] Application role '$APP_USER' successfully synchronized with environment password."

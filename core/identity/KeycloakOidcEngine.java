@@ -1731,6 +1731,10 @@ public final class KeycloakOidcEngine {
             }
 
             String body = getResp.body();
+            if (getResp.statusCode() != 200) {
+                System.err.println("acquireLiveKeycloakAuthCode: GET authUrl returned HTTP " + getResp.statusCode() + ": " + body);
+                return Optional.empty();
+            }
             Matcher matcher = Pattern.compile("action=\"([^\"]+)\"").matcher(body);
             if (!matcher.find()) {
                 System.err.println("acquireLiveKeycloakAuthCode: Could not find login form action in Keycloak HTML response");
@@ -1838,7 +1842,7 @@ public final class KeycloakOidcEngine {
 
 
 
-                + "&scope=" + URLEncoder.encode("openid profile email organization_id", StandardCharsets.UTF_8)
+                + "&scope=" + URLEncoder.encode("openid profile email", StandardCharsets.UTF_8)
 
 
 
