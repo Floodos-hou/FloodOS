@@ -209,6 +209,22 @@ public final class AcceptanceTestRunner {
 
                         "In KEYCLOAK_PRODUCTION mode, HS256 mock token must be rejected with 401");
 
+                // In KEYCLOAK_PRODUCTION mode: authorize-url must not issue fake code, and token exchange must fail fast with 401 when Keycloak is offline
+                ApiRes prodPkceUrl = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
+                check(prodPkceUrl.status() == 200 && !prodPkceUrl.body().containsKey("code"),
+                        "In KEYCLOAK_PRODUCTION mode, authorize-url must never issue a fake code");
+                check("KEYCLOAK_PRODUCTION".equals(prodPkceUrl.body().get("auth_mode")),
+                        "In KEYCLOAK_PRODUCTION mode, auth_mode stamp must be KEYCLOAK_PRODUCTION");
+
+                ApiRes prodPkceFail = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                        "code", "fake_code_12345",
+                        "code_verifier", "dummy_code_verifier_1234567890123456789012345678901234567890",
+                        "client_id", "agriops-web",
+                        "redirect_uri", "http://localhost:8000/callback"
+                ));
+                check(prodPkceFail.status() == 401 && "KEYCLOAK_TOKEN_EXCHANGE_FAILED".equals(prodPkceFail.body().get("error")),
+                        "In KEYCLOAK_PRODUCTION mode, PKCE exchange must fail fast (HTTP 401) without mock fallback when Keycloak is offline");
+
             } finally {
 
                 KeycloakOidcEngine.resetAuthModeForTesting();
@@ -244,6 +260,15 @@ public final class AcceptanceTestRunner {
             check(pkceRes.status() == 200 && pkceRes.body().containsKey("code_challenge") && pkceRes.body().containsKey("code_verifier"), "PKCE session generation failed");
             String generatedCode = String.valueOf(pkceRes.body().get("code"));
             String generatedVerifier = String.valueOf(pkceRes.body().get("code_verifier"));
+
+            // Verify /api/v1/auth/pkce/authorize-code acquisition in standalone mock mode
+            ApiRes mockCodeAcquisition = apiReq("POST", "/api/v1/auth/pkce/authorize-code", null, Map.of(
+                    "username", "coord_htx01",
+                    "password", "123456",
+                    "code_challenge", String.valueOf(pkceRes.body().get("code_challenge")),
+                    "state", "test-state-pkce-1"
+            ));
+            check(mockCodeAcquisition.status() == 200 && mockCodeAcquisition.body().containsKey("code"), "PKCE authorize-code acquisition failed");
 
             // 2.7. Verify Confidential Client Introspection Credentials (RFC 7662)
             check("agriops-gateway".equals(KeycloakOidcEngine.DEFAULT_INTROSPECTION_CLIENT_ID), "Confidential client ID must be agriops-gateway");

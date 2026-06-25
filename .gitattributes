@@ -1,0 +1,4 @@
+# Ensure bash scripts and SQL files always have LF line endings
+*.sh text eol=lf
+*.sql text eol=lf
+*.json text eol=lf

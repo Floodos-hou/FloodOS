@@ -38,7 +38,10 @@ import java.net.URI;
 
 
 
+import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 
@@ -199,6 +202,23 @@ public final class KeycloakOidcEngine {
 
 
     }
+
+    public record KeycloakExchangeResult(
+            int statusCode,
+            boolean success,
+            Map<String, Object> data,
+            String error,
+            String errorDescription
+    ) {
+        public static KeycloakExchangeResult ok(Map<String, Object> data) {
+            return new KeycloakExchangeResult(200, true, data, null, null);
+        }
+
+        public static KeycloakExchangeResult fail(int code, String err, String desc) {
+            return new KeycloakExchangeResult(code, false, Map.of(), err, desc);
+        }
+    }
+
 
 
 
@@ -1536,7 +1556,7 @@ public final class KeycloakOidcEngine {
      * Exchanges an authorization code and PKCE code_verifier for an access token (RFC 7636 & RFC 9700).
      * Recommended standard for all interactive web and mobile client authentication.
      */
-    public static Optional<Map<String, Object>> exchangeAuthorizationCodeWithPkce(
+    public static KeycloakExchangeResult exchangeAuthorizationCodeWithPkceDetailed(
             String issuerUrl,
             String clientId,
             String clientSecret,
@@ -1547,8 +1567,9 @@ public final class KeycloakOidcEngine {
         try {
             String tokenEndpoint = issuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
             String targetClientId = (clientId != null && !clientId.isBlank()) ? clientId : DEFAULT_AUDIENCE;
+            String secret = (clientSecret != null && !clientSecret.isBlank()) ? clientSecret : DEFAULT_CLIENT_SECRET;
+
             String formBody = "grant_type=authorization_code"
-                    + "&client_id=" + URLEncoder.encode(targetClientId, StandardCharsets.UTF_8)
                     + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
                     + "&code_verifier=" + URLEncoder.encode(codeVerifier, StandardCharsets.UTF_8)
                     + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8);
@@ -1556,22 +1577,47 @@ public final class KeycloakOidcEngine {
             HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(tokenEndpoint))
                     .header("Content-Type", "application/x-www-form-urlencoded")
-                    .timeout(Duration.ofSeconds(4));
+                    .timeout(Duration.ofSeconds(6));
 
-            if (clientSecret != null && !clientSecret.isBlank()) {
-                String creds = targetClientId + ":" + clientSecret;
+            if (secret != null && !secret.isBlank()) {
+                String creds = targetClientId + ":" + secret;
                 reqBuilder.header("Authorization", "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8)));
-                // RFC 6749 Section 2.3.1: Do not send client_secret in body when HTTP Basic auth header is present
+            } else {
+                formBody += "&client_id=" + URLEncoder.encode(targetClientId, StandardCharsets.UTF_8);
             }
 
             HttpRequest req = reqBuilder.POST(HttpRequest.BodyPublishers.ofString(formBody)).build();
             HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+
+            Map<String, Object> bodyMap = Collections.emptyMap();
+            try {
+                if (resp.body() != null && !resp.body().isBlank()) {
+                    bodyMap = JsonCodec.parseObject(resp.body());
+                }
+            } catch (Exception ignored) {}
+
             if (resp.statusCode() == 200) {
-                return Optional.of(JsonCodec.parseObject(resp.body()));
+                return KeycloakExchangeResult.ok(bodyMap);
+            } else {
+                String err = String.valueOf(bodyMap.getOrDefault("error", "KEYCLOAK_TOKEN_EXCHANGE_FAILED")).toUpperCase(Locale.ROOT);
+                String desc = String.valueOf(bodyMap.getOrDefault("error_description", "Keycloak upstream returned HTTP " + resp.statusCode()));
+                return KeycloakExchangeResult.fail(resp.statusCode(), err, desc);
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            return KeycloakExchangeResult.fail(401, "KEYCLOAK_TOKEN_EXCHANGE_FAILED", ex.getMessage());
         }
-        return Optional.empty();
+    }
+
+    public static Optional<Map<String, Object>> exchangeAuthorizationCodeWithPkce(
+            String issuerUrl,
+            String clientId,
+            String clientSecret,
+            String code,
+            String codeVerifier,
+            String redirectUri
+    ) {
+        KeycloakExchangeResult res = exchangeAuthorizationCodeWithPkceDetailed(issuerUrl, clientId, clientSecret, code, codeVerifier, redirectUri);
+        return res.success() ? Optional.of(res.data()) : Optional.empty();
     }
 
     /**
@@ -1634,6 +1680,120 @@ public final class KeycloakOidcEngine {
 
 
 
+
+    /**
+     * Programmatically completes Keycloak OIDC Authorization Code Flow in headless / testing environments (RFC 7636).
+     * Simulates user-agent interaction:
+     * 1. Initiates authorization request with code_challenge and state
+     * 2. Extracts Keycloak login form action URL and cookies
+     * 3. Posts credentials to Keycloak login endpoint
+     * 4. Extracts genuine authorization code from 302 Found Location header
+     */
+    public static Optional<String> acquireLiveKeycloakAuthCode(
+            String issuerUrl,
+            String clientId,
+            String username,
+            String password,
+            String redirectUri,
+            String codeChallenge,
+            String state
+    ) {
+        try {
+            String targetClientId = (clientId != null && !clientId.isBlank()) ? clientId : DEFAULT_AUDIENCE;
+            String targetRedirect = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : "http://localhost:8000/callback";
+            String s = (state != null && !state.isBlank()) ? state : "state-" + UUID.randomUUID().toString().substring(0, 8);
+
+            String authUrl = buildPkceAuthorizationUrl(issuerUrl, targetClientId, targetRedirect, codeChallenge, s);
+
+            HttpClient directClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(6))
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .build();
+
+            // Step 1: GET authorization endpoint to retrieve login form and session cookies
+            HttpRequest getReq = HttpRequest.newBuilder()
+                    .uri(URI.create(authUrl))
+                    .timeout(Duration.ofSeconds(6))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> getResp = directClient.send(getReq, HttpResponse.BodyHandlers.ofString());
+
+            // Collect cookies from Set-Cookie headers
+            List<String> cookies = getResp.headers().allValues("Set-Cookie");
+            StringBuilder cookieHeader = new StringBuilder();
+            for (String c : cookies) {
+                String pair = c.split(";")[0].trim();
+                if (!pair.isBlank()) {
+                    if (cookieHeader.length() > 0) cookieHeader.append("; ");
+                    cookieHeader.append(pair);
+                }
+            }
+
+            String body = getResp.body();
+            if (getResp.statusCode() != 200) {
+                System.err.println("acquireLiveKeycloakAuthCode: GET authUrl returned HTTP " + getResp.statusCode() + ": " + body);
+                return Optional.empty();
+            }
+            Matcher matcher = Pattern.compile("action=\"([^\"]+)\"").matcher(body);
+            if (!matcher.find()) {
+                System.err.println("acquireLiveKeycloakAuthCode: Could not find login form action in Keycloak HTML response");
+                return Optional.empty();
+            }
+            String rawActionUrl = matcher.group(1).replace("&amp;", "&");
+
+            // Normalize actionUrl: if relative, make absolute using issuerUrl origin;
+            // if hostname in actionUrl differs from issuerUrl (e.g. keycloak vs localhost inside container), align host
+            URI issuerUri = URI.create(issuerUrl);
+            String actionUrl;
+            if (rawActionUrl.startsWith("/")) {
+                actionUrl = issuerUri.getScheme() + "://" + issuerUri.getAuthority() + rawActionUrl;
+            } else {
+                URI actionUri = URI.create(rawActionUrl);
+                if (!issuerUri.getHost().equalsIgnoreCase(actionUri.getHost()) || issuerUri.getPort() != actionUri.getPort()) {
+                    actionUrl = issuerUri.getScheme() + "://" + issuerUri.getAuthority() + actionUri.getRawPath()
+                            + (actionUri.getRawQuery() != null ? "?" + actionUri.getRawQuery() : "");
+                } else {
+                    actionUrl = rawActionUrl;
+                }
+            }
+
+            // Step 2: POST credentials to login action URL
+            String formBody = "username=" + URLEncoder.encode(username, StandardCharsets.UTF_8)
+                    + "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8)
+                    + "&credentialId=";
+
+            HttpRequest.Builder postReqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(actionUrl))
+                    .timeout(Duration.ofSeconds(6))
+                    .header("Content-Type", "application/x-www-form-urlencoded");
+
+            if (cookieHeader.length() > 0) {
+                postReqBuilder.header("Cookie", cookieHeader.toString());
+            }
+
+            HttpRequest postReq = postReqBuilder.POST(HttpRequest.BodyPublishers.ofString(formBody)).build();
+            HttpResponse<String> postResp = directClient.send(postReq, HttpResponse.BodyHandlers.ofString());
+
+            // Step 3: Check 302 Found redirect Location header
+            if (postResp.statusCode() == 302 || postResp.statusCode() == 303) {
+                String location = postResp.headers().firstValue("Location").orElse("");
+                if (location.contains("code=")) {
+                    Matcher codeMatcher = Pattern.compile("[?&]code=([^&]+)").matcher(location);
+                    if (codeMatcher.find()) {
+                        String code = URLDecoder.decode(codeMatcher.group(1), StandardCharsets.UTF_8);
+                        return Optional.of(code);
+                    }
+                }
+            } else {
+                System.err.println("acquireLiveKeycloakAuthCode: Login post returned HTTP " + postResp.statusCode());
+            }
+        } catch (Exception ex) {
+            System.err.println("acquireLiveKeycloakAuthCode failed: " + ex.getMessage());
+        }
+        return Optional.empty();
+    }
+
     public static String buildPkceAuthorizationUrl(
 
 
@@ -1682,7 +1842,7 @@ public final class KeycloakOidcEngine {
 
 
 
-                + "&scope=" + URLEncoder.encode("openid profile email organization_id", StandardCharsets.UTF_8)
+                + "&scope=" + URLEncoder.encode("openid profile email", StandardCharsets.UTF_8)
 
 
 
@@ -1831,84 +1991,36 @@ public final class KeycloakOidcEngine {
 
 
     public static Map<String, Object> generatePkceSession(String redirectUri, String state) {
-
-
-
         String verifier = generateCodeVerifier();
-
-
-
         String challenge = generateCodeChallenge(verifier);
-
-
-
         String s = (state != null && !state.isBlank()) ? state : "state-" + UUID.randomUUID().toString().substring(0, 8);
-
-
-
         String rUri = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : "http://localhost:8000/callback";
 
-
-
         String authUrl = buildPkceAuthorizationUrl(DEFAULT_ISSUER, DEFAULT_AUDIENCE, rUri, challenge, s);
-        String authCode = "code-" + UUID.randomUUID().toString().replace("-", "");
-        pendingPkceSessions.put(authCode, new PkceSession(authCode, challenge, "S256", DEFAULT_AUDIENCE, rUri, s, Instant.now()));
-
-
-
-
-
-
 
         Map<String, Object> res = new LinkedHashMap<>();
-
-
-
         res.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
-
-
-
         res.put("standard", "RFC 7636 / OpenID Connect Core 1.0");
-
-
-
         res.put("client_id", DEFAULT_AUDIENCE);
-
-
-
         res.put("issuer", DEFAULT_ISSUER);
-
-
-
         res.put("authorization_url", authUrl);
-
-
-
         res.put("code_verifier", verifier);
-
-
-
         res.put("code_challenge", challenge);
-
-
-
         res.put("code_challenge_method", "S256");
-
-
-
         res.put("state", s);
-
-
-
         res.put("redirect_uri", rUri);
-        res.put("code", authCode);
 
-
+        AuthMode mode = getActiveAuthMode();
+        if (mode == AuthMode.DEV_MOCK_STANDALONE) {
+            String authCode = "code-" + UUID.randomUUID().toString().replace("-", "");
+            pendingPkceSessions.put(authCode, new PkceSession(authCode, challenge, "S256", DEFAULT_AUDIENCE, rUri, s, Instant.now()));
+            res.put("code", authCode);
+            res.put("auth_mode", "DEV_MOCK_STANDALONE");
+        } else {
+            res.put("auth_mode", "KEYCLOAK_PRODUCTION");
+        }
 
         return res;
-
-
-
     }
 
 

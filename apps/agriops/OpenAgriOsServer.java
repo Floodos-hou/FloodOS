@@ -426,6 +426,7 @@ public final class OpenAgriOsServer {
                 endpoints.put("demo_accounts", "GET /api/v1/auth/accounts");
 
                 endpoints.put("pkce_auth_url", "GET /api/v1/auth/pkce/authorize-url");
+                endpoints.put("pkce_auth_code", "POST /api/v1/auth/pkce/authorize-code");
                 endpoints.put("pkce_token_exchange", "POST /api/v1/auth/pkce/token");
 
 
@@ -890,6 +891,12 @@ public final class OpenAgriOsServer {
 
 
 
+            }
+
+            if ("/api/v1/auth/pkce/authorize-code".equals(path)) {
+                HttpResult res = service.acquirePkceAuthCode(body);
+                sendJson(ex, res.status(), res.body(), null);
+                return;
             }
 
             if ("/api/v1/auth/pkce/token".equals(path)) {
