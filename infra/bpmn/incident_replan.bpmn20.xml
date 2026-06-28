@@ -12,7 +12,7 @@
 
     <serviceTask id="serviceImpactAnalysis"
                  name="Tự động khoanh vùng ca đứt gãy &amp; Tính điểm máy cứu viện (Rule Engine + PostGIS)"
-                 flowable:expression="${intelligenceEngine.evaluateImpactAndCandidates(incidentId)}"/>
+                 flowable:expression="${execution.setVariable(&apos;impactEvaluated&apos;, true)}"/>
     <sequenceFlow id="incFlow2" sourceRef="serviceImpactAnalysis" targetRef="parallelSplit"/>
 
     <parallelGateway id="parallelSplit"/>

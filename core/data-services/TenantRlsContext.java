@@ -4,6 +4,9 @@
 package org.openagrios.core.dataservices;
 
 import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 /**
  * Multi-Tenant Row-Level Security (RLS) & Field-Level Visibility Policy Resolver.
@@ -13,6 +16,32 @@ import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
 public final class TenantRlsContext {
 
     private TenantRlsContext() {}
+
+    /**
+     * Parameter-safe RLS session applicator using parameterized PreparedStatement and set_config().
+     * Eliminates SQL injection risks when setting session-local tenant context.
+     */
+    public static void applyPostgresRlsSession(Connection conn, String orgId, String role, String userId) throws SQLException {
+        if (conn == null) return;
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT set_config('app.current_org_id', ?, true), " +
+                "       set_config('app.current_user_role', ?, true), " +
+                "       set_config('app.current_user_id', ?, true)"
+        )) {
+            ps.setString(1, orgId != null ? orgId : "");
+            ps.setString(2, role != null ? role : "");
+            ps.setString(3, userId != null ? userId : "");
+            ps.execute();
+        }
+    }
+
+    public static void applyPostgresRlsSession(Connection conn, AuthContext auth) throws SQLException {
+        if (auth == null) {
+            applyPostgresRlsSession(conn, "", "", "");
+        } else {
+            applyPostgresRlsSession(conn, auth.organizationId(), auth.role(), auth.userId());
+        }
+    }
 
     public static String buildPostgresRlsPolicySql(AuthContext auth) {
         if (auth == null) {

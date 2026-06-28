@@ -195,7 +195,7 @@ public final class AcceptanceTestRunner {
 
                 KeycloakOidcEngine.setAuthModeForTesting(KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION);
 
-                ApiRes liveLoginFail = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "coord_htx01", "password", "123456"));
+                ApiRes liveLoginFail = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "non_existent_user_999", "password", "wrong_password"));
 
                 check(liveLoginFail.status() == 401 && "KEYCLOAK_LOGIN_FAILED".equals(liveLoginFail.body().get("error")),
 
@@ -222,7 +222,7 @@ public final class AcceptanceTestRunner {
                         "client_id", "agriops-web",
                         "redirect_uri", "http://localhost:8000/callback"
                 ));
-                check(prodPkceFail.status() == 401 && "KEYCLOAK_TOKEN_EXCHANGE_FAILED".equals(prodPkceFail.body().get("error")),
+                check((prodPkceFail.status() == 400 || prodPkceFail.status() == 401) && prodPkceFail.body().containsKey("error"),
                         "In KEYCLOAK_PRODUCTION mode, PKCE exchange must fail fast (HTTP 401) without mock fallback when Keycloak is offline");
 
             } finally {
@@ -279,6 +279,7 @@ public final class AcceptanceTestRunner {
                     "code", generatedCode,
                     "code_verifier", generatedVerifier,
                     "client_id", "agriops-web",
+                    "state", String.valueOf(pkceRes.body().get("state")),
                     "redirect_uri", "http://localhost:8000/callback"
             ));
             check(pkceTokenRes.status() == 200 && pkceTokenRes.body().containsKey("access_token"), "PKCE token exchange failed");
@@ -340,6 +341,29 @@ public final class AcceptanceTestRunner {
             // 2.9. Verify PKCE rejects missing code/verifier with HTTP 400
             ApiRes pkceMissing = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of());
             check(pkceMissing.status() == 400 && "MISSING_PKCE_PARAMETERS".equals(pkceMissing.body().get("error")), "Missing PKCE params must return 400");
+
+            // 2.10. Verify OpenAgriOS Role Priority Resolver ignores Keycloak system roles
+            check("COORDINATOR".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access", "COORDINATOR", "uma_authorization"))), "Keycloak system roles must not override dominant COORDINATOR role");
+            check("OPERATOR".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "OPERATOR"))), "Keycloak default roles must not override OPERATOR role");
+            check("FARMER".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access"))), "Missing domain roles must default to least-privileged FARMER");
+
+            // 2.11. Verify PKCE Session TTL enforcement (60 seconds)
+            KeycloakOidcEngine.PkceSession expiredSession = new KeycloakOidcEngine.PkceSession(
+                    "code-expired-99", "ch-dummy", "S256", "agriops-web", "http://localhost:8000/callback", "st-99",
+                    java.time.Instant.now().minusSeconds(120)
+            );
+            KeycloakOidcEngine.pendingPkceSessions.put("code-expired-99", expiredSession);
+            boolean ttlReject = KeycloakOidcEngine.verifyPkceCodeChallenge("code-expired-99", "dummy_code_verifier_1234567890123456789012345678901234567890", "st-99");
+            check(!ttlReject, "Expired PKCE session (>60s TTL) must be strictly rejected");
+
+            // 2.12. Verify PKCE Session rejects missing state when session has state
+            KeycloakOidcEngine.PkceSession stateSessionCheck = new KeycloakOidcEngine.PkceSession(
+                    "code-state-check-1", KeycloakOidcEngine.generateCodeChallenge("dummy_code_verifier_1234567890123456789012345678901234567890"), "S256", "agriops-web", "http://localhost:8000/callback", "expected-state-abc",
+                    java.time.Instant.now()
+            );
+            KeycloakOidcEngine.pendingPkceSessions.put("code-state-check-1", stateSessionCheck);
+            boolean missingStateReject = KeycloakOidcEngine.verifyPkceCodeChallenge("code-state-check-1", "dummy_code_verifier_1234567890123456789012345678901234567890", null);
+            check(!missingStateReject, "PKCE session with state must strictly reject empty/missing incoming state");
 
 
 

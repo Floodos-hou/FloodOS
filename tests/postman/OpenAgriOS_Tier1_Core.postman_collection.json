@@ -177,10 +177,10 @@
               "script": {
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('pkce_code_challenge', json.code_challenge);",
-                  "pm.collectionVariables.set('pkce_code_verifier', json.code_verifier);",
-                  "pm.collectionVariables.set('pkce_state', json.state);",
-                  "if (json.code) { pm.collectionVariables.set('pkce_code', json.code); }",
+                  "pm.environment.set('pkce_code_challenge', json.code_challenge);",
+                  "pm.environment.set('pkce_code_verifier', json.code_verifier);",
+                  "pm.environment.set('pkce_state', json.state);",
+                  "if (json.code) { pm.environment.set('pkce_code', json.code); }",
                   "pm.test('Khởi tạo tham số PKCE thành công', () => {",
                   "    pm.expect(pm.response.code).to.eql(200);",
                   "    pm.expect(json.code_challenge).to.be.a('string');",
@@ -224,7 +224,7 @@
               "script": {
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('pkce_code', json.code);",
+                  "pm.environment.set('pkce_code', json.code);",
                   "pm.test('Lấy mã Keycloak Authorization Code thành công', () => {",
                   "    pm.expect(pm.response.code).to.eql(200);",
                   "    pm.expect(json.code).to.be.a('string');",
@@ -270,7 +270,7 @@
               "script": {
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('coord_token', json.access_token);",
+                  "pm.environment.set('coord_token', json.access_token);",
                   "pm.test('Đổi mã PKCE lấy Live JWT Token thành công', () => {",
                   "    pm.expect(pm.response.code).to.eql(200);",
                   "    pm.expect(json.access_token).to.be.a('string');",
@@ -362,7 +362,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('farmer_token', json.access_token);",
+                  "pm.environment.set('farmer_token', json.access_token);",
                   "pm.test('Issued FARMER JWT for HTX_CANTHO_01', () => {",
                   "    pm.expect(json.user.role).to.eql('FARMER');",
                   "    pm.expect(json.user.organization_id).to.eql('HTX_CANTHO_01');",
@@ -406,7 +406,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('coord_token', json.access_token);",
+                  "pm.environment.set('coord_token', json.access_token);",
                   "pm.test('Issued COORDINATOR JWT for HTX_CANTHO_01', () => {",
                   "    pm.expect(json.user.role).to.eql('COORDINATOR');",
                   "});"
@@ -449,7 +449,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('op_token', json.access_token);",
+                  "pm.environment.set('op_token', json.access_token);",
                   "pm.test('Issued OPERATOR JWT', () => pm.expect(json.user.role).to.eql('OPERATOR'));"
                 ]
               }
@@ -490,7 +490,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('repair_token', json.access_token);"
+                  "pm.environment.set('repair_token', json.access_token);"
                 ]
               }
             }
@@ -530,7 +530,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "pm.collectionVariables.set('st_coord_token', json.access_token);",
+                  "pm.environment.set('st_coord_token', json.access_token);",
                   "pm.test('Issued JWT for Tenant HTX_SOCTRANG_02', () => {",
                   "    pm.expect(json.user.organization_id).to.eql('HTX_SOCTRANG_02');",
                   "});"
@@ -792,7 +792,7 @@
                   "    pm.response.to.have.status(201);",
                   "    pm.expect(json.impacted_assignment_ids).to.include('ASG-102');",
                   "    pm.expect(json.candidate_options[0].machine_id).to.eql('M02');",
-                  "    pm.collectionVariables.set('top_option_id', json.candidate_options[0].option_id);",
+                  "    pm.environment.set('top_option_id', json.candidate_options[0].option_id);",
                   "});"
                 ]
               }
