@@ -8,11 +8,15 @@
 # Key Features:
 #   1. Mandatory Non-Default Secrets: Enforces ${VAR:?error} syntax — container
 #      startup will fail fast if any production secret is missing or empty.
-#   2. Network Boundary Hardening: Internal database, S3 storage, and BPMN
-#      engine communicate over the internal docker network.
-#   3. Strict Production Mode: OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION and
+#   2. Network Boundary Hardening: Internal database, S3 storage, BPMN engine,
+#      and Core API have their host port publishing reset (ports: !reset []),
+#      enforcing that ALL traffic from external clients MUST pass through
+#      the APISIX Zero-Trust Gateway (plus Keycloak SSO for browser login).
+#   3. Introspection Secret Synchronization: APISIX, Keycloak, and Core API
+#      all receive KEYCLOAK_INTROSPECTION_CLIENT_SECRET dynamically.
+#   4. Strict Production Mode: OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION and
 #      OPENAGRIOS_STORAGE_MODE=POSTGRESQL_PRODUCTION (no dev mock fallbacks).
-#   4. High Availability: restart: always policy configured across all services.
+#   5. High Availability: restart: always policy configured across all services.
 #
 # Usage:
 #   cp .env.production.example .env
@@ -31,6 +35,7 @@ services:
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
     entrypoint: ["/bin/sh", "/entrypoint-sync.sh", "postgres"]
+    ports: !reset []
 
   keycloak:
     restart: always
@@ -39,19 +44,25 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:?CRITICAL KEYCLOAK_ADMIN_PASSWORD must be explicitly provided in production}"
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:?CRITICAL KEYCLOAK_INTROSPECTION_CLIENT_SECRET must be explicitly provided in production}"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
 
   object-storage:
     restart: always
+    ports: !reset []
 
   flowable:
     restart: always
     environment:
       SPRING_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:?CRITICAL Database password required for Flowable in production}"
+    ports: !reset []
 
   apisix:
     restart: always
     environment:
       APISIX_STAND_ALONE: "true"
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:?CRITICAL KEYCLOAK_INTROSPECTION_CLIENT_SECRET must be explicitly provided in production}"
     ports:
       - "${GATEWAY_HTTP_PORT:-9080}:9080"
       - "${GATEWAY_HTTPS_PORT:-9443}:9443"
@@ -66,3 +77,4 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
       KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:?CRITICAL KEYCLOAK_INTROSPECTION_CLIENT_SECRET must be explicitly provided in production}"
+    ports: !reset []

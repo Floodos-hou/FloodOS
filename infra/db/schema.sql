@@ -241,8 +241,14 @@ ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
 -- Tenant Isolation Policies
 CREATE POLICY tenant_isolation_fields ON fields
     USING (
-        organization_id = current_setting('app.current_org_id', true)
-        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) <> 'FARMER'
+                OR owner_user_id = current_setting('app.current_user_id', true)
+            )
+        )
     );
 
 CREATE POLICY tenant_isolation_machines ON machines
