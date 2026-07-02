@@ -174,4 +174,4 @@ Khi áp dụng `compose.prod.yaml`, các cổng nội bộ như:
 - Cổng Flowable BPMN `8081`
 - Cổng OpenAgriOS Core API `8000`
 
-sẽ **không được xuất bản ra ngoài mạng Internet (no host port binding)** mà chỉ giao tiếp qua mạng nội bộ Docker. Người dùng và ứng dụng bên ngoài chỉ có thể truy cập thông qua Gateway APISIX (cổng `9080` / `9443`).
+sẽ **không được xuất bản ra ngoài mạng Internet (no host port binding)** mà chỉ giao tiếp qua mạng nội bộ Docker. API nghiệp vụ chỉ được công bố qua Gateway APISIX (cổng `9080` / `9443`). Keycloak (cổng `8080`) vẫn được công bố riêng để client OIDC thực hiện đăng nhập; khi triển khai thực tế, nên đặt cổng này sau HTTPS ingress/reverse proxy và giới hạn quyền truy cập quản trị.

@@ -194,7 +194,7 @@ openagrios/
 
 - **`[D] Data-governed`**: Bản sao số thực thể theo chuẩn ETSI NGSI-LD v1.6 và sổ cái kiểm toán bất biến chuỗi băm SHA-256 có thể truy vết toàn trình (Data Lineage).
 
-- **`[I] Intelligence-assisted`**: Thuật toán tính toán khoảng cách PostGIS và đối sánh đa tiêu chí giúp tìm kiếm máy cứu hộ thay thế tối ưu trong vòng dưới 100ms.
+- **`[I] Intelligence-assisted`**: `SpatialMatchingEngine` tính khoảng cách bằng công thức Haversine trong Java và xếp hạng máy cứu hộ theo khoảng cách, công suất và đánh giá người vận hành. GiST trong PostgreSQL hiện dùng cho ràng buộc chống trùng lịch; dự án chưa dùng PostGIS cho tìm kiếm không gian và chưa cam kết thời gian xử lý dưới 100ms.
 
 
 
@@ -266,7 +266,7 @@ openagrios/
 
 | **Lưu trữ Đối tượng Phi cấu trúc** | SeaweedFS S3 Storage | `3.64` | **Apache-2.0** | Tương thích S3 API, phân tán cao, thay thế hoàn toàn MinIO (vốn dùng giấy phép AGPL). |
 
-| **Cơ sở dữ liệu Quan hệ & Không gian** | PostgreSQL + GiST + RLS | `16.2-alpine` | **PostgreSQL License** | Hỗ trợ ràng buộc loại trừ không gian thời gian và cách ly dữ liệu cấp hàng. |
+| **Cơ sở dữ liệu Quan hệ & Ràng buộc Lịch** | PostgreSQL + GiST + RLS | `16.2-alpine` | **PostgreSQL License** | Hỗ trợ ràng buộc loại trừ thời gian cho lịch máy/người vận hành và cách ly dữ liệu cấp hàng. Tọa độ hiện được xử lý bằng Haversine trong Java; chưa dùng PostGIS. |
 
 | **Chuẩn hóa Bản sao số** | ETSI GS CIM 009 / NGSI-LD | `v1.6` | **Apache-2.0** | Chuẩn châu Âu cho dữ liệu bản sao số nông nghiệp thông minh. |
 
