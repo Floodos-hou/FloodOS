@@ -90,7 +90,7 @@
       "name": "Apache APISIX Zero-Trust Gateway Confidential Client",
       "enabled": true,
       "publicClient": false,
-      "secret": "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET}",
+      "secret": "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}",
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,

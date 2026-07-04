@@ -20,7 +20,7 @@ services:
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-openagrios_app_dev_only}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
       - ./infra/db/docker-entrypoint-sync.sh:/entrypoint-sync.sh:ro
       - ./infra/db/init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
@@ -61,8 +61,8 @@ services:
     container_name: openagrios-s3-storage
     command: "server -s3 -s3.port=9000 -dir=/data"
     ports:
-      - "9000:9000"
-      - "8888:8888"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8888:8888"
     volumes:
       - s3data:/data
     healthcheck:
@@ -82,7 +82,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-openagrios}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,7 +125,7 @@ services:
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy

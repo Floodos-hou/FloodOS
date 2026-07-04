@@ -17,7 +17,7 @@ CREATE EXTENSION IF NOT EXISTS "btree_gist";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 1. ORGANIZATION (Đơn vị thuê ước / Multi-tenancy)
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
     organization_id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     org_type VARCHAR(50) NOT NULL CHECK (org_type IN ('COOPERATIVE', 'SERVICE_PROVIDER', 'REPAIR_UNIT')),
@@ -27,7 +27,7 @@ CREATE TABLE organizations (
 );
 
 -- 2. USERS & ROLES (Ánh xạ định danh từ Keycloak SSO - Apache-2.0)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     user_id VARCHAR(64) PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE users (
 );
 
 -- 3. FIELDS / SEASONS (Vùng canh tác & Mùa vụ — Kho Ấm GeoJSON JSONB)
-CREATE TABLE fields (
+CREATE TABLE IF NOT EXISTS fields (
     field_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     owner_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
@@ -59,7 +59,7 @@ CREATE TABLE fields (
 );
 
 -- 4. MACHINES (Máy cơ giới — Bản sao số IT/OT Digital Twin)
-CREATE TABLE machines (
+CREATE TABLE IF NOT EXISTS machines (
     machine_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     owner_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
@@ -78,7 +78,7 @@ CREATE TABLE machines (
 );
 
 -- 5. OPERATORS (Người vận hành máy)
-CREATE TABLE operators (
+CREATE TABLE IF NOT EXISTS operators (
     operator_id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) UNIQUE NOT NULL REFERENCES users(user_id),
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
@@ -90,7 +90,7 @@ CREATE TABLE operators (
 );
 
 -- 6. SERVICE REQUESTS (Yêu cầu dịch vụ thu hoạch từ Nông hộ)
-CREATE TABLE service_requests (
+CREATE TABLE IF NOT EXISTS service_requests (
     request_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     field_id VARCHAR(64) NOT NULL REFERENCES fields(field_id),
@@ -110,7 +110,7 @@ CREATE TABLE service_requests (
 );
 
 -- 7. ASSIGNMENTS (Lịch phân công Máy + Người vận hành — Ràng buộc GiST chống trùng lịch)
-CREATE TABLE assignments (
+CREATE TABLE IF NOT EXISTS assignments (
     assignment_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     request_id VARCHAR(64) NOT NULL REFERENCES service_requests(request_id),
@@ -142,7 +142,7 @@ CREATE TABLE assignments (
 );
 
 -- 8. INCIDENTS & REPAIR TICKETS (Sự cố máy hỏng & Phiếu sửa chữa)
-CREATE TABLE incidents (
+CREATE TABLE IF NOT EXISTS incidents (
     incident_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     machine_id VARCHAR(64) NOT NULL REFERENCES machines(machine_id),
@@ -163,7 +163,7 @@ CREATE TABLE incidents (
 );
 
 -- 9. WORK RESULTS & ACCEPTANCE (Biên bản hoàn thành & Nghiệm thu dịch vụ)
-CREATE TABLE work_acceptances (
+CREATE TABLE IF NOT EXISTS work_acceptances (
     acceptance_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
     assignment_id VARCHAR(64) UNIQUE NOT NULL REFERENCES assignments(assignment_id),
@@ -181,7 +181,7 @@ CREATE TABLE work_acceptances (
 );
 
 -- 10. IMMUTABLE AUDIT LEDGER (Kho Lạnh Bất Biến — SHA-256 Hash Chain & Data Lineage)
-CREATE TABLE audit_records (
+CREATE TABLE IF NOT EXISTS audit_records (
     seq_no BIGSERIAL PRIMARY KEY,
     event_id VARCHAR(64) UNIQUE NOT NULL,
     organization_id VARCHAR(64) NOT NULL,
@@ -206,6 +206,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_audit_immutable ON audit_records;
 CREATE TRIGGER trg_audit_immutable
 BEFORE UPDATE OR DELETE ON audit_records
 FOR EACH ROW EXECUTE FUNCTION prevent_audit_mutation();
@@ -238,7 +239,8 @@ ALTER TABLE work_acceptances FORCE ROW LEVEL SECURITY;
 ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
 
--- Tenant Isolation Policies
+-- Tenant Isolation Policies (Idempotent: DROP before CREATE)
+DROP POLICY IF EXISTS tenant_isolation_fields ON fields;
 CREATE POLICY tenant_isolation_fields ON fields
     USING (
         current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
@@ -251,18 +253,21 @@ CREATE POLICY tenant_isolation_fields ON fields
         )
     );
 
+DROP POLICY IF EXISTS tenant_isolation_machines ON machines;
 CREATE POLICY tenant_isolation_machines ON machines
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
+DROP POLICY IF EXISTS tenant_isolation_operators ON operators;
 CREATE POLICY tenant_isolation_operators ON operators
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
+DROP POLICY IF EXISTS tenant_isolation_requests ON service_requests;
 CREATE POLICY tenant_isolation_requests ON service_requests
     USING (
         current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
@@ -275,24 +280,28 @@ CREATE POLICY tenant_isolation_requests ON service_requests
         )
     );
 
+DROP POLICY IF EXISTS tenant_isolation_assignments ON assignments;
 CREATE POLICY tenant_isolation_assignments ON assignments
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
+DROP POLICY IF EXISTS tenant_isolation_incidents ON incidents;
 CREATE POLICY tenant_isolation_incidents ON incidents
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
+DROP POLICY IF EXISTS tenant_isolation_acceptances ON work_acceptances;
 CREATE POLICY tenant_isolation_acceptances ON work_acceptances
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
+DROP POLICY IF EXISTS tenant_isolation_audit ON audit_records;
 CREATE POLICY tenant_isolation_audit ON audit_records
     USING (
         organization_id = current_setting('app.current_org_id', true)
