@@ -58,21 +58,23 @@ public final class AgriModels {
 
         public Map<String, Object> toMapWithVisibility(String visibility) {
             Map<String, Object> m = new LinkedHashMap<>();
+            boolean isFog = "FOG_OF_WAR".equals(visibility);
             m.put("field_id", fieldId);
             m.put("organization_id", organizationId);
-            m.put("owner_user_id", ownerUserId);
-            m.put("owner_name", "FOG_OF_WAR".equals(visibility) ? "🔒 [Ẩn bởi RLS/Fog of War - Hộ khác]" : ownerName);
-            m.put("name", name);
-            m.put("hamlet", hamlet);
-            m.put("crop", crop);
+            // Server-side RLS Data-leak protection: never leak polygon or owner id of other farmers
+            m.put("owner_user_id", isFog ? "REDACTED_BY_RLS" : ownerUserId);
+            m.put("owner_name", isFog ? "🔒 [Ẩn bởi RLS/Fog of War - Hộ khác]" : ownerName);
+            m.put("name", isFog ? "Thửa ruộng lân cận" : name);
+            m.put("hamlet", isFog ? "" : hamlet);
+            m.put("crop", isFog ? "Lúa" : crop);
             m.put("area_ha", areaHa);
             m.put("readiness_status", readinessStatus);
             m.put("harvest_progress_pct", harvestProgressPct);
-            m.put("window_start", windowStart);
-            m.put("window_end", windowEnd);
-            m.put("center_lat", centerLat);
-            m.put("center_lng", centerLng);
-            m.put("polygon", polygon);
+            m.put("window_start", isFog ? "" : windowStart);
+            m.put("window_end", isFog ? "" : windowEnd);
+            m.put("center_lat", isFog ? 0.0 : centerLat);
+            m.put("center_lng", isFog ? 0.0 : centerLng);
+            m.put("polygon", isFog ? Collections.emptyList() : polygon);
             m.put("visibility", visibility);
             return m;
         }
@@ -119,20 +121,21 @@ public final class AgriModels {
 
         public Map<String, Object> toMapWithVisibility(String visibility) {
             Map<String, Object> m = new LinkedHashMap<>();
+            boolean isFog = "FOG_OF_WAR".equals(visibility);
             m.put("machine_id", machineId);
             m.put("organization_id", organizationId);
-            m.put("owner_user_id", ownerUserId);
-            m.put("name", name);
+            m.put("owner_user_id", isFog ? "REDACTED_BY_RLS" : ownerUserId);
+            m.put("name", isFog ? "Máy cơ giới HTX" : name);
             m.put("machine_type", machineType);
-            m.put("model", model);
+            m.put("model", isFog ? "" : model);
             m.put("capacity_ha_per_hr", capacityHaPerHr);
             m.put("status", status);
-            m.put("fuel_pct", fuelPct);
-            m.put("health_pct", healthPct);
-            m.put("current_lat", currentLat);
-            m.put("current_lng", currentLng);
-            m.put("assigned_operator_id", assignedOperatorId);
-            m.put("telemetry_updated_at", telemetryUpdatedAt);
+            m.put("fuel_pct", isFog ? 0.0 : fuelPct);
+            m.put("health_pct", isFog ? 0.0 : healthPct);
+            m.put("current_lat", isFog ? 0.0 : currentLat);
+            m.put("current_lng", isFog ? 0.0 : currentLng);
+            m.put("assigned_operator_id", isFog ? "REDACTED_BY_RLS" : assignedOperatorId);
+            m.put("telemetry_updated_at", isFog ? "" : telemetryUpdatedAt);
             m.put("visibility", visibility);
             return m;
         }

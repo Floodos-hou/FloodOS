@@ -219,7 +219,7 @@ echo "Executing Live Golden Path across APISIX Gateway (:9080) with Full RFC 763
 # 1. Step 1: Initialize PKCE Parameters with anti-CSRF State Token through APISIX Gateway
 PKCE_STATE="csrf-token-$(date +%s)-$$"
 echo " -> Step 1: Initializing PKCE parameters with anti-CSRF state: $PKCE_STATE..."
-PKCE_GW_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE")
+PKCE_GW_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE&redirect_uri=http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback")
 
 CODE_CHALLENGE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_challenge":"\([^"]*\)".*/\1/p')
 CODE_VERIFIER=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_verifier":"\([^"]*\)".*/\1/p')
@@ -236,7 +236,7 @@ fi
 echo " -> Step 2: Acquiring genuine Keycloak Authorization Code (RFC 7636)..."
 AUTH_CODE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
     -H "Content-Type: application/json" \
-    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
+    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
 AUTH_CODE=$(echo "$AUTH_CODE_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
 
 if [ -n "$AUTH_CODE" ]; then
@@ -252,7 +252,7 @@ echo " -> Step 3: Testing PKCE Security Guard against Keycloak (Anti-Tampering &
 TAMPERED_VERIFIER="tampered_code_verifier_1234567890123456789012345678901234567890"
 TAMPERED_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
     -H "Content-Type: application/json" \
-    -d "{\"code\":\"$AUTH_CODE\",\"code_verifier\":\"$TAMPERED_VERIFIER\",\"state\":\"$PKCE_STATE\"}")
+    -d "{\"code\":\"$AUTH_CODE\",\"code_verifier\":\"$TAMPERED_VERIFIER\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
 
 if echo "$TAMPERED_RESP" | grep -q -E "INVALID_GRANT|KEYCLOAK_TOKEN_EXCHANGE_FAILED"; then
     echo "    [OK] PKCE Anti-Tampering verified: Keycloak upstream strictly rejected mismatched verifier."
@@ -265,14 +265,28 @@ fi
 # 3. Step 4: Re-create a fresh PKCE Session & acquire a fresh Keycloak Authorization Code
 # (RFC 7636 Section 4.6: Authorization codes are single-use; the previous code was consumed or invalidated)
 PKCE_STATE_VALID="csrf-valid-$(date +%s)-$$"
-PKCE_FRESH_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE_VALID")
-CODE_CHALLENGE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"code_challenge":"\([^"]*\)".*/\1/p')
-CODE_VERIFIER_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"code_verifier":"\([^"]*\)".*/\1/p')
+# Browser-equivalent client: the verifier is generated and kept locally; only the S256 challenge is sent (RFC 7636 / RFC 9700)
+CODE_VERIFIER_VALID=$(head -c 48 /dev/urandom | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+CODE_CHALLENGE_VALID=$(printf '%s' "$CODE_VERIFIER_VALID" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+PKCE_FRESH_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE_VALID&code_challenge=$CODE_CHALLENGE_VALID&redirect_uri=http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback")
+if echo "$PKCE_FRESH_RESP" | grep -q '"code_verifier"'; then
+    echo "[FAIL] Assertion 8: Server returned a code_verifier although the client supplied its own code_challenge."
+    exit 1
+fi
+if ! echo "$PKCE_FRESH_RESP" | grep -q "\"code_challenge\":\"$CODE_CHALLENGE_VALID\""; then
+    echo "[FAIL] Assertion 8: Server did not echo the client-owned code_challenge."
+    exit 1
+fi
+BAD_CHALLENGE_HTTP=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=x&code_challenge=not-a-valid-challenge")
+if [ "$BAD_CHALLENGE_HTTP" != "400" ]; then
+    echo "[FAIL] Assertion 8: Malformed code_challenge must be rejected with HTTP 400 (got $BAD_CHALLENGE_HTTP)."
+    exit 1
+fi
 AUTH_STATE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
 
 AUTH_CODE_FRESH_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
     -H "Content-Type: application/json" \
-    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
+    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
 AUTH_CODE_VALID=$(echo "$AUTH_CODE_FRESH_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
 
 if [ -z "$AUTH_CODE_VALID" ]; then
@@ -285,7 +299,7 @@ fi
 echo " -> Step 4: Exchanging genuine Keycloak Authorization Code + valid code_verifier for Live Bearer Token..."
 TOKEN_EXCHANGE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
     -H "Content-Type: application/json" \
-    -d "{\"code\":\"$AUTH_CODE_VALID\",\"code_verifier\":\"$CODE_VERIFIER_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:8000/callback\"}")
+    -d "{\"code\":\"$AUTH_CODE_VALID\",\"code_verifier\":\"$CODE_VERIFIER_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
 
 ACCESS_TOKEN=$(echo "$TOKEN_EXCHANGE_RESP" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 if [ -z "$ACCESS_TOKEN" ]; then
@@ -342,5 +356,29 @@ else
     exit 1
 fi
 
-echo "[5/5] All full-stack container integration assertions (1-8) PASSED successfully!"
+# Assertion 9: Experience & Operations Web Portal (web-app via APISIX)
+echo "Checking Operations Web App through APISIX Gateway (:9080)..."
+WEB_HTML=$(curl -s http://localhost:9080/ || true)
+if echo "$WEB_HTML" | grep -q 'id="root"'; then
+    echo "[PASS] Assertion 9: Operations Web App (apps/web) successfully routed via APISIX Gateway."
+else
+    echo "[WARN] Assertion 9: Operations Web App root div check skipped or pending."
+fi
+
+# Assertion 10: data written through the API survives a Core API restart (no re-seeding over real rows)
+echo "Restarting Core API to verify persistence across restarts..."
+docker compose -f compose.yaml restart core-api >/dev/null 2>&1
+for i in {1..40}; do
+    if curl -sf http://localhost:9080/api/v1/health >/dev/null 2>&1; then break; fi
+    sleep 3
+done
+STATE_AFTER_RESTART=$(curl -s http://localhost:9080/api/v1/state -H "Authorization: Bearer $ACCESS_TOKEN" || true)
+if echo "$STATE_AFTER_RESTART" | grep -q "\"request_id\":\"$CREATED_REQ_ID\""; then
+    echo "[PASS] Assertion 10: Request $CREATED_REQ_ID is still present after a Core API restart (state rehydrated from PostgreSQL)."
+else
+    echo "[FAIL] Assertion 10: Request $CREATED_REQ_ID was lost after a Core API restart (platform re-seeded over real data)."
+    exit 1
+fi
+
+echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

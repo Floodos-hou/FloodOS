@@ -4,13 +4,14 @@
 # ============================================================================
 # APACHE APISIX — ZERO-TRUST API GATEWAY CONFIGURATION (Apache-2.0 License)
 # Thực thi biên mạng Zero-Trust, kiểm tra JWT OIDC Keycloak, Rate Limit & CORS
+# Điều phối lưu lượng: API Backend Core & Experience Web Portal
 # ============================================================================
 routes:
   # 1. Public Discovery, Health, and Login Route (No Token Required)
   - id: openagrios-public-discovery-route
     name: "OpenAgriOS Public Manifest & Login Route"
+    priority: 20
     uris:
-      - "/"
       - "/api/v1"
       - "/api/v1/health"
       - "/api/v1/auth/accounts"
@@ -38,6 +39,7 @@ routes:
   # 2. Zero-Trust Protected Core API Route (Enforced via Keycloak OIDC Token Introspection)
   - id: openagrios-protected-core-route
     name: "OpenAgriOS Zero-Trust Protected Core API Route"
+    priority: 10
     uris:
       - "/api/v1/*"
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -67,4 +69,20 @@ routes:
         headers:
           set:
             X-Gateway: "Apache-APISIX-ZeroTrust"
+
+  # 3. OpenAgriOS Experience & Operations Web Portal (H-P-D-I SPA)
+  - id: openagrios-web-ui-route
+    name: "OpenAgriOS Web UI SPA Route"
+    priority: 1
+    uris:
+      - "/*"
+    methods: ["GET", "HEAD", "OPTIONS"]
+    upstream:
+      type: roundrobin
+      nodes:
+        "web-app:80": 1
+    plugins:
+      cors:
+        allow_origins: "*"
+        allow_methods: "GET,HEAD,OPTIONS"
 #END

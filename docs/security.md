@@ -62,7 +62,7 @@ Hệ thống cung cấp cơ chế bảo vệ nghiêm ngặt giữa hai chế đ�
 
 Theo khuyến nghị bảo mật RFC 9700 (OAuth 2.0 Security Best Current Practice), cơ chế ROPC (Resource Owner Password Credentials) đã bị loại bỏ cho các ứng dụng tương tác người dùng. OpenAgriOS áp dụng chuẩn **Authorization Code Flow kết hợp Proof Key for Code Exchange (PKCE - RFC 7636)**:
 
-1. **Khởi tạo phiên:** Client gọi `GET /api/v1/auth/pkce/authorize-url` để nhận `code_challenge` (SHA-256 base64url) và `code_verifier`.
+1. **Khởi tạo phiên:** Client (trình duyệt) tự sinh `code_verifier` bằng Web Crypto, tính `code_challenge` (SHA-256 base64url, 43 ký tự) rồi gọi `GET /api/v1/auth/pkce/authorize-url?code_challenge=...&state=...&redirect_uri=...`. Máy chủ **không bao giờ** nhận hay trả về `code_verifier` ở chế độ này; `code_challenge` sai định dạng bị từ chối `400 INVALID_CODE_CHALLENGE`. (Chế độ cũ không kèm `code_challenge` chỉ còn phục vụ công cụ dev/test.)
 2. **Đổi mã lấy token:** Client gửi mã xác thực tới `POST /api/v1/auth/pkce/token` cùng `code` và `code_verifier`.
 3. **Kiểm tra tính hợp lệ:**
    - Chiều dài `code_verifier` bắt buộc phải từ 43 đến 128 ký tự (RFC 7636 Section 4.1).

@@ -243,6 +243,7 @@ public final class KeycloakOidcEngine {
 
 
     public static final String DEFAULT_ISSUER = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
+    public static final String DEFAULT_PUBLIC_ISSUER = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", "http://localhost:8080/realms/openagrios");
 
 
 
@@ -1284,7 +1285,8 @@ public final class KeycloakOidcEngine {
 
 
 
-            boolean active = introspectLiveKeycloakToken(normExpectedIss, DEFAULT_INTROSPECTION_CLIENT_ID, DEFAULT_INTROSPECTION_CLIENT_SECRET, token);
+            String introspectionIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", normExpectedIss);
+            boolean active = introspectLiveKeycloakToken(introspectionIssuer, DEFAULT_INTROSPECTION_CLIENT_ID, DEFAULT_INTROSPECTION_CLIENT_SECRET, token);
 
 
 
@@ -1394,7 +1396,7 @@ public final class KeycloakOidcEngine {
 
 
 
-            Map<String, Object> payload = verifyJwt(token);
+            Map<String, Object> payload = verifyJwt(token, DEFAULT_PUBLIC_ISSUER, DEFAULT_AUDIENCE);
 
 
 
@@ -1567,7 +1569,9 @@ public final class KeycloakOidcEngine {
         try {
             String tokenEndpoint = issuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
             String targetClientId = (clientId != null && !clientId.isBlank()) ? clientId : DEFAULT_AUDIENCE;
-            String secret = (clientSecret != null && !clientSecret.isBlank()) ? clientSecret : DEFAULT_CLIENT_SECRET;
+            // agriops-web is a public PKCE client and must never authenticate with a client secret.
+            String secret = "agriops-web".equals(targetClientId) ? null
+                    : ((clientSecret != null && !clientSecret.isBlank()) ? clientSecret : DEFAULT_CLIENT_SECRET);
 
             String formBody = "grant_type=authorization_code"
                     + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
@@ -1990,13 +1994,28 @@ public final class KeycloakOidcEngine {
 
 
 
+    private static final java.util.regex.Pattern S256_CHALLENGE = java.util.regex.Pattern.compile("^[A-Za-z0-9_-]{43}$");
+
+    /** Server-side verifier generation: kept for dev tooling and tests only. */
     public static Map<String, Object> generatePkceSession(String redirectUri, String state) {
+        return generatePkceSession(redirectUri, state, null);
+    }
+
+    /**
+     * @param clientChallenge S256 code_challenge produced by the caller. When present the verifier never
+     *                        leaves the client (RFC 7636 / RFC 9700) and no code_verifier is returned.
+     */
+    public static Map<String, Object> generatePkceSession(String redirectUri, String state, String clientChallenge) {
         purgeExpiredPkceSessions();
-        String verifier = generateCodeVerifier();
-        String challenge = generateCodeChallenge(verifier);
-        String s = (state != null && !state.isBlank()) ? state : "state-" + UUID.randomUUID().toString().substring(0, 8);
+        boolean clientOwned = clientChallenge != null && !clientChallenge.isBlank();
+        if (clientOwned && !S256_CHALLENGE.matcher(clientChallenge).matches()) {
+            throw new IllegalArgumentException("code_challenge must be a 43-character base64url SHA-256 digest (S256).");
+        }
+        String verifier = clientOwned ? null : generateCodeVerifier();
+        String challenge = clientOwned ? clientChallenge : generateCodeChallenge(verifier);
+        String s = (state != null && !state.isBlank()) ? state : "state-" + UUID.randomUUID();
         String rUri = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : "http://localhost:8000/callback";
-        String issuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", DEFAULT_ISSUER);
+        String issuer = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", DEFAULT_PUBLIC_ISSUER);
 
         String authUrl = buildPkceAuthorizationUrl(issuer, DEFAULT_AUDIENCE, rUri, challenge, s);
 
@@ -2006,7 +2025,9 @@ public final class KeycloakOidcEngine {
         res.put("client_id", DEFAULT_AUDIENCE);
         res.put("issuer", issuer);
         res.put("authorization_url", authUrl);
-        res.put("code_verifier", verifier);
+        if (verifier != null) {
+            res.put("code_verifier", verifier);
+        }
         res.put("code_challenge", challenge);
         res.put("code_challenge_method", "S256");
         res.put("state", s);

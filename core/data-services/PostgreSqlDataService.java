@@ -851,12 +851,18 @@ public final class PostgreSqlDataService {
      */
     public boolean hasExistingData() {
         if (!isConnectionLive()) return false;
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
-             Statement stmt = conn.createStatement()) {
-            stmt.setQueryTimeout(3);
-            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM fields")) {
-                if (rs.next()) {
-                    return rs.getInt(1) > 0;
+        // `fields` has FORCE ROW LEVEL SECURITY: without a tenant/role context every row is hidden, so a plain
+        // COUNT(*) always returned 0, the platform believed the database was empty and re-seeded demo data over
+        // real rows on every restart. Count with the same platform-level context that queryAll() uses.
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
+            conn.setAutoCommit(false);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.setQueryTimeout(3);
+                stmt.execute("SET LOCAL app.current_user_role = 'PLATFORM_ADMIN';");
+                try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM fields")) {
+                    boolean has = rs.next() && rs.getInt(1) > 0;
+                    conn.commit();
+                    return has;
                 }
             }
         } catch (Exception e) {

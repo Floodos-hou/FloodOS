@@ -37,3 +37,9 @@ OpenAgriOS_Ke_hoach*
 postman/
 tests/postman/postman/
 tests/postman/.postman/
+
+# Node & Frontend Web
+node_modules/
+dist/
+dist-ssr/
+.tmp/
