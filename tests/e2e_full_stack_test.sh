@@ -356,6 +356,59 @@ else
     exit 1
 fi
 
+# Assertion 11: hot -> cold data pipeline (Core API -> Redpanda -> Parquet on S3 -> DuckDB analytics)
+echo "Verifying hot/cold data pipeline (Redpanda -> Parquet on SeaweedFS S3 -> DuckDB)..."
+BUS_PUBLISHED=0
+for i in {1..20}; do
+    BUS_PUBLISHED=$(curl -s http://localhost:8000/api/v1/health | python3 -c "import sys,json; print(json.load(sys.stdin)['core_services']['event_bus']['published'])" 2>/dev/null || echo 0)
+    if [ "${BUS_PUBLISHED:-0}" -gt 0 ]; then break; fi
+    sleep 2
+done
+if [ "${BUS_PUBLISHED:-0}" -le 0 ]; then
+    echo "[FAIL] Assertion 11: Core API published no events to the Redpanda event bus."
+    exit 1
+fi
+echo "    [OK] Core API published $BUS_PUBLISHED audit event(s) to Redpanda."
+
+LAKE_EVENTS=0
+for i in {1..30}; do
+    LAKE_JSON=$(curl -s http://localhost:9080/api/v1/analytics/summary -H "Authorization: Bearer $ACCESS_TOKEN" || true)
+    LAKE_EVENTS=$(echo "$LAKE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['audit']['events'])" 2>/dev/null || echo 0)
+    if [ "${LAKE_EVENTS:-0}" -gt 0 ]; then break; fi
+    sleep 3
+done
+if [ "${LAKE_EVENTS:-0}" -le 0 ]; then
+    echo "Analytics summary response: $LAKE_JSON"
+    echo "[FAIL] Assertion 11: No audit events reached the cold Parquet lake."
+    exit 1
+fi
+echo "    [OK] DuckDB counted $LAKE_EVENTS audit event(s) in the Parquet lake."
+
+PARQUET_KEYS=$(curl -s "http://localhost:9000/openagrios-lake?prefix=audit/" | grep -o 'audit/dt=[0-9-]*/part-[^<"]*\.parquet' | sort -u | wc -l)
+if [ "$PARQUET_KEYS" -le 0 ]; then
+    echo "[FAIL] Assertion 11: No .parquet objects found in the S3 lake bucket."
+    exit 1
+fi
+echo "    [OK] $PARQUET_KEYS Parquet object(s) stored in s3://openagrios-lake/audit/."
+
+DAY_JSON=$(curl -s http://localhost:9080/api/v1/analytics/actions-by-day -H "Authorization: Bearer $ACCESS_TOKEN")
+if ! echo "$DAY_JSON" | grep -q '"engine": *"DuckDB"'; then
+    echo "actions-by-day response: $DAY_JSON"
+    echo "[FAIL] Assertion 11: actions-by-day analytics query failed."
+    exit 1
+fi
+
+UNAUTH_HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9080/api/v1/analytics/summary)
+if [ "$UNAUTH_HTTP" != "401" ] && [ "$UNAUTH_HTTP" != "403" ]; then
+    echo "[FAIL] Assertion 11: analytics reachable without a token via the gateway (HTTP $UNAUTH_HTTP)."
+    exit 1
+fi
+if curl -s -m 3 -o /dev/null http://localhost:8090/health 2>/dev/null; then
+    echo "[FAIL] Assertion 11: lake-archiver port 8090 is exposed on the host (Zero-Trust violation)."
+    exit 1
+fi
+echo "[PASS] Assertion 11: Hot/cold pipeline verified (events -> Redpanda -> Parquet in S3 -> DuckDB query; gateway-protected, archiver not host-exposed)."
+
 # Assertion 9: Experience & Operations Web Portal (web-app via APISIX)
 echo "Checking Operations Web App through APISIX Gateway (:9080)..."
 WEB_HTML=$(curl -s http://localhost:9080/ || true)

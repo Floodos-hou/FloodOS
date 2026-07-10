@@ -77,6 +77,11 @@ flowchart TD
   - **ImmutableAuditLedger**: Sổ cái kiểm toán bất biến chuỗi băm SHA-256 và truy vết phả hệ dữ liệu (`correlation_id`).
   - **NgsiLdTwinMapper**: Bản sao số thực thể chuẩn ETSI GS CIM 009 / Smart Data Models.
 
+- **Luồng dữ liệu nóng/lạnh (Hot/Cold Data Plane):**
+  - **Nóng**: giao dịch thời gian thực nằm ở PostgreSQL; mỗi bản ghi audit đồng thời được `EventBusPublisher` phát bất đồng bộ lên Redpanda (`openagrios.audit.v1`).
+  - **Lạnh**: `services/lake-archiver` đọc topic, gom lô và ghi Parquet (ZSTD, phân vùng `dt=YYYY-MM-DD`) vào bucket `openagrios-lake` trên SeaweedFS; DuckDB truy vấn trực tiếp các file này (khử trùng lặp theo `ledger_epoch` + `event_id` vì giao nhận at-least-once).
+  - Truy cập qua `GET /api/v1/analytics/*` (chỉ điều phối viên/quản trị, cách ly theo `organization_id`). Chưa dùng Iceberg/Trino: đây là lựa chọn gọn cho quy mô MVP, không phải lớp lakehouse đầy đủ.
+
 ### 2.2. Không gian Năng lực Số & Cổng Điều hành Tác chiến (Experience & Operations Portal — H-P-D-I)
 Ứng dụng web điều hành nghiệp vụ tập trung (`apps/web` - React 18, TypeScript, Tailwind CSS, MapLibre GL JS):
 - **[H] Human Role Workspaces:**

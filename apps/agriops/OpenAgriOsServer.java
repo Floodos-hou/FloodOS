@@ -478,6 +478,7 @@ public final class OpenAgriOsServer {
 
 
                 endpoints.put("data_lineage", "GET /api/v1/audit/lineage/{correlation_id}");
+                endpoints.put("cold_analytics", "GET /api/v1/analytics/{summary|actions-by-day|machine-utilization}");
 
 
 
@@ -662,6 +663,8 @@ public final class OpenAgriOsServer {
 
 
                 coreServices.put("audit_ledger", "SHA-256 Immutable Hash-Chain (org.openagrios.core.dataservices)");
+                coreServices.put("event_bus", service.getStore().eventBus.status());
+                coreServices.put("cold_analytics_lake", service.getStore().analyticsLake.probe());
 
 
 
@@ -833,6 +836,18 @@ public final class OpenAgriOsServer {
 
 
 
+
+            if (path.startsWith("/api/v1/analytics/")) {
+                if (!"COORDINATOR".equals(auth.role()) && !"PLATFORM_ADMIN".equals(auth.role())) {
+                    sendJson(ex, 403, Map.of("error", "forbidden",
+                            "message", "Cold analytics is restricted to COORDINATOR / PLATFORM_ADMIN."), auth);
+                    return;
+                }
+                String queryName = path.substring("/api/v1/analytics/".length());
+                AnalyticsLakeClient.Result lake = service.getStore().analyticsLake.query(queryName, auth.organizationId());
+                sendJson(ex, lake.status(), lake.body(), auth);
+                return;
+            }
 
             if (path.startsWith("/api/v1/audit/lineage/")) {
 
