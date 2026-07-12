@@ -2,7 +2,7 @@
 
 This project, **OpenAgriOS**, is licensed under the [Apache License 2.0](LICENSE).
 
-This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within OpenAgriOS, along with their respective licensing terms. Every component is OSI-approved and permissive **except Redpanda Community Edition**, which uses the Business Source License 1.1 (source-available; it converts to Apache-2.0 after four years and restricts offering it as a competing managed service). It is used only as an internal event bus behind the Kafka-compatible HTTP Proxy API, so it can be swapped for Apache Kafka without code changes in the core.
+This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within OpenAgriOS, along with their respective licensing terms. All integrated components use OSI-approved permissive or copyleft licences (MIT, Apache-2.0, BSD, ISC, EPL, GPL-family, PostgreSQL, PSF-2.0).
 
 ---
 
@@ -17,7 +17,8 @@ This document lists the third-party open-source components, libraries, and runti
 | **PostgreSQL** | PostgreSQL Global Development Group 16 | Relational Storage, Row-Level Security (RLS), GiST Exclusion Constraints | **PostgreSQL License** *(BSD/MIT-style)* | Yes |
 | **SeaweedFS** | SeaweedFS (Chris Lu) | Scalable S3-Compatible Object Storage for Unstructured Evidence | **Apache-2.0** | Yes |
 | **FIWARE NGSI-LD** | ETSI ISG CIM / FIWARE Foundation | Smart Data Models & Digital Twin Entity Representation | **Apache-2.0** | Yes |
-| **Redpanda (Community)** | Redpanda Data v24.1 | Event bus (Kafka API + HTTP Proxy) cho luồng dữ liệu nóng | **BSL 1.1** *(source-available, tự chuyển sang Apache-2.0 sau 4 năm; KHÔNG phải giấy phép OSI)* | Có điều kiện |
+| **Apache Kafka** | Apache Software Foundation 3.7 (KRaft) | Event bus cho luồng dữ liệu nóng | **Apache-2.0** | Yes |
+| **Karapace** | Aiven 4.1 | Kafka REST Proxy (HTTP produce/consume cho lõi Java) | **Apache-2.0** | Yes |
 | **DuckDB** | DuckDB Foundation 1.1 | Truy vấn phân tích trên Parquet (kho lạnh) | **MIT** | Yes |
 | **Python** | PSF 3.12 (image `python:3.12-slim`) | Runtime của dịch vụ `lake-archiver` | **PSF-2.0** | Yes |
 

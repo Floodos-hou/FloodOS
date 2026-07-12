@@ -3,7 +3,7 @@
 """
 OpenAgriOS cold-tier lake archiver.
 
-Hot path  : core-api -> Redpanda topics (audit / telemetry events)
+Hot path  : core-api -> Apache Kafka topics (via Kafka REST Proxy) (audit / telemetry events)
 Cold path : this service consumes the topics (at-least-once), writes Hive-partitioned
             Parquet files to S3-compatible object storage (SeaweedFS), and answers analytical
             queries over those Parquet files with DuckDB.
@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import duckdb
 
-EVENT_BUS_URL = os.environ.get("EVENT_BUS_URL", "http://redpanda:8082").rstrip("/")
+EVENT_BUS_URL = os.environ.get("EVENT_BUS_URL", "http://kafka-rest:8082").rstrip("/")
 S3_ENDPOINT = os.environ.get("LAKE_S3_ENDPOINT", "object-storage:9000")
 BUCKET = os.environ.get("LAKE_BUCKET", "openagrios-lake")
 S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "openagrios")
@@ -115,7 +115,7 @@ def ensure_bucket():
     sys.exit("object storage never became ready; failing fast")
 
 
-# --------------------------------------------------------------------------- event bus (Pandaproxy REST)
+# --------------------------------------------------------------------------- event bus (Kafka REST Proxy, Confluent REST v2 API)
 def bus(method, path, body=None, accept=KAFKA_V2, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
