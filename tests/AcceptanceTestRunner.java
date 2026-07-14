@@ -671,6 +671,33 @@ public final class AcceptanceTestRunner {
 
             System.out.println("[PASS] Immutable SHA-256 Audit Chain & Data Lineage verified (" + steps.size() + " linked records).");
 
+            // 10. OT telemetry ingestion: validation, tenant ownership and twin update (AgriOpsService.ingestTelemetry)
+            var agri = server.getAgriOpsService();
+            String telTs = "2026-11-20T10:00:00Z";
+            check(agri.ingestTelemetry(Map.of("machine_id", "M-NOPE", "organization_id", "HTX_CANTHO_01",
+                    "lat", 10.0, "lon", 105.0, "fuel_pct", 50, "ts", telTs)).status() == 404,
+                    "Telemetry for an unknown machine must be rejected with 404");
+            check(agri.ingestTelemetry(Map.of("machine_id", "M02", "organization_id", "HTX_SOCTRANG_02",
+                    "lat", 10.0, "lon", 105.0, "fuel_pct", 50, "ts", telTs)).status() == 409,
+                    "Telemetry claiming another tenant must be rejected with 409");
+            check(agri.ingestTelemetry(Map.of("machine_id", "M02", "organization_id", "HTX_CANTHO_01",
+                    "lat", 999, "lon", 105.0, "fuel_pct", 50, "ts", telTs)).status() == 400,
+                    "Out-of-range latitude must be rejected with 400");
+            check(agri.ingestTelemetry(Map.of("machine_id", "M02", "organization_id", "HTX_CANTHO_01",
+                    "lat", 10.0, "lon", 105.0, "ts", telTs)).status() == 400,
+                    "Telemetry without fuel_pct must be rejected with 400");
+            double beforeLat = agri.getStore().machines.get("M02").currentLat;
+            String statusBefore = agri.getStore().machines.get("M02").status;
+            check(beforeLat != 10.0123, "Precondition: M02 must not already be at the test latitude");
+            var okTel = agri.ingestTelemetry(Map.of("machine_id", "M02", "organization_id", "HTX_CANTHO_01",
+                    "lat", 10.0123, "lon", 105.5, "fuel_pct", 72.5, "speed_kmh", 5.5, "ts", telTs));
+            check(okTel.status() == 200, "Valid telemetry must be accepted");
+            var m02 = agri.getStore().machines.get("M02");
+            check(m02.currentLat == 10.0123 && m02.fuelPct == 72.5 && telTs.equals(m02.telemetryUpdatedAt),
+                    "Digital twin must follow a valid telemetry sample");
+            check(statusBefore.equals(m02.status), "Telemetry must never change workflow-owned status");
+            System.out.println("[PASS] OT telemetry ingestion verified (404 unknown machine, 409 tenant mismatch, 400 out-of-range/missing, 200 updates the twin).");
+
 
 
             System.out.println("============================================================================");

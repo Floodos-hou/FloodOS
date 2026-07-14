@@ -80,9 +80,26 @@ services:
   lake-archiver:
     restart: always
 
+  mosquitto:
+    restart: always
+    environment:
+      MQTT_DEVICE_USER: ${MQTT_DEVICE_USER:-device}
+      MQTT_DEVICE_PASSWORD: "${MQTT_DEVICE_PASSWORD:?CRITICAL MQTT_DEVICE_PASSWORD must be explicitly provided in production}"
+      MQTT_INGESTOR_USER: ${MQTT_INGESTOR_USER:-ingestor}
+      MQTT_INGESTOR_PASSWORD: "${MQTT_INGESTOR_PASSWORD:?CRITICAL MQTT_INGESTOR_PASSWORD must be explicitly provided in production}"
+    ports: !reset []
+
+  telemetry-ingestor:
+    restart: always
+    environment:
+      MQTT_USER: ${MQTT_INGESTOR_USER:-ingestor}
+      MQTT_PASSWORD: "${MQTT_INGESTOR_PASSWORD:?CRITICAL MQTT_INGESTOR_PASSWORD must be explicitly provided in production}"
+      INGEST_TOKEN: "${OPENAGRIOS_INGEST_TOKEN:?CRITICAL OPENAGRIOS_INGEST_TOKEN must be explicitly provided in production}"
+
   core-api:
     restart: always
     environment:
+      OPENAGRIOS_INGEST_TOKEN: "${OPENAGRIOS_INGEST_TOKEN:?CRITICAL OPENAGRIOS_INGEST_TOKEN must be explicitly provided in production}"
       OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       KEYCLOAK_PUBLIC_ISSUER: "${KEYCLOAK_PUBLIC_ISSUER:?CRITICAL KEYCLOAK_PUBLIC_ISSUER must match the Keycloak realm issuer}"
       OPENAGRIOS_STORAGE_MODE: POSTGRESQL_PRODUCTION

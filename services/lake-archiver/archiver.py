@@ -20,7 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import duckdb
@@ -28,6 +28,8 @@ import duckdb
 EVENT_BUS_URL = os.environ.get("EVENT_BUS_URL", "http://kafka-rest:8082").rstrip("/")
 S3_ENDPOINT = os.environ.get("LAKE_S3_ENDPOINT", "object-storage:9000")
 BUCKET = os.environ.get("LAKE_BUCKET", "openagrios-lake")
+# Root URI of the lake. Defaults to the S3 bucket; tests point it at a local directory.
+LAKE_ROOT = os.environ.get("LAKE_ROOT", f"s3://{BUCKET}").rstrip("/")
 S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "openagrios")
 S3_SECRET = os.environ.get("LAKE_S3_SECRET_KEY", "openagrios-dev-only")
 GROUP = os.environ.get("LAKE_CONSUMER_GROUP", "openagrios-lake-archiver")
@@ -191,7 +193,10 @@ def write_parquet(con, table, rows):
     con.executemany(f"INSERT INTO {tmp} VALUES ({placeholders})", rows)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     key = f"{table}/dt={day}/part-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}.parquet"
-    con.execute(f"COPY {tmp} TO 's3://{BUCKET}/{key}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+    target = f"{LAKE_ROOT}/{key}"
+    if not LAKE_ROOT.startswith("s3://"):
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+    con.execute(f"COPY {tmp} TO '{target}' (FORMAT PARQUET, COMPRESSION ZSTD)")
     con.execute(f"DROP TABLE {tmp}")
     return key
 
@@ -215,7 +220,7 @@ def flush(con, consumer, pending, offsets):
             with state_lock:
                 state["rows_archived"][table] += len(rows)
                 state["files_written"] += 1
-            log(f"wrote {len(rows)} {table} row(s) -> s3://{BUCKET}/{key}")
+            log(f"wrote {len(rows)} {table} row(s) -> {LAKE_ROOT}/{key}")
         if rejected:
             with state_lock:
                 state["rejected_events"] += rejected
@@ -266,33 +271,38 @@ def consume_loop():
 
 
 # --------------------------------------------------------------------------- analytics (DuckDB over Parquet)
-AUDIT_VIEW = (
-    f"(SELECT * FROM read_parquet('s3://{BUCKET}/audit/*/*.parquet', hive_partitioning=true) "
-    "WHERE organization_id = ? "
-    "QUALIFY row_number() OVER (PARTITION BY ledger_epoch, event_id ORDER BY ingested_at) = 1)"
-)
-TELEMETRY_VIEW = (
-    f"(SELECT * FROM read_parquet('s3://{BUCKET}/telemetry/*/*.parquet', hive_partitioning=true) "
-    "WHERE organization_id = ?)"
-)
+def audit_view():
+    return (
+        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/audit/*/*.parquet', hive_partitioning=true) "
+        "WHERE organization_id = ? "
+        "QUALIFY row_number() OVER (PARTITION BY ledger_epoch, event_id ORDER BY ingested_at) = 1)"
+    )
+
+
+def telemetry_view():
+    return (
+        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/telemetry/*/*.parquet', hive_partitioning=true) "
+        "WHERE organization_id = ?)"
+    )
 
 
 def rows_as_dicts(cur):
     cols = [d[0] for d in cur.description]
     out = []
     for r in cur.fetchall():
-        out.append({c: (v.isoformat() if isinstance(v, (datetime,)) else v) for c, v in zip(cols, r)})
+        out.append({c: (v.isoformat() if isinstance(v, (datetime, date)) else v) for c, v in zip(cols, r)})
     return out
 
 
 def run_query(name, org):
     con = root.cursor()
-    configure_s3(con)
+    if LAKE_ROOT.startswith("s3://"):
+        configure_s3(con)
     result = {"query": name, "organization_id": org, "source": f"parquet://{BUCKET}", "engine": "DuckDB"}
     try:
         if name == "actions-by-day":
             cur = con.execute(
-                f"SELECT CAST(created_at AS DATE) AS day, action, count(*) AS events FROM {AUDIT_VIEW} "
+                f"SELECT CAST(created_at AS DATE) AS day, action, count(*) AS events FROM {audit_view()} "
                 "GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC", [org])
             result["rows"] = rows_as_dicts(cur)
         elif name == "machine-utilization":
@@ -300,7 +310,7 @@ def run_query(name, org):
                 f"""WITH t AS (
                         SELECT machine_id, ts, lat, lon, speed_kmh, fuel_pct,
                                lag(lat) OVER w AS plat, lag(lon) OVER w AS plon
-                        FROM {TELEMETRY_VIEW} WINDOW w AS (PARTITION BY machine_id ORDER BY ts))
+                        FROM {telemetry_view()} WINDOW w AS (PARTITION BY machine_id ORDER BY ts))
                     SELECT machine_id,
                            count(*) AS samples,
                            round(avg(speed_kmh), 2) AS avg_speed_kmh,
@@ -316,12 +326,12 @@ def run_query(name, org):
         elif name == "summary":
             a = con.execute(
                 f"SELECT count(*) AS events, count(DISTINCT correlation_id) AS workflows, "
-                f"min(created_at) AS first_event, max(created_at) AS last_event FROM {AUDIT_VIEW}", [org])
+                f"min(created_at) AS first_event, max(created_at) AS last_event FROM {audit_view()}", [org])
             result["audit"] = rows_as_dicts(a)[0]
             try:
                 t = con.execute(
                     f"SELECT count(*) AS samples, count(DISTINCT machine_id) AS machines, "
-                    f"max(ts) AS last_sample FROM {TELEMETRY_VIEW}", [org])
+                    f"max(ts) AS last_sample FROM {telemetry_view()}", [org])
                 result["telemetry"] = rows_as_dicts(t)[0]
             except duckdb.IOException:
                 result["telemetry"] = {"samples": 0, "machines": 0, "last_sample": None}

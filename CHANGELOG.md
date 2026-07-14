@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
 - **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
+### Unit Test Suites and Defects Found by Them
+- Added `tests/run_unit_tests.sh` (wired into CI): 122 Java tests (`tests/unit/`, dependency-free harness), 26 Python tests for `lake-archiver` (real DuckDB + Parquet in a temp dir) and 26 for `telemetry`. Mutation-checked: 29/29 deliberately injected defects are caught.
+- **Fixed**: `JsonCodec.parseObject` silently turned garbage request bodies (e.g. `not-json`) into `{}`, so handlers applied their defaults (`machine_id=M01`, `field_id=F07`...). Client bodies now go through the new strict `JsonCodec.parseObjectStrict`; malformed JSON returns `400 INVALID_JSON`. The lenient parser is kept only for trusted upstream responses.
+- **Fixed**: `NaN`/`Infinity` were serialised verbatim (invalid JSON); they are now emitted as `null`.
+- **Fixed**: `lake-archiver` returned `datetime.date` values un-serialised from `rows_as_dicts`.
+- Testability: `EventBusPublisher.forUrl(...)`, `AnalyticsLakeClient(String)` and the `LAKE_ROOT` setting of the archiver (default behaviour unchanged).
+- CI: the production-compose validation step now supplies every required secret (it was missing `KEYCLOAK_PUBLIC_URL`/`KEYCLOAK_PUBLIC_ISSUER` and the new MQTT/ingest secrets).
+
+### OT Telemetry Ingestion over MQTT
+- `mosquitto` (EPL-2.0/EDL-1.0) with mandatory authentication and a least-privilege ACL regenerated from env on every boot (`infra/mosquitto/`); no anonymous access.
+- `services/telemetry`: `telemetry-ingestor` (schema validation, topic/payload tenant check, Prometheus-style `/metrics`, never drops silently) and `device-simulator` (**simulated devices**, `demo` profile, off by default).
+- Core: `POST /api/v1/internal/telemetry` and `GET /api/v1/internal/fleet`, guarded by `X-Ingest-Token` (fail-closed `503` if unset; required in `compose.prod.yaml`) and blocked with `404` by APISIX. Telemetry updates the NGSI-LD twin, is persisted to PostgreSQL at most every 10 s per machine and streamed to Kafka `openagrios.telemetry.v1` -> Parquet.
+- Tests: in-process validation cases in `AcceptanceTestRunner`; `tests/e2e_full_stack_test.sh` Assertion 12 (broker auth, twin update, rejection of out-of-range/cross-tenant/malformed samples, sealed internal endpoint, DuckDB `machine-utilization`).
+
 ---
 
 ## [0.1.0-alpha] - 2026-10-30
