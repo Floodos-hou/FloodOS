@@ -32,6 +32,9 @@ jobs:
         find core apps tests -name "*.java" > sources.txt
         javac -encoding UTF-8 -d target/classes @sources.txt
 
+    - name: Run Unit Tests (Java + Python, incl. DuckDB/Parquet round-trips)
+      run: bash tests/run_unit_tests.sh
+
     - name: Run In-Process Integration & Acceptance Tests (10/10 Suites)
       run: |
         java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
@@ -47,6 +50,11 @@ jobs:
         POSTGRES_APP_PASSWORD=ci_test_app_pw \
         KEYCLOAK_ADMIN_PASSWORD=ci_test_kc_pw \
         KEYCLOAK_INTROSPECTION_CLIENT_SECRET=ci_test_secret \
+        KEYCLOAK_PUBLIC_URL=https://sso.example.test \
+        KEYCLOAK_PUBLIC_ISSUER=https://sso.example.test/realms/openagrios \
+        MQTT_DEVICE_PASSWORD=ci_test_mqtt_device_pw \
+        MQTT_INGESTOR_PASSWORD=ci_test_mqtt_ingestor_pw \
+        OPENAGRIOS_INGEST_TOKEN=ci_test_ingest_token \
         docker compose -f compose.yaml -f compose.prod.yaml config --quiet
         echo "Production Docker Compose override validated successfully!"
 

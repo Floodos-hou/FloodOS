@@ -407,6 +407,22 @@ Xem chi tiết kiến trúc Zero-Trust, phân quyền `openagrios_app` và quy t
 
 
 
+### 8.0. Kiểm thử Đơn vị (Unit Tests) — nhanh, không cần dựng stack
+
+```bash
+bash tests/run_unit_tests.sh          # Java (JDK 21) + Python (chạy trong container python:3.12-slim)
+SKIP_PYTHON=1 bash tests/run_unit_tests.sh   # chỉ phần Java, không cần Docker
+```
+
+| Tầng | Số ca | Phạm vi |
+|---|---|---|
+| Java — [`tests/unit/`](tests/unit/) | 122 | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
+| Python — [`services/lake-archiver/tests/`](services/lake-archiver/tests/test_archiver.py) | 26 | **DuckDB + Parquet thật** trên thư mục tạm: khử trùng lặp, epoch, cách ly tenant, tham số hóa SQL, Haversine, *offset chỉ commit sau khi ghi xong*, sự kiện hỏng không làm kẹt lô |
+| Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 26 | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
+
+Chất lượng bộ test được kiểm bằng **đột biến mã** (cố ý phá từng quy tắc trên bản sao mã nguồn rồi chạy test): 29/29 đột biến bị phát hiện (14 Java, 15 Python).
+Bộ unit test cũng chạy trong CI trước bộ acceptance và E2E.
+
 ### 8.1. Chạy Bộ Kiểm Thử Chấp Nhận Tự Động (Acceptance Test Suite)
 
 OpenAgriOS tích hợp sẵn bộ kiểm thử E2E tự động xác thực toàn bộ các ràng buộc nghiệp vụ và bảo mật trong môi trường độc lập:
