@@ -141,7 +141,10 @@ public final class AgriDataStore {
 
 
     public synchronized void resetAndSeed() {
-
+        if (postgreSqlDataService.isConfigured() && postgreSqlDataService.isConnectionLive()
+                && !postgreSqlDataService.deleteTransactionalData() && isProductionStorage()) {
+            throw new IllegalStateException("Could not clear transactional data in PostgreSQL during reset (fail-fast).");
+        }
         organizations.clear();
 
         usersByUsername.clear();
@@ -366,7 +369,7 @@ public final class AgriDataStore {
                 postgreSqlDataService.syncField(f.organizationId, "COORDINATOR", f.fieldId, f.ownerUserId, f.name, f.hamlet, f.crop, f.areaHa, f.readinessStatus, f.harvestProgressPct, f.windowStart, f.windowEnd, f.centerLat, f.centerLng, polyJson);
             }
             for (HarvesterMachine m : machines.values()) {
-                postgreSqlDataService.syncMachine(m.organizationId, "COORDINATOR", m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+                postgreSqlDataService.syncMachine(m.organizationId, "COORDINATOR", m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng, m.assignedOperatorId);
             }
             for (OperatorProfile op : operators.values()) {
                 postgreSqlDataService.syncOperator(op.organizationId(), "COORDINATOR", op.operatorId(), op.userId(), op.fullName(), op.rating(), op.status());
@@ -480,7 +483,7 @@ public final class AgriDataStore {
             if (!postgreSqlDataService.isConnectionLive()) {
                 throw new IllegalStateException("PostgreSQL is unavailable in POSTGRESQL_PRODUCTION mode (connection is not live). Fail-fast enforced to prevent silent in-memory data drift.");
             }
-            boolean synced = postgreSqlDataService.syncMachine(m.organizationId, role, userId != null ? userId : m.ownerUserId, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+            boolean synced = postgreSqlDataService.syncMachine(m.organizationId, role, userId != null ? userId : m.ownerUserId, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng, m.assignedOperatorId);
             if (!synced) {
                 throw new IllegalStateException("Failed to persist machine " + m.machineId + " to PostgreSQL in POSTGRESQL_PRODUCTION mode. In-memory state unchanged.");
             }
@@ -491,7 +494,7 @@ public final class AgriDataStore {
         // DEV_MOCK_STANDALONE MODE:
         machines.put(m.machineId, m);
         if (postgreSqlDataService.isConnectionLive()) {
-            postgreSqlDataService.syncMachine(m.organizationId, role, userId != null ? userId : m.ownerUserId, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng);
+            postgreSqlDataService.syncMachine(m.organizationId, role, userId != null ? userId : m.ownerUserId, m.machineId, m.ownerUserId, m.name, m.machineType, m.model, m.capacityHaPerHr, m.status, m.fuelPct, m.healthPct, m.currentLat, m.currentLng, m.assignedOperatorId);
         }
         return true;
     }
@@ -823,30 +826,41 @@ public final class AgriDataStore {
             acceptances.put(accId, new WorkAcceptance(accId, orgId, asgId, reqId, compArea, objKey, opSub, farmConf, confStatus, notes, corrId, confAt, created));
         }
 
-        // 10. Audit Records
+        // 10. Audit Records: restore only the newest ledger epoch (an independent chain from genesis) using the exact
+        //     material that was hashed, so GET /audit/verify still passes after a restart. Rows without an epoch predate
+        //     this storage format: they stay in the table as immutable history but cannot be re-verified.
         List<Map<String, Object>> auditRows = postgreSqlDataService.queryAll("audit_records");
+        String liveEpoch = null;
+        for (Map<String, Object> r : auditRows) {
+            if (r.get("ledger_epoch") != null) liveEpoch = String.valueOf(r.get("ledger_epoch")); // rows are ordered by insertion
+        }
         List<ImmutableAuditLedger.AuditRecord> recs = new ArrayList<>();
         for (Map<String, Object> r : auditRows) {
-            int seq = r.get("seq_no") instanceof Number n ? n.intValue() : recs.size() + 1;
-            String evtId = String.valueOf(r.get("event_id"));
-            String orgId = String.valueOf(r.get("organization_id"));
-            String corrId = String.valueOf(r.get("correlation_id"));
-            String entType = String.valueOf(r.get("entity_type"));
-            String entId = String.valueOf(r.get("entity_id"));
-            String action = String.valueOf(r.get("action"));
-            String actUser = String.valueOf(r.get("actor_user_id"));
-            String actRole = String.valueOf(r.get("actor_role"));
-            int gwStatus = 200;
-            String bJson = r.get("before_state") != null ? String.valueOf(r.get("before_state")) : "{}";
-            String aJson = r.get("after_state") != null ? String.valueOf(r.get("after_state")) : "{}";
-            Map<String, Object> bMap = org.openagrios.core.dataservices.JsonCodec.parseObject(bJson);
-            Map<String, Object> aMap = org.openagrios.core.dataservices.JsonCodec.parseObject(aJson);
-            String prevH = String.valueOf(r.get("prev_hash"));
-            String recH = String.valueOf(r.get("record_hash"));
-            String created = String.valueOf(r.get("created_at"));
-            recs.add(new ImmutableAuditLedger.AuditRecord(seq, evtId, orgId, corrId, entType, entId, action, actUser, actRole, gwStatus, bMap, aMap, bJson, aJson, prevH, recH, created));
+            if (liveEpoch == null || !liveEpoch.equals(String.valueOf(r.get("ledger_epoch")))) continue;
+            int seq = r.get("ledger_seq") instanceof Number n ? n.intValue() : recs.size() + 1;
+            String bJson = r.get("before_canonical") != null ? String.valueOf(r.get("before_canonical")) : "{}";
+            String aJson = r.get("after_canonical") != null ? String.valueOf(r.get("after_canonical")) : "{}";
+            recs.add(new ImmutableAuditLedger.AuditRecord(
+                    seq,
+                    String.valueOf(r.get("event_id")),
+                    String.valueOf(r.get("organization_id")),
+                    String.valueOf(r.get("correlation_id")),
+                    String.valueOf(r.get("entity_type")),
+                    String.valueOf(r.get("entity_id")),
+                    String.valueOf(r.get("action")),
+                    String.valueOf(r.get("actor_user_id")),
+                    String.valueOf(r.get("actor_role")),
+                    r.get("gateway_status") instanceof Number g ? g.intValue() : 200,
+                    org.openagrios.core.dataservices.JsonCodec.parseObject(bJson),
+                    org.openagrios.core.dataservices.JsonCodec.parseObject(aJson),
+                    bJson, aJson,
+                    String.valueOf(r.get("prev_hash")),
+                    String.valueOf(r.get("record_hash")),
+                    r.get("ledger_ts") != null ? String.valueOf(r.get("ledger_ts")) : String.valueOf(r.get("created_at"))
+            ));
         }
-        auditLedger.rehydrateLedger(recs);
+        recs.sort(java.util.Comparator.comparingInt(ImmutableAuditLedger.AuditRecord::seqNo));
+        auditLedger.rehydrateLedger(recs, liveEpoch);
 
         return true;
     }

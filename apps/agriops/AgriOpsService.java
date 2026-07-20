@@ -990,13 +990,16 @@ public final class AgriOpsService {
             if (m.machineId.equals(impactedAsg.machineId)) continue;
             if ("BREAKDOWN".equals(m.status) || "MAINTENANCE".equals(m.status)) continue;
 
-            OperatorProfile op = orgOps.get(0);
+            // The rescuer is the machine's own registered operator. Never guess: falling back to "the first operator"
+            // used to pick the broken machine's driver and produced overlapping shifts.
+            OperatorProfile op = null;
             for (OperatorProfile o : orgOps) {
                 if (o.operatorId().equals(m.assignedOperatorId)) {
                     op = o;
                     break;
                 }
             }
+            if (op == null) continue;
 
             Map<String, Object> conflict = ScheduleConflictEngine.checkConflict(
                     orgId, m.machineId, m.status, true,

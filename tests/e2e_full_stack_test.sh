@@ -542,5 +542,115 @@ else
     exit 1
 fi
 
+# Assertion 13: incident -> rescue replan on real PostgreSQL (regression for machines losing their operator link)
+echo "Verifying incident -> rescue replan persistence on PostgreSQL..."
+psql_q() { docker compose -f compose.yaml exec -T postgres psql -U openagrios -d openagrios_db -At -c "$1" | tr -d '\r'; }
+api() { # method path [json]
+    curl -s -X "$1" "http://localhost:9080/api/v1$2" -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"}
+}
+json() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null; }
+
+api POST /sim/reset '{}' >/dev/null
+STALE=$(psql_q "SELECT (SELECT count(*) FROM incidents) + (SELECT count(*) FROM assignments WHERE assignment_id LIKE '%-R1');")
+if [ "$STALE" != "0" ]; then
+    echo "[FAIL] Assertion 13: simulator reset left $STALE stale incident/replacement rows in PostgreSQL (they would resurrect on restart)."
+    exit 1
+fi
+echo "    [OK] Simulator reset removed all incident/replacement rows from PostgreSQL."
+OP_OF_M02=$(psql_q "SELECT assigned_operator_id FROM machines WHERE machine_id='M02';")
+if [ "$OP_OF_M02" != "OP-02" ]; then
+    echo "[FAIL] Assertion 13: machine M02 lost its registered operator in PostgreSQL (assigned_operator_id='$OP_OF_M02', expected OP-02)."
+    exit 1
+fi
+echo "    [OK] machines.assigned_operator_id is persisted (M02 -> OP-02)."
+
+INC_JSON=$(api POST /incidents '{"machine_id":"M01","severity":"CRITICAL","incident_type":"Dong co qua nong","description":"e2e","estimated_downtime_hours":24,"evidence_filename":"e2e.jpg"}')
+INC_ID=$(echo "$INC_JSON" | json "d['incident_id']")
+OPT_ID=$(echo "$INC_JSON" | json "d['candidate_options'][0]['option_id']")
+OPT_OP=$(echo "$INC_JSON" | json "d['candidate_options'][0]['operator_id']")
+if [ -z "$INC_ID" ] || [ "$OPT_OP" != "OP-02" ]; then
+    echo "Incident response: $INC_JSON"
+    echo "[FAIL] Assertion 13: incident not created, or top rescue option does not use M02's own operator OP-02 (got '$OPT_OP')."
+    exit 1
+fi
+APPROVE_JSON=$(api POST "/incidents/$INC_ID/approve-replan" "{\"option_id\":\"$OPT_ID\"}")
+NEW_ASG=$(echo "$APPROVE_JSON" | json "d['new_assignment_id']")
+if [ -z "$NEW_ASG" ]; then
+    echo "Approve response: $APPROVE_JSON"
+    echo "[FAIL] Assertion 13: rescue replan was not approved/persisted."
+    exit 1
+fi
+NEW_ROW=$(psql_q "SELECT machine_id||'/'||operator_id||'/'||status FROM assignments WHERE assignment_id='$NEW_ASG';")
+OLD_STATUS=$(psql_q "SELECT status FROM assignments WHERE assignment_id='ASG-102';")
+if [ "$NEW_ROW" != "M02/OP-02/CONFIRMED" ] || [ "$OLD_STATUS" != "SUPERSEDED" ]; then
+    echo "[FAIL] Assertion 13: PostgreSQL rows wrong (new=$NEW_ROW expected M02/OP-02/CONFIRMED, old ASG-102=$OLD_STATUS expected SUPERSEDED)."
+    exit 1
+fi
+CHAIN_OK=$(api GET /audit/verify | json "d['chain_valid']")
+api POST /sim/reset '{}' >/dev/null   # leave the persistent volume in the clean seeded state
+if [ "$CHAIN_OK" != "True" ]; then
+    echo "[FAIL] Assertion 13: audit hash chain invalid after the replan."
+    exit 1
+fi
+echo "[PASS] Assertion 13: Incident -> rescue replan persisted on PostgreSQL ($NEW_ASG = M02/OP-02, ASG-102 SUPERSEDED, audit chain valid)."
+
+# Assertion 14: the audit hash chain stays verifiable across Core API restarts and simulator resets
+echo "Verifying audit chain integrity across restarts and resets..."
+restart_core() {
+    docker compose -f compose.yaml restart core-api >/dev/null 2>&1
+    for i in {1..40}; do
+        if curl -sf http://localhost:9080/api/v1/health >/dev/null 2>&1; then return 0; fi
+        sleep 3
+    done
+    return 1
+}
+audit_proof() { api GET /audit/verify; }
+new_request() {
+    api POST /requests "{\"field_id\":\"F01\",\"requested_start\":\"2026-12-01T08:00:00Z\",\"requested_end\":\"2026-12-01T12:00:00Z\",\"priority\":\"NORMAL\",\"notes\":\"audit-restart-check\"}" >/dev/null
+}
+
+new_request
+BEFORE=$(audit_proof)
+B_VALID=$(echo "$BEFORE" | json "d['chain_valid']")
+B_BLOCKS=$(echo "$BEFORE" | json "d['total_blocks']")
+B_HASH=$(echo "$BEFORE" | json "d['latest_hash']")
+restart_core || { echo "[FAIL] Assertion 14: Core API did not come back after restart."; exit 1; }
+AFTER=$(audit_proof)
+A_VALID=$(echo "$AFTER" | json "d['chain_valid']")
+A_BLOCKS=$(echo "$AFTER" | json "d['total_blocks']")
+A_HASH=$(echo "$AFTER" | json "d['latest_hash']")
+if [ "$B_VALID" != "True" ] || [ "$A_VALID" != "True" ] || [ "$B_BLOCKS" != "$A_BLOCKS" ] || [ "$B_HASH" != "$A_HASH" ]; then
+    echo "before: $BEFORE"
+    echo "after : $AFTER"
+    echo "[FAIL] Assertion 14: chain not identical/valid after a Core API restart."
+    exit 1
+fi
+echo "    [OK] Chain of $A_BLOCKS blocks verified before and after a Core API restart (same latest hash)."
+
+# a simulator reset starts a NEW epoch (events restart at EVT-2026-0001): nothing may be silently dropped
+api POST /sim/reset '{}' >/dev/null
+new_request
+R_PROOF=$(audit_proof)
+R_BLOCKS=$(echo "$R_PROOF" | json "d['total_blocks']")
+PERSISTED=$(psql_q "SELECT count(*) FROM audit_records WHERE ledger_epoch = (SELECT ledger_epoch FROM audit_records WHERE ledger_epoch IS NOT NULL ORDER BY seq_no DESC LIMIT 1);")
+if [ "$PERSISTED" != "$R_BLOCKS" ]; then
+    echo "[FAIL] Assertion 14: in-memory chain has $R_BLOCKS blocks but PostgreSQL stored $PERSISTED for the current epoch (records were dropped)."
+    exit 1
+fi
+restart_core || { echo "[FAIL] Assertion 14: Core API did not come back after the second restart."; exit 1; }
+R_AFTER=$(audit_proof)
+if [ "$(echo "$R_AFTER" | json "d['chain_valid']")" != "True" ] || [ "$(echo "$R_AFTER" | json "d['total_blocks']")" != "$R_BLOCKS" ]; then
+    echo "after : $R_AFTER"
+    echo "[FAIL] Assertion 14: chain invalid or truncated after reset + restart."
+    exit 1
+fi
+EPOCHS=$(psql_q "SELECT count(DISTINCT ledger_epoch) FROM audit_records WHERE ledger_epoch IS NOT NULL;")
+if [ "${EPOCHS:-0}" -lt 2 ]; then
+    echo "[FAIL] Assertion 14: expected at least 2 ledger epochs in PostgreSQL after a reset, found $EPOCHS."
+    exit 1
+fi
+api POST /sim/reset '{}' >/dev/null
+echo "[PASS] Assertion 14: Audit chain verifiable after restarts and resets (epochs in DB: $EPOCHS; every record of the live epoch persisted)."
+
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"
