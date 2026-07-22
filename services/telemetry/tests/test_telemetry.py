@@ -289,6 +289,33 @@ class SimulatorTests(unittest.TestCase):
         self.assertEqual("tok", core.requests[0]["token"])
         self.assertEqual("/api/v1/internal/fleet", core.requests[0]["path"])
 
+    def test_advance_moves_along_the_heading_at_the_expected_distance(self):
+        m = {"lat": 10.0, "lon": 105.0, "heading": 0.0, "fuel_pct": 50.0}
+        speed = simulator.advance(m, interval_s=2, timelapse=1, turn_deg=0)
+        self.assertEqual(simulator.WORKING_SPEED_KMH, speed)
+        # 6 km/h for 2 s = 3.33 m due north
+        self.assertAlmostEqual(3.33, simulator.metres_between(10.0, 105.0, m["lat"], m["lon"]), delta=0.05)
+        self.assertAlmostEqual(105.0, m["lon"], places=9)
+        self.assertLess(m["fuel_pct"], 50.0)
+
+    def test_timelapse_multiplies_distance_but_caps_the_reported_speed(self):
+        slow = {"lat": 10.0, "lon": 105.0, "heading": 90.0, "fuel_pct": 50.0}
+        fast = dict(slow)
+        simulator.advance(slow, 2, 1, 0)
+        reported = simulator.advance(fast, 2, 12, 0)
+        d_slow = simulator.metres_between(10.0, 105.0, slow["lat"], slow["lon"])
+        d_fast = simulator.metres_between(10.0, 105.0, fast["lat"], fast["lon"])
+        self.assertAlmostEqual(12.0, d_fast / d_slow, delta=0.05)
+        self.assertEqual(72.0, reported)
+        self.assertEqual(simulator.MAX_REPORTED_SPEED_KMH, simulator.advance(dict(slow), 2, 50, 0),
+                         "the core rejects speeds above 80 km/h, so the report is capped")
+
+    def test_fuel_never_drops_below_the_floor(self):
+        m = {"lat": 10.0, "lon": 105.0, "heading": 0.0, "fuel_pct": 5.01}
+        for _ in range(10):
+            simulator.advance(m, 2, 1, 0)
+        self.assertEqual(5.0, m["fuel_pct"])
+
     def test_simulator_fails_fast_without_credentials(self):
         saved = (simulator.INGEST_TOKEN, simulator.MQTT_USER, simulator.MQTT_PASSWORD)
         try:

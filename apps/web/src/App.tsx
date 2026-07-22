@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 OpenAgriOS Contributors
 
-import React, { Suspense, lazy, useEffect, useState, useCallback } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from './context/useAuth';
 import { api } from './services/api';
 import type { TacticalState, CandidateRescueOption } from './types';
@@ -22,6 +22,8 @@ import { RefreshCw, AlertCircle } from 'lucide-react';
 import { WelcomeBanner } from './components/common/WelcomeBanner';
 import { DemoGuide } from './components/common/DemoGuide';
 import { DEMO_MODE } from './demo/demoScript';
+import { useLiveFleet, mergeLive } from './hooks/useLiveFleet';
+import { IncidentScenario } from './components/demo/IncidentScenario';
 
 type Tab = 'HOME' | 'MAP' | 'PROCESS' | 'RESCUE';
 
@@ -30,6 +32,8 @@ export const App: React.FC = () => {
   const { user, token, isAuthenticated, logout, loginWithCredentials } = useAuth();
 
   const [state, setState] = useState<TacticalState | null>(null);
+  const { live, trails, info: liveInfo } = useLiveFleet(token, user?.role);
+  const mapMachines = useMemo(() => (state ? mergeLive(state.machines, live) : []), [state, live]);
   const [stateUpdatedAt, setStateUpdatedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,10 +247,12 @@ export const App: React.FC = () => {
     <Suspense fallback={<div className="grid h-80 place-items-center rounded-3xl bg-slate-100 text-lg text-slate-600">Đang tải bản đồ…</div>}>
       <TacticalMap
         fields={state.fields}
-        machines={state.machines}
+        machines={mapMachines}
         assignments={state.assignments}
         rescueCandidate={topRescueCandidate}
         userRole={user.role}
+        trails={trails}
+        live={liveInfo}
       />
     </Suspense>
   );
@@ -395,7 +401,14 @@ export const App: React.FC = () => {
           </>
         )}
 
-        {state && activeTab === 'MAP' && mapEl}
+        {state && activeTab === 'MAP' && (
+          <div className={DEMO_MODE && user.role === 'COORDINATOR' && token ? 'grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]' : ''}>
+            <div className="min-w-0">{mapEl}</div>
+            {DEMO_MODE && user.role === 'COORDINATOR' && token && (
+              <IncidentScenario token={token} state={state} onRefresh={loadTacticalState} />
+            )}
+          </div>
+        )}
 
         {state && activeTab === 'PROCESS' && (
           <ProcessCommandCard

@@ -299,6 +299,8 @@ services:
       MQTT_PASSWORD: ${MQTT_DEVICE_PASSWORD:-device_dev_only}
       CORE_URL: http://core-api:8000
       INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+      # Demo time-lapse (1 = real speed): makes harvesters visibly move on the map
+      SIM_TIMELAPSE: ${SIM_TIMELAPSE:-12}
     depends_on:
       mosquitto:
         condition: service_healthy
