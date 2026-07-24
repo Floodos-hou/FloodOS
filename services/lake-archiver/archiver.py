@@ -13,6 +13,7 @@ re-delivers the batch. Queries de-duplicate on (ledger_epoch, event_id), which m
 """
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -36,6 +37,10 @@ GROUP = os.environ.get("LAKE_CONSUMER_GROUP", "openagrios-lake-archiver")
 BATCH_MAX = int(os.environ.get("LAKE_BATCH_MAX", "200"))
 FLUSH_SECONDS = float(os.environ.get("LAKE_FLUSH_SECONDS", "5"))
 PORT = int(os.environ.get("PORT", "8090"))
+# Compaction: merge the many small per-flush files of a day partition into one (the lake is append-only otherwise)
+COMPACT_MIN_FILES = int(os.environ.get("LAKE_COMPACT_MIN_FILES", "20"))
+COMPACT_MIN_AGE_S = float(os.environ.get("LAKE_COMPACT_MIN_AGE_S", "120"))
+COMPACT_EVERY_S = float(os.environ.get("LAKE_COMPACT_EVERY_S", "300"))
 
 TOPIC_AUDIT = "openagrios.audit.v1"
 TOPIC_TELEMETRY = "openagrios.telemetry.v1"
@@ -49,7 +54,8 @@ AUDIT_COLUMNS = [
     ("entity_id", "VARCHAR"), ("action", "VARCHAR"), ("actor_user_id", "VARCHAR"),
     ("actor_role", "VARCHAR"), ("gateway_status", "INTEGER"), ("before_state", "VARCHAR"),
     ("after_state", "VARCHAR"), ("prev_hash", "VARCHAR"), ("record_hash", "VARCHAR"),
-    ("created_at", "TIMESTAMP"), ("ingested_at", "TIMESTAMP"),
+    ("created_at", "TIMESTAMP"), ("before_canonical", "VARCHAR"), ("after_canonical", "VARCHAR"),
+    ("ingested_at", "TIMESTAMP"),
 ]
 TELEMETRY_COLUMNS = [
     ("machine_id", "VARCHAR"), ("organization_id", "VARCHAR"), ("ts", "TIMESTAMP"),
@@ -66,6 +72,8 @@ state = {
     "consumer": "starting",
     "rows_archived": {"audit": 0, "telemetry": 0},
     "files_written": 0,
+    "files_compacted": 0,
+    "commit_failures": 0,
     "rejected_events": 0,
     "last_flush_at": "",
     "last_error": "",
@@ -87,7 +95,17 @@ def set_error(msg):
 root = duckdb.connect(":memory:")
 
 
+_ext_lock = threading.Lock()
+
+
 def configure_s3(con):
+    """Per-connection S3 settings. Extension loading is database-wide and NOT thread safe: two threads loading httpfs
+    at once fail with "already registered secret type 's3'", so the whole step is serialised."""
+    with _ext_lock:
+        _configure_s3_locked(con)
+
+
+def _configure_s3_locked(con):
     con.execute("LOAD httpfs")
     con.execute(f"SET s3_endpoint='{S3_ENDPOINT}'")
     con.execute("SET s3_use_ssl=false")
@@ -153,7 +171,7 @@ class Consumer:
     def commit(self, offsets):
         parts = [{"topic": t, "partition": p, "offset": o} for (t, p), o in offsets.items()]
         if parts:
-            bus("POST", f"/consumers/{GROUP}/instances/{self.instance}/offsets", {"partitions": parts})
+            bus("POST", f"/consumers/{GROUP}/instances/{self.instance}/offsets", {"offsets": parts})
 
 
 # --------------------------------------------------------------------------- Parquet writing
@@ -169,7 +187,8 @@ def audit_row(v, now):
         v.get("correlation_id"), v.get("entity_type"), v.get("entity_id"), v.get("action"),
         v.get("actor_user_id"), v.get("actor_role"), v.get("gateway_status"),
         json.dumps(v.get("before_state", {}), sort_keys=True), json.dumps(v.get("after_state", {}), sort_keys=True),
-        v.get("prev_hash"), v.get("record_hash"), parse_ts(v.get("created_at")), now,
+        v.get("prev_hash"), v.get("record_hash"), parse_ts(v.get("created_at")),
+        v.get("before_canonical"), v.get("after_canonical"), now,
     )
 
 
@@ -201,8 +220,8 @@ def write_parquet(con, table, rows):
     return key
 
 
-def flush(con, consumer, pending, offsets):
-    """Write every pending table to Parquet, then commit offsets (at-least-once)."""
+def write_pending(con, pending):
+    """Write every pending table to Parquet (durable on return). Raises if any write fails: nothing is lost."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for table, values in pending.items():
         if not values:
@@ -224,40 +243,76 @@ def flush(con, consumer, pending, offsets):
         if rejected:
             with state_lock:
                 state["rejected_events"] += rejected
-    consumer.commit(offsets)
     with state_lock:
         state["last_flush_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def flush(con, consumer, pending, offsets):
+    """Write every pending table to Parquet, then commit offsets (at-least-once)."""
+    write_pending(con, pending)
+    consumer.commit(offsets)
+    with state_lock:
         state["last_error"] = ""
+
+
+class Pump:
+    """One consume -> write -> commit cycle at a time (consume_loop drives it; tests drive it with a fake consumer).
+
+    Invariants: a batch is written exactly once; a failed commit is retried later WITHOUT re-writing the batch
+    (the data is already durable and queries de-duplicate anyway); a failed write keeps the batch for the next try.
+    """
+
+    def __init__(self, con, consumer):
+        self.con = con
+        self.consumer = consumer
+        self.pending = {t: [] for t in TABLES}
+        self.offsets = {}          # consumed but not yet written
+        self.unacked = {}          # written to the lake but not yet committed to the broker
+        self.last_flush = time.time()
+        self.topic_to_table = {topic: table for table, (topic, _) in TABLES.items()}
+
+    def step(self):
+        if not self.consumer.ready:
+            self.consumer.connect()
+        for rec in self.consumer.poll():
+            table = self.topic_to_table.get(rec.get("topic"))
+            if table and isinstance(rec.get("value"), dict):
+                self.pending[table].append(rec["value"])
+                key = (rec["topic"], rec["partition"])
+                self.offsets[key] = max(rec["offset"], self.offsets.get(key, -1))
+        total = sum(len(v) for v in self.pending.values())
+        if total and (total >= BATCH_MAX or time.time() - self.last_flush >= FLUSH_SECONDS):
+            write_pending(self.con, self.pending)          # raises -> pending kept and retried
+            self.pending = {t: [] for t in TABLES}
+            for key, off in self.offsets.items():
+                self.unacked[key] = max(off, self.unacked.get(key, -1))
+            self.offsets = {}
+            self.last_flush = time.time()
+        elif not total:
+            self.last_flush = time.time()
+        if self.unacked:
+            try:
+                self.consumer.commit(self.unacked)
+                self.unacked = {}
+                with state_lock:
+                    state["last_error"] = ""
+            except Exception as e:
+                with state_lock:
+                    state["commit_failures"] += 1
+                set_error(f"offset commit failed (will retry, batch NOT re-written): {type(e).__name__}: {e}")
 
 
 def consume_loop():
     con = root.cursor()
     configure_s3(con)
-    consumer = Consumer()
-    pending = {t: [] for t in TABLES}
-    offsets = {}
-    last_flush = time.time()
-    topic_to_table = {topic: table for table, (topic, _) in TABLES.items()}
+    pump = Pump(con, Consumer())
     while True:
         try:
-            if not consumer.ready:
-                consumer.connect()
-            for rec in consumer.poll():
-                table = topic_to_table.get(rec.get("topic"))
-                if table and isinstance(rec.get("value"), dict):
-                    pending[table].append(rec["value"])
-                    offsets[(rec["topic"], rec["partition"])] = rec["offset"]
-            total = sum(len(v) for v in pending.values())
-            if total and (total >= BATCH_MAX or time.time() - last_flush >= FLUSH_SECONDS):
-                flush(con, consumer, pending, offsets)
-                pending = {t: [] for t in TABLES}
-                offsets = {}
-                last_flush = time.time()
-            elif not total:
-                last_flush = time.time()
+            pump.step()
         except urllib.error.HTTPError as e:
-            if e.code == 404:  # consumer expired server-side: rejoin and replay uncommitted records
-                consumer = Consumer()
+            if e.code == 404:  # consumer expired server-side: rejoin; uncommitted records are replayed and de-duplicated
+                pump.consumer = Consumer()
+                pump.unacked = {}
                 with state_lock:
                     state["consumer"] = "rejoining"
             set_error(f"event bus HTTP {e.code}")
@@ -265,15 +320,119 @@ def consume_loop():
         except Exception as e:
             with state_lock:
                 state["consumer"] = "disconnected"
-            consumer.ready = False
+            pump.consumer.ready = False
             set_error(f"consume loop: {type(e).__name__}: {e}")
             time.sleep(3)
+
+
+# --------------------------------------------------------------------------- compaction of small files
+PART_RE = re.compile(r"(?:^|/)part-(\d+)-[0-9a-f]+\.parquet$")
+
+
+def list_keys(prefix):
+    """Object keys (relative to the lake root) under prefix, for either a local directory or the S3 bucket."""
+    if not LAKE_ROOT.startswith("s3://"):
+        base = os.path.join(LAKE_ROOT, prefix)
+        out = []
+        for dirpath, _, files in os.walk(base):
+            for f in files:
+                out.append(os.path.relpath(os.path.join(dirpath, f), LAKE_ROOT).replace(os.sep, "/"))
+        return sorted(out)
+    keys, marker = [], ""
+    while True:
+        q = urllib.parse.urlencode({"prefix": prefix, "marker": marker, "max-keys": 1000})
+        with urllib.request.urlopen(f"http://{S3_ENDPOINT}/{BUCKET}?{q}", timeout=20) as r:
+            body = r.read().decode()
+        page = re.findall(r"<Key>([^<]+)</Key>", body)
+        keys.extend(page)
+        if "<IsTruncated>true</IsTruncated>" not in body or not page:
+            return keys
+        marker = page[-1]
+
+
+def delete_key(key):
+    if not LAKE_ROOT.startswith("s3://"):
+        os.remove(os.path.join(LAKE_ROOT, key))
+        return
+    req = urllib.request.Request(f"http://{S3_ENDPOINT}/{BUCKET}/{key}", method="DELETE")
+    with urllib.request.urlopen(req, timeout=20):
+        pass
+
+
+DEDUPE_KEYS = {"audit": "ledger_epoch, event_id", "telemetry": "organization_id, machine_id, ts"}
+
+
+def compact_once(con, now=None):
+    """Merge old small files of each day partition into one compact file. Returns the number of files removed.
+
+    Safety order: write the merged file, check that it holds exactly the distinct rows of the sources, only then delete
+    the sources. Readers de-duplicate, so a query that sees both generations still returns correct results.
+    """
+    now = now if now is not None else time.time()
+    removed = 0
+    for table in TABLES:
+        by_partition = {}
+        for key in list_keys(f"{table}/"):
+            m = PART_RE.search(key)
+            if m and now - int(m.group(1)) / 1000.0 >= COMPACT_MIN_AGE_S:
+                by_partition.setdefault(key.rsplit("/", 1)[0], []).append(key)
+        for partition, keys in by_partition.items():
+            if len(keys) < COMPACT_MIN_FILES:
+                continue
+            sources = ", ".join(f"'{LAKE_ROOT}/{k}'" for k in keys)
+            dedupe = f"QUALIFY row_number() OVER (PARTITION BY {DEDUPE_KEYS[table]} ORDER BY ingested_at) = 1"
+            target = f"{partition}/compact-{int(now * 1000)}-{uuid.uuid4().hex[:6]}.parquet"
+            expected = con.execute(f"SELECT count(*) FROM (SELECT 1 FROM read_parquet([{sources}], union_by_name=true) {dedupe})").fetchone()[0]
+            if not LAKE_ROOT.startswith("s3://"):
+                os.makedirs(os.path.dirname(os.path.join(LAKE_ROOT, target)), exist_ok=True)
+            con.execute(f"COPY (SELECT * FROM read_parquet([{sources}], union_by_name=true) {dedupe}) "
+                        f"TO '{LAKE_ROOT}/{target}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+            written = con.execute(f"SELECT count(*) FROM read_parquet('{LAKE_ROOT}/{target}')").fetchone()[0]
+            if written != expected:
+                delete_key(target)
+                raise RuntimeError(f"compaction check failed for {partition}: wrote {written}, expected {expected}; sources kept")
+            for k in keys:
+                delete_key(k)
+            removed += len(keys)
+            with state_lock:
+                state["files_compacted"] += len(keys)
+            log(f"compacted {len(keys)} {table} file(s) in {partition} -> {target} ({written} row(s))")
+    return removed
+
+
+def supervised(name, fn, retry_s=5.0, max_restarts=None):
+    """Runs a worker forever. A worker that dies is reported (never silently) and restarted."""
+    restarts = 0
+    while True:
+        try:
+            fn()
+        except Exception as e:
+            with state_lock:
+                state["worker_restarts"] = state.get("worker_restarts", 0) + 1
+                if name == "consumer":
+                    state["consumer"] = "crashed"
+            set_error(f"{name} thread crashed, restarting in {retry_s}s: {type(e).__name__}: {e}")
+        restarts += 1
+        if max_restarts is not None and restarts >= max_restarts:
+            return
+        time.sleep(retry_s)
+
+
+def compaction_loop():
+    con = root.cursor()
+    configure_s3(con)
+    while True:
+        time.sleep(COMPACT_EVERY_S)
+        try:
+            compact_once(con)
+        except Exception as e:
+            set_error(f"compaction: {type(e).__name__}: {e}")
 
 
 # --------------------------------------------------------------------------- analytics (DuckDB over Parquet)
 def audit_view():
     return (
-        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/audit/*/*.parquet', hive_partitioning=true) "
+        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/audit/*/*.parquet', hive_partitioning=true, union_by_name=true) "
         "WHERE organization_id = ? "
         "QUALIFY row_number() OVER (PARTITION BY ledger_epoch, event_id ORDER BY ingested_at) = 1)"
     )
@@ -282,7 +441,8 @@ def audit_view():
 def telemetry_view():
     return (
         f"(SELECT * FROM read_parquet('{LAKE_ROOT}/telemetry/*/*.parquet', hive_partitioning=true) "
-        "WHERE organization_id = ?)"
+        "WHERE organization_id = ? "
+        "QUALIFY row_number() OVER (PARTITION BY machine_id, ts ORDER BY ingested_at) = 1)"
     )
 
 
@@ -295,6 +455,13 @@ def rows_as_dicts(cur):
 
 
 def run_query(name, org):
+    status, body = _run_query(name, org)
+    if status == 503 and body.get("error") == "lake_io_error":
+        status, body = _run_query(name, org)  # a compaction may have replaced a file between listing and reading
+    return status, body
+
+
+def _run_query(name, org):
     con = root.cursor()
     if LAKE_ROOT.startswith("s3://"):
         configure_s3(con)
@@ -382,6 +549,10 @@ class Handler(BaseHTTPRequestHandler):
                 f"openagrios_lake_files_written_total {snap['files_written']}",
                 "# TYPE openagrios_lake_rejected_events_total counter",
                 f"openagrios_lake_rejected_events_total {snap['rejected_events']}",
+                "# TYPE openagrios_lake_files_compacted_total counter",
+                f"openagrios_lake_files_compacted_total {snap['files_compacted']}",
+                "# TYPE openagrios_lake_commit_failures_total counter",
+                f"openagrios_lake_commit_failures_total {snap['commit_failures']}",
                 "# TYPE openagrios_lake_consumer_connected gauge",
                 f"openagrios_lake_consumer_connected {1 if snap['consumer'] == 'connected' else 0}",
             ]
@@ -408,7 +579,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ensure_bucket()
-    threading.Thread(target=consume_loop, name="consumer", daemon=True).start()
+    threading.Thread(target=supervised, args=("consumer", consume_loop), name="consumer", daemon=True).start()
+    threading.Thread(target=supervised, args=("compactor", compaction_loop), name="compactor", daemon=True).start()
     log(f"analytics API listening on :{PORT}")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
