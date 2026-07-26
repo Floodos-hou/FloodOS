@@ -175,6 +175,9 @@ public final class ImmutableAuditLedger {
             Map<String, Object> event = rec.toFullMap();
             event.put("event_type", "audit.v1");
             event.put("ledger_epoch", ledgerEpoch);
+            // exact hashed bytes: lets independent consumers (Tier-3 traceability) recompute the SHA-256 chain
+            event.put("before_canonical", beforeJson);
+            event.put("after_canonical", afterJson);
             eventBus.publish(EventBusPublisher.TOPIC_AUDIT, organizationId, event);
         }
 

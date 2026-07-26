@@ -80,6 +80,12 @@ services:
   lake-archiver:
     restart: always
 
+  traceability:
+    restart: always
+    environment:
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:?CRITICAL PUBLIC_BASE_URL must be the public HTTPS origin used in the QR codes}"
+      TRACE_DISCLAIMER: ""
+
   mosquitto:
     restart: always
     environment:
