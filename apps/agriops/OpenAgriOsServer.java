@@ -671,6 +671,7 @@ public final class OpenAgriOsServer {
 
                 coreServices.put("audit_ledger", "SHA-256 Immutable Hash-Chain (org.openagrios.core.dataservices)");
                 coreServices.put("event_bus", service.getStore().eventBus.status());
+                coreServices.put("malware_scanner", service.getStore().malwareScanner.status());
                 coreServices.put("cold_analytics_lake", service.getStore().analyticsLake.probe());
 
 
