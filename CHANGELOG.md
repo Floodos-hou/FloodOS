@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
 - **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
+### Live Map Visual Feedback
+- KPI strip above the map (working / broken / average fuel / harvest progress / active shifts) with animated counters and a pulsing card while a machine is broken.
+- Machine icons turn towards their direction of travel (compass bearing corrected for the map rotation; a parked machine never spins on GPS noise).
+- The rescue route is drawn with a glow and "marching ants" animation, and the destination field gets a pulsing ring.
+- A slide-in event feed reports status changes (breakdown, rescue proposal, rescuer moving/working, recovery); the first snapshot is a baseline, not news.
+- All of it honours `prefers-reduced-motion`. The pure logic (heading, KPIs, event detection) has 13 `node --test` tests and runs in `tests/run_unit_tests.sh`; the effects were verified in real Chrome (DOM probes + screenshots).
+
 ### Malware Gate (ClamAV) for Client Uploads
 - New `MalwareScanner` (pure-Java clamd `zINSTREAM` client, 64 KiB chunks, `zPING` liveness) and a `clamav` service. Evidence attached to an incident report is scanned **before** anything is stored: infected -> `422 MALWARE_DETECTED` (signature returned, `UPLOAD_BLOCKED_MALWARE` audited, no object, no incident); scanner unreachable/erroring -> `503 MALWARE_SCANNER_UNAVAILABLE` (**fail-closed**, audited); malformed base64 -> `400`; oversized (> 10 MiB) -> `413`.
 - Production: `OPENAGRIOS_MALWARE_SCAN=REQUIRED` makes the core refuse to start without `CLAMAV_HOST`. Standalone development without ClamAV runs with scanning explicitly `DISABLED` (visible in `/api/v1/health` under `malware_scanner`).

@@ -24,6 +24,7 @@ import { DemoGuide } from './components/common/DemoGuide';
 import { DEMO_MODE } from './demo/demoScript';
 import { useLiveFleet, mergeLive } from './hooks/useLiveFleet';
 import { IncidentScenario } from './components/demo/IncidentScenario';
+import { FleetKpiStrip } from './components/map/FleetKpiStrip';
 
 type Tab = 'HOME' | 'MAP' | 'PROCESS' | 'RESCUE';
 
@@ -403,7 +404,10 @@ export const App: React.FC = () => {
 
         {state && activeTab === 'MAP' && (
           <div className={DEMO_MODE && user.role === 'COORDINATOR' && token ? 'grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]' : ''}>
-            <div className="min-w-0">{mapEl}</div>
+            <div className="min-w-0">
+              <FleetKpiStrip machines={mapMachines} fields={state.fields} assignments={state.assignments} />
+              {mapEl}
+            </div>
             {DEMO_MODE && user.role === 'COORDINATOR' && token && (
               <IncidentScenario token={token} state={state} onRefresh={loadTacticalState} />
             )}

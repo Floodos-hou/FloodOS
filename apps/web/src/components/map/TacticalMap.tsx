@@ -6,6 +6,8 @@ import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, setW
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { LiveFleetPanel } from './LiveFleetPanel';
+import { MapEventTicker } from './MapEventTicker';
+import { nextHeading, screenRotation } from '../../utils/fleetInsights';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 setWorkerUrl(maplibreWorkerUrl);
 import type { FieldPlot, HarvesterMachine, DispatchAssignment, CandidateRescueOption } from '../../types';
@@ -267,9 +269,18 @@ interface MachineMarkerEntry {
   sig: string;
   machine: HarvesterMachine;
   raf: number;
+  /** Last position the heading was computed from (a machine only turns when it really moves). */
+  hd: { lat: number; lng: number; heading: number } | null;
 }
 
 const GLIDE_MS = 1_800;
+
+/** Turns the machine icon towards its direction of travel (screen-space, corrected for the map's rotation). */
+function orientMarker(entry: MachineMarkerEntry, lat: number, lng: number, mapBearing: number) {
+  entry.hd = nextHeading(entry.hd, lat, lng);
+  const body = entry.marker.getElement().querySelector<HTMLElement>('[data-machine-body]');
+  if (body) body.style.rotate = `${screenRotation(entry.hd.heading, mapBearing)}deg`;
+}
 
 /** Moves a marker to `target` with an ease-out glide; large jumps (zone switch, reset) snap instead. */
 function glideMarker(entry: MachineMarkerEntry, target: [number, number]) {
@@ -307,6 +318,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const markersRef = useRef<Marker[]>([]);
   const machineMarkersRef = useRef<Map<string, MachineMarkerEntry>>(new Map());
   const tagSigRef = useRef('');
+  const rescuePulseRef = useRef<Marker | null>(null);
   // True after MapLibre's 'load' event. isStyleLoaded() is NOT used as a guard: it stays false while raster tiles are
   // slow or unreachable (flaky venue Wi-Fi), which froze every live update.
   const mapReadyRef = useRef(false);
@@ -410,6 +422,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     // SVG 3D Isometric Tractor / Harvester
     const svgWrap = document.createElement('div');
     svgWrap.className = 'relative transition-transform transform group-hover:scale-125 filter drop-shadow-xl';
+    svgWrap.setAttribute('data-machine-body', '');
+    svgWrap.style.transition = 'rotate 800ms ease-out, scale 150ms';
 
     const primaryColor = m.machine_type === 'TRACTOR' ? '#dc2626' : (m.status === 'BREAKDOWN' ? '#ef4444' : '#ea580c');
     const accentColor = m.machine_type === 'TRACTOR' ? '#991b1b' : '#c2410c';
@@ -664,6 +678,21 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         }
       }
 
+      // Pulsing ring on the field the rescuer is heading to
+      const rescueFeature = vectorFeatures.find((f) => f.properties?.type === 'RESCUE_RADAR');
+      const rescueTarget: [number, number] | null = rescueFeature ? rescueFeature.geometry.coordinates[1] : null;
+      if (rescueTarget) {
+        if (!rescuePulseRef.current) {
+          const el = document.createElement('div');
+          el.className = 'rescue-pulse';
+          rescuePulseRef.current = new Marker({ element: el, anchor: 'center' }).setLngLat(rescueTarget).addTo(map);
+        } else {
+          rescuePulseRef.current.setLngLat(rescueTarget);
+        }
+      } else if (rescuePulseRef.current) {
+        rescuePulseRef.current.remove();
+        rescuePulseRef.current = null;
+      }
       const vectorsGeoJson: any = {
         type: 'FeatureCollection',
         features: vectorFeatures,
@@ -686,6 +715,23 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             'line-width': 4,
             'line-dasharray': [2, 1],
           },
+        });
+        const rescueOnly = ['==', ['get', 'type'], 'RESCUE_RADAR'] as any;
+        map.addLayer({
+          id: 'rescue-glow',
+          type: 'line',
+          source: 'vectors-source',
+          filter: rescueOnly,
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#34d399', 'line-width': 14, 'line-opacity': 0.35, 'line-blur': 6 },
+        });
+        map.addLayer({
+          id: 'rescue-line',
+          type: 'line',
+          source: 'vectors-source',
+          filter: rescueOnly,
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#059669', 'line-width': 5, 'line-dasharray': [0, 4, 3] },
         });
       }
 
@@ -790,6 +836,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const existing = entries.get(m.machine_id);
         if (existing && existing.sig === sig) {
           existing.machine = m;
+          orientMarker(existing, m.current_lat, m.current_lng, map.getBearing());
           glideMarker(existing, target);
           return;
         }
@@ -800,10 +847,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           start = [p.lng, p.lat];
           existing.marker.remove();
         }
-        const entry = { sig, machine: m, raf: 0 } as MachineMarkerEntry;
+        const entry = { sig, machine: m, raf: 0, hd: existing ? existing.hd : null } as MachineMarkerEntry;
         const el = create3DMachineMarker(m, () => entry.machine);
         entry.marker = new Marker({ element: el }).setLngLat(start).addTo(map);
         entries.set(m.machine_id, entry);
+        orientMarker(entry, m.current_lat, m.current_lng, map.getBearing());
         if (start !== target) glideMarker(entry, target);
       });
     },
@@ -901,6 +949,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         entry.marker.remove();
       });
       machineMarkersRef.current.clear();
+      rescuePulseRef.current?.remove();
+      rescuePulseRef.current = null;
       mapReadyRef.current = false;
       tagSigRef.current = '';
       mapRef.current?.remove();
@@ -925,6 +975,21 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       syncMachineMarkers(map);
     }
   }, [syncMachineMarkers, activeMachines]);
+
+  // Marching-ants animation of the rescue route (skipped for users who prefer reduced motion)
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const seq = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
+      [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
+    let step = 0;
+    const id = window.setInterval(() => {
+      const map = mapRef.current;
+      if (!map || !mapReadyRef.current || !map.getLayer('rescue-line')) return;
+      step = (step + 1) % seq.length;
+      map.setPaintProperty('rescue-line', 'line-dasharray', seq[step]);
+    }, 90);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Vector lines (machine -> field) must follow machines as they move
   useEffect(() => {
@@ -1108,6 +1173,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           <>
             <div ref={mapContainer} className="w-full h-full" />
             {activeZone === 'CAN_THO' && <LiveFleetPanel machines={activeMachines} live={live} onFocus={focusMachine} />}
+            {activeZone === 'CAN_THO' && <MapEventTicker machines={activeMachines} rescueCandidate={rescueCandidate} />}
           </>
         ) : (
           <div className="p-6 h-full overflow-y-auto bg-slate-50">

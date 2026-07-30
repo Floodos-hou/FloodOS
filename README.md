@@ -416,7 +416,8 @@ SKIP_PYTHON=1 bash tests/run_unit_tests.sh   # chỉ phần Java, không cần D
 
 | Tầng | Số ca | Phạm vi |
 |---|---|---|
-| Java — [`tests/unit/`](tests/unit/) | 150 | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
+| Java — [`tests/unit/`](tests/unit/) | 150 |
+| Web — [`apps/web/tests/`](apps/web/tests/fleetInsights.test.ts) (`npm test`) | 13 | Hướng chạy của máy (la bàn, bù góc xoay bản đồ, chống xoay do nhiễu GPS), KPI (bỏ ruộng bị Fog of War), phát hiện sự kiện từ thay đổi trạng thái | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
 | Python — [`services/lake-archiver/tests/`](services/lake-archiver/tests/) | 42 | **DuckDB + Parquet thật** trên thư mục tạm: khử trùng lặp, epoch, cách ly tenant, tham số hóa SQL, Haversine, *offset chỉ commit sau khi ghi xong*, sự kiện hỏng không làm kẹt lô |
 | Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 29 |
 | Python — [`apps/traceability/tests/`](apps/traceability/tests/test_traceability.py) (Tầng 3) | 34 | Công thức băm (vector vàng chung với Java), phát hiện sửa/xóa/đảo bản ghi, chọn epoch mới nhất, che danh tính, chống XSS, kiểm tra mã lô | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
@@ -436,6 +437,8 @@ docker compose --profile demo up -d --build     # profile `demo` bật thêm thi
 | Chấm **TRỰC TIẾP · MQTT**, danh sách máy, thanh nhiên liệu | Bản sao số NGSI-LD (`/api/v1/digital-twin/entities`, hỏi lại mỗi 2 giây) |
 | Marker máy **trượt mượt** tới vị trí mới, vệt di chuyển | Telemetry MQTT → `telemetry-ingestor` → core |
 | Nút **▶ Chạy kịch bản** (chỉ vai điều phối viên, chỉ build demo) | Gọi API thật: báo sự cố → chấm điểm máy thay → duyệt → máy thay xuất phát → kiểm chuỗi băm |
+| **Dải KPI** trên bản đồ (máy đang gặt, sự cố, nhiên liệu TB, tiến độ, ca đang chạy) | Tính từ trạng thái + bản sao số, số liệu đếm động; thẻ sự cố nhấp nháy đỏ |
+| **Máy xoay theo hướng đi**, đường cứu viện "kiến bò" có vầng sáng, vòng sóng tại ruộng đích, bảng sự kiện trượt vào | Từ chuyển động thật của bản sao số; tôn trọng `prefers-reduced-motion` |
 | **↺ Đặt lại dữ liệu** | `POST /api/v1/sim/reset` (xóa dữ liệu nghiệp vụ trong PostgreSQL rồi nạp lại dữ liệu mẫu) |
 
 Lưu ý trung thực: (1) thiết bị là **mô phỏng**, chạy time-lapse ×12 (`SIM_TIMELAPSE`) để chuyển động thấy được ở mức zoom 14; (2) nền bản đồ lấy tile OpenStreetMap nên cần Internet, mất mạng thì vẫn có nền xanh mặc định và dữ liệu trực tiếp vẫn cập nhật; (3) vùng “Hải Hậu (dữ liệu mẫu)” là dữ liệu cố định trong giao diện, không phải dữ liệu thật; (4) nông hộ và đội sửa chữa không thấy đội máy (Fog of War).

@@ -19,6 +19,13 @@ find core apps tests -name '*.java' > "$OUT/sources.txt"
 javac -encoding UTF-8 -d "$OUT/classes" @"$OUT/sources.txt"
 java -Dfile.encoding=UTF-8 -cp "$OUT/classes" org.openagrios.tests.unit.UnitTestRunner || status=1
 
+echo "=== [1b/2] Web logic tests (node --test) ==="
+if command -v node >/dev/null 2>&1; then
+    (cd apps/web && node --test "tests/*.test.ts") || status=1
+else
+    echo "node not found: web logic tests skipped"
+fi
+
 if [ "${SKIP_PYTHON:-0}" = "1" ]; then
     echo "=== [2/2] Python unit tests skipped (SKIP_PYTHON=1) ==="
     exit "$status"
