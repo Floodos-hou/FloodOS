@@ -22,6 +22,8 @@ java -Dfile.encoding=UTF-8 -cp "$OUT/classes" org.openagrios.tests.unit.UnitTest
 echo "=== [1b/2] Web logic tests (node --test) ==="
 if command -v node >/dev/null 2>&1; then
     (cd apps/web && node --test "tests/*.test.ts") || status=1
+    echo "=== [1c/2] Farm game logic tests (node --test) ==="
+    (cd apps/farm && node --test "tests/*.test.ts") || status=1
 else
     echo "node not found: web logic tests skipped"
 fi
