@@ -233,6 +233,33 @@ final class PureLogicTests {
             equal(List.of(104.998, 9.999), ring.get(0), "south-west corner as [lng, lat]");
             equal(List.of(105.002, 10.001), ring.get(2), "north-east corner as [lng, lat]");
         });
+        test("a polygon generated for a stated area really has that area (any latitude)", () -> {
+            for (double lat : new double[]{0, 10.07, 21.0, 45}) {
+                for (double ha : new double[]{0.5, 2.0, 2.4, 3.1, 12.0}) {
+                    double got = SpatialMatchingEngine.ringAreaHa(SpatialMatchingEngine.polygonForArea(lat, 105.5, ha).get(0));
+                    near(ha, got, ha * 0.01, "lat " + lat + " area " + ha);
+                }
+            }
+        });
+        test("generated polygons are closed rectangles centred on the field with the 1.3 aspect", () -> {
+            List<List<Double>> ring = SpatialMatchingEngine.polygonForArea(10.07, 105.57, 2.4).get(0);
+            equal(5, ring.size(), "5 vertices");
+            equal(ring.get(0), ring.get(4), "closed");
+            double cx = (ring.get(0).get(0) + ring.get(2).get(0)) / 2, cy = (ring.get(0).get(1) + ring.get(2).get(1)) / 2;
+            near(105.57, cx, 1e-5, "centre lng");
+            near(10.07, cy, 1e-5, "centre lat");
+            double w = (ring.get(1).get(0) - ring.get(0).get(0)) * 111_320 * Math.cos(Math.toRadians(10.07));
+            double h = (ring.get(2).get(1) - ring.get(1).get(1)) * 111_320;
+            near(1.3, w / h, 0.01, "aspect ratio");
+        });
+        test("ring area helper: shoelace is orientation independent and degenerate input is 0", () -> {
+            List<List<Double>> ring = SpatialMatchingEngine.polygonForArea(10, 105, 1.0).get(0);
+            List<List<Double>> reversed = new java.util.ArrayList<>(ring);
+            java.util.Collections.reverse(reversed);
+            near(SpatialMatchingEngine.ringAreaHa(ring), SpatialMatchingEngine.ringAreaHa(reversed), 1e-9, "orientation");
+            equal(0.0, SpatialMatchingEngine.ringAreaHa(null), "null");
+            equal(0.0, SpatialMatchingEngine.ringAreaHa(List.of()), "empty");
+        });
         test("score reproduces the documented rescue example (M02: 1.37 km, 0.72 ha/h, rating 4.95 -> 93.8)", () ->
                 equal(93.8, SpatialMatchingEngine.computeMultiCriteriaScore(1.37, 0.72, 4.95), "golden score"));
         test("score decreases monotonically with distance and floors the distance term at 10 km", () -> {
