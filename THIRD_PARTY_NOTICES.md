@@ -24,6 +24,9 @@ This document lists the third-party open-source components, libraries, and runti
 | **segno** | Michael Peterson 1.6 | Sinh mã QR (SVG) cho trang truy xuất nguồn gốc (Tầng 3) | **BSD-3-Clause** | Yes |
 | **ClamAV** | Cisco Talos 1.4 (image `clamav/clamav`) | Quét mã độc cho tệp client tải lên (cổng chặn fail-closed) | **GPL-2.0** | Yes |
 | **DuckDB** | DuckDB Foundation 1.1 | Truy vấn phân tích trên Parquet (kho lạnh) | **MIT** | Yes |
+| **three.js** | three.js authors 0.180 | Dựng cảnh 3D của bản sao số (`apps/twin3d`) | **MIT** | Yes |
+| **MapLibre GL JS** | MapLibre contributors 6.x | Bản đồ phẳng của ứng dụng Tầng 2 thứ hai (cùng thư viện với cổng điều hành) | **BSD-3-Clause** | Yes |
+| **OpenStreetMap tiles via EOX (data)** | © OpenStreetMap contributors (ODbL); tiles © EOX IT Services GmbH, https://tiles.maps.eox.at | Nền bản đồ tải lúc chạy từ trình duyệt (không đóng gói trong repo) | **ODbL (dữ liệu)** | Yes (cần ghi nguồn) |
 | **Python** | PSF 3.12 (image `python:3.12-slim`) | Runtime của dịch vụ `lake-archiver` | **PSF-2.0** | Yes |
 
 ---
