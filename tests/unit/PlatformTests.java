@@ -19,11 +19,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.openagrios.apps.agriops.AgriDataStore;
-import org.openagrios.apps.agriops.AgriModels.HarvesterMachine;
-import org.openagrios.apps.agriops.AgriOpsService;
-import org.openagrios.apps.agriops.AgriOpsService.HttpResult;
-import org.openagrios.apps.agriops.OpenAgriOsServer;
+import org.openagrios.apps.floodops.FloodDataStore;
+import org.openagrios.apps.floodops.FloodModels.DispatchOrder;
+import org.openagrios.apps.floodops.FloodModels.FloodReport;
+import org.openagrios.apps.floodops.FloodModels.FloodZone;
+import org.openagrios.apps.floodops.FloodModels.GaugeStation;
+import org.openagrios.apps.floodops.FloodModels.RescueVehicle;
+import org.openagrios.apps.floodops.FloodOpsServer;
+import org.openagrios.apps.floodops.FloodOpsService;
+import org.openagrios.apps.floodops.FloodOpsService.HttpResult;
+import org.openagrios.apps.floodops.FloodRepository;
+import org.openagrios.apps.floodops.FloodRoles;
 import org.openagrios.core.dataservices.AnalyticsLakeClient;
 import org.openagrios.core.dataservices.EventBusPublisher;
 import org.openagrios.core.dataservices.ImmutableAuditLedger;
@@ -278,258 +284,694 @@ final class PlatformTests {
         });
     }
 
-    // ------------------------------------------------------------------ AgriOpsService
-    private static AgriOpsService newService() {
-        File bpmn = new File(OpenAgriOsServer.resolveProjectRoot(), "infra/bpmn");
-        return new AgriOpsService(new AgriDataStore(new ImmutableAuditLedger(), new SeaweedS3StorageService(), new BpmnWorkflowEngine(bpmn)));
+    // ------------------------------------------------------------------ Hanoi FloodOps application rules
+    private static final String ORG1 = "ORG_HN_PILOT_01";
+    private static final String ORG2 = "ORG_HN_PILOT_02";
+
+    private static FloodOpsService newService() {
+        File bpmn = new File(FloodOpsServer.resolveProjectRoot(), "infra/bpmn");
+        return new FloodOpsService(new FloodDataStore(new ImmutableAuditLedger(), new SeaweedS3StorageService(), new BpmnWorkflowEngine(bpmn)));
     }
 
-    private static Map<String, Object> sample(String machine, String org, Object lat, Object lon, Object fuel, Object speed, Object ts) {
+    private static AuthContext ctx(String username, String org, String role) {
+        return new AuthContext("usr_" + username, username, org, role);
+    }
+
+    private static final AuthContext LAN = ctx("reporter_lan", ORG1, "REPORTER");
+    private static final AuthContext HUNG = ctx("reporter_hung", ORG1, "REPORTER");
+    private static final AuthContext HOA = ctx("dispatcher_hoa", ORG1, "DISPATCHER");
+    private static final AuthContext BINH = ctx("team_binh", ORG1, "FIELD_TEAM");
+    private static final AuthContext CUONG = ctx("team_cuong", ORG1, "FIELD_TEAM");
+    private static final AuthContext DUNG = ctx("team_dung", ORG1, "FIELD_TEAM");
+    private static final AuthContext GIANG = ctx("resource_giang", ORG1, "RESOURCE_MANAGER");
+    private static final AuthContext ADMIN = ctx("platform_admin", ORG1, "PLATFORM_ADMIN");
+    private static final AuthContext MAI = ctx("reporter_mai", ORG2, "REPORTER");
+    private static final AuthContext TUAN = ctx("dispatcher_tuan", ORG2, "DISPATCHER");
+
+    private static Map<String, Object> body(Object... kv) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("machine_id", machine);
+        for (int i = 0; i < kv.length; i += 2) m.put(String.valueOf(kv[i]), kv[i + 1]);
+        return m;
+    }
+
+    private static final String W1S = "2030-01-01T08:00:00Z", W1E = "2030-01-01T10:00:00Z";
+
+    private static Map<String, Object> reportBody(double lat, double lng, double depth, String need) {
+        return body("lat", lat, "lng", lng, "depth_cm", depth, "need_type", need, "people_affected", 4, "description", "unit test");
+    }
+
+    /** Files a report as `who`, verifies it as the dispatcher and returns its id. */
+    private static String verifiedReport(FloodOpsService s, AuthContext who, String need) {
+        HttpResult r = s.createFloodReport(who, reportBody(20.9665, 105.8712, 45, need));
+        equal(201, r.status(), "report created: " + r.body());
+        String id = String.valueOf(r.body().get("report_id"));
+        equal(200, s.verifyFloodReport(HOA, id, body("decision", "VERIFIED", "priority", "HIGH")).status(), "verified");
+        return id;
+    }
+
+    private static HttpResult dispatch(FloodOpsService s, String reportId, String vehicle, String team, String start, String end) {
+        return s.createDispatchOrder(HOA, body("report_id", reportId, "vehicle_id", vehicle, "team_id", team, "start_time", start, "end_time", end));
+    }
+
+    private static Map<String, Object> sample(String vehicle, String org, Object lat, Object lon, Object fuel, Object speed, Object ts, Object source) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("asset_kind", "vehicle");
+        m.put("asset_id", vehicle);
         m.put("organization_id", org);
         m.put("lat", lat);
         m.put("lon", lon);
         m.put("fuel_pct", fuel);
         if (speed != null) m.put("speed_kmh", speed);
         m.put("ts", ts);
+        m.put("source", source);
         return m;
     }
 
-    private static Map<String, Object> incidentBody(String machineId) {
-        Map<String, Object> b = new LinkedHashMap<>();
-        b.put("machine_id", machineId);
-        b.put("severity", "CRITICAL");
-        b.put("incident_type", "Động cơ quá nóng");
-        b.put("description", "unit test");
-        b.put("estimated_downtime_hours", 24);
-        b.put("evidence_filename", "evidence.jpg");
-        return b;
+    private static Map<String, Object> gaugeSample(String station, String org, Object level, Object ts, Object source) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("asset_kind", "gauge");
+        m.put("asset_id", station);
+        m.put("organization_id", org);
+        m.put("level_cm", level);
+        m.put("ts", ts);
+        m.put("source", source);
+        return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> ids(Object listOfMaps, String key) {
+        List<String> out = new ArrayList<>();
+        for (Map<String, Object> m : (List<Map<String, Object>>) listOfMaps) out.add(String.valueOf(m.get(key)));
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> stateIds(FloodOpsService s, AuthContext a, String section, String key) {
+        return ids(s.getState(a).get(section), key);
     }
 
     private static void applicationRules() {
-        suite("AgriOpsService - telemetry ingestion");
-        AgriOpsService svc = newService();
-        final String TS = "2026-11-20T10:00:00Z";
-        final String ORG = "HTX_CANTHO_01";
+        telemetryRules();
+        reportAndDispatchRules();
+        fieldAndConfirmationRules();
+        incidentRules();
+        visibilityRules();
+        seedRules();
+    }
 
-        test("unknown machine -> 404, foreign tenant -> 409 (machine existence is not leaked across tenants)", () -> {
-            equal(404, svc.ingestTelemetry(sample("NOPE", ORG, 10.0, 105.0, 50, 0, TS)).status(), "unknown");
-            equal(409, svc.ingestTelemetry(sample("M01", "HTX_SOCTRANG_02", 10.0, 105.0, 50, 0, TS)).status(), "tenant mismatch");
-            equal(409, svc.ingestTelemetry(sample("M01", "", 10.0, 105.0, 50, 0, TS)).status(), "blank tenant");
+    private static void telemetryRules() {
+        suite("FloodOpsService - telemetry ingestion (vehicles and gauges, source is mandatory)");
+        FloodOpsService svc = newService();
+        final String TS = "2026-11-20T10:00:00Z";
+
+        test("unknown vehicle -> 404, foreign tenant -> 409 (existence is not leaked across tenants)", () -> {
+            equal(404, svc.ingestTelemetry(sample("NOPE", ORG1, 20.9, 105.8, 50, 0, TS, "SIMULATOR")).status(), "unknown");
+            equal(409, svc.ingestTelemetry(sample("V01", ORG2, 20.9, 105.8, 50, 0, TS, "SIMULATOR")).status(), "tenant mismatch");
+            equal(409, svc.ingestTelemetry(sample("V01", "", 20.9, 105.8, 50, 0, TS, "SIMULATOR")).status(), "blank tenant");
+        });
+        test("a sample must say where it comes from: only SIMULATOR or DEVICE are accepted", () -> {
+            for (Object bad : new Object[]{null, "", "mqtt", "simulator", "OFFICIAL", 7}) {
+                equal(400, svc.ingestTelemetry(sample("V03", ORG1, 20.9, 105.8, 50, 0, TS, bad)).status(), "source=" + bad);
+            }
+            equal(200, svc.ingestTelemetry(sample("V03", ORG1, 20.9, 105.8, 50, 0, TS, "SIMULATOR")).status(), "SIMULATOR");
+            equal(200, svc.ingestTelemetry(sample("V03", ORG1, 20.9, 105.8, 50, 0, TS, "DEVICE")).status(), "DEVICE");
         });
         test("accepted range boundaries", () -> {
-            equal(200, svc.ingestTelemetry(sample("M03", ORG, 90.0, 180.0, 100, 80, TS)).status(), "upper bounds");
-            equal(200, svc.ingestTelemetry(sample("M03", ORG, -90.0, -180.0, 0, 0, TS)).status(), "lower bounds");
+            equal(200, svc.ingestTelemetry(sample("V03", ORG1, 90.0, 180.0, 100, 80, TS, "SIMULATOR")).status(), "upper bounds");
+            equal(200, svc.ingestTelemetry(sample("V03", ORG1, -90.0, -180.0, 0, 0, TS, "SIMULATOR")).status(), "lower bounds");
         });
         test("values just outside each range are rejected with 400", () -> {
             Object[][] bad = {
-                    {90.0001, 105.0, 50, 0}, {-90.0001, 105.0, 50, 0},
-                    {10.0, 180.0001, 50, 0}, {10.0, -180.0001, 50, 0},
-                    {10.0, 105.0, -0.1, 0}, {10.0, 105.0, 100.1, 0},
-                    {10.0, 105.0, 50, -1}, {10.0, 105.0, 50, 80.5},
+                    {90.0001, 105.0, 50, 0}, {-90.0001, 105.0, 50, 0}, {10.0, 180.0001, 50, 0}, {10.0, -180.0001, 50, 0},
+                    {10.0, 105.0, -0.1, 0}, {10.0, 105.0, 100.1, 0}, {10.0, 105.0, 50, -1}, {10.0, 105.0, 50, 80.5},
                     {Double.NaN, 105.0, 50, 0}, {Double.POSITIVE_INFINITY, 105.0, 50, 0},
                     {10.0, 105.0, Double.NaN, 0}, {10.0, 105.0, 50, Double.NaN},
             };
             for (Object[] b : bad) {
-                equal(400, svc.ingestTelemetry(sample("M03", ORG, b[0], b[1], b[2], b[3], TS)).status(),
+                equal(400, svc.ingestTelemetry(sample("V03", ORG1, b[0], b[1], b[2], b[3], TS, "SIMULATOR")).status(),
                         "lat=" + b[0] + " lon=" + b[1] + " fuel=" + b[2] + " speed=" + b[3]);
             }
         });
         test("wrong types and missing fields are rejected with 400", () -> {
-            equal(400, svc.ingestTelemetry(sample("M03", ORG, "10.0", 105.0, 50, 0, TS)).status(), "string lat");
-            equal(400, svc.ingestTelemetry(sample("M03", ORG, 10.0, 105.0, true, 0, TS)).status(), "boolean fuel");
-            equal(400, svc.ingestTelemetry(sample("M03", ORG, 10.0, 105.0, 50, "fast", TS)).status(), "string speed");
-            equal(400, svc.ingestTelemetry(sample("M03", ORG, 10.0, 105.0, 50, 0, "yesterday")).status(), "bad timestamp");
-            equal(400, svc.ingestTelemetry(sample("M03", ORG, 10.0, 105.0, 50, 0, null)).status(), "missing timestamp");
-            Map<String, Object> noLat = sample("M03", ORG, 10.0, 105.0, 50, 0, TS);
+            equal(400, svc.ingestTelemetry(sample("V03", ORG1, "10.0", 105.0, 50, 0, TS, "SIMULATOR")).status(), "string lat");
+            equal(400, svc.ingestTelemetry(sample("V03", ORG1, 10.0, 105.0, true, 0, TS, "SIMULATOR")).status(), "boolean fuel");
+            equal(400, svc.ingestTelemetry(sample("V03", ORG1, 10.0, 105.0, 50, "fast", TS, "SIMULATOR")).status(), "string speed");
+            equal(400, svc.ingestTelemetry(sample("V03", ORG1, 10.0, 105.0, 50, 0, "yesterday", "SIMULATOR")).status(), "bad timestamp");
+            equal(400, svc.ingestTelemetry(sample("V03", ORG1, 10.0, 105.0, 50, 0, null, "SIMULATOR")).status(), "missing timestamp");
+            Map<String, Object> noLat = sample("V03", ORG1, 10.0, 105.0, 50, 0, TS, "SIMULATOR");
             noLat.remove("lat");
             equal(400, svc.ingestTelemetry(noLat).status(), "missing lat");
+            Map<String, Object> badKind = sample("V03", ORG1, 10.0, 105.0, 50, 0, TS, "SIMULATOR");
+            badKind.put("asset_kind", "machine");
+            equal(400, svc.ingestTelemetry(badKind).status(), "unknown asset kind");
         });
-        test("speed is optional and defaults to 0", () ->
-                equal(200, svc.ingestTelemetry(sample("M03", ORG, 10.0, 105.0, 50, null, TS)).status(), "no speed"));
-        test("a rejected sample changes nothing; an accepted one updates position, fuel and timestamp only", () -> {
-            HarvesterMachine m = svc.getStore().machines.get("M02");
-            double lat0 = m.currentLat, lng0 = m.currentLng, fuel0 = m.fuelPct;
-            String status0 = m.status;
-            svc.ingestTelemetry(sample("M02", ORG, 999.0, 105.0, 50, 0, TS));
-            equal(lat0, m.currentLat, "rejected: lat unchanged");
-            equal(fuel0, m.fuelPct, "rejected: fuel unchanged");
-            svc.ingestTelemetry(sample("M02", ORG, 10.5, 105.9, 33.3, 4, TS));
-            equal(10.5, m.currentLat, "lat");
-            equal(105.9, m.currentLng, "lng");
-            equal(33.3, m.fuelPct, "fuel");
-            equal(TS, m.telemetryUpdatedAt, "timestamp");
-            equal(status0, m.status, "workflow-owned status is never changed by telemetry");
-            isFalse(lng0 == m.currentLng, "position really moved");
+        test("a rejected sample changes nothing; an accepted one updates position, fuel, time and source only", () -> {
+            RescueVehicle v = svc.getStore().vehicles.get("V02");
+            double lat0 = v.currentLat, fuel0 = v.fuelPct;
+            String status0 = v.status;
+            svc.ingestTelemetry(sample("V02", ORG1, 999.0, 105.0, 50, 0, TS, "SIMULATOR"));
+            equal(lat0, v.currentLat, "rejected: lat unchanged");
+            equal(fuel0, v.fuelPct, "rejected: fuel unchanged");
+            isTrue("SEED".equals(v.telemetrySource), "rejected: source unchanged");
+            svc.ingestTelemetry(sample("V02", ORG1, 20.95, 105.9, 33.3, 4, TS, "SIMULATOR"));
+            equal(20.95, v.currentLat, "lat");
+            equal(105.9, v.currentLng, "lng");
+            equal(33.3, v.fuelPct, "fuel");
+            equal(TS, v.telemetryUpdatedAt, "timestamp");
+            equal("SIMULATOR", v.telemetrySource, "the position is now labelled as simulated");
+            equal(status0, v.status, "workflow-owned status is never changed by telemetry");
+            equal(Boolean.TRUE, v.toMap().get("position_is_simulated"), "exposed as simulated");
+        });
+        test("a gauge reading updates the gauge and its zone, labelled with its source, and derives the risk level", () -> {
+            equal(200, svc.ingestTelemetry(gaugeSample("G01", ORG1, 125.0, TS, "SIMULATOR")).status(), "critical level");
+            GaugeStation g = svc.getStore().gauges.get("G01");
+            FloodZone z = svc.getStore().zones.get("Z01");
+            equal("CRITICAL", g.alertState(), "gauge alert");
+            equal("CRITICAL", z.riskLevel, "zone risk follows the gauge");
+            equal(125.0, z.waterLevelCm, "zone level");
+            equal("SIMULATOR", z.waterLevelSource, "zone level source");
+            equal(200, svc.ingestTelemetry(gaugeSample("G01", ORG1, 10.0, TS, "SIMULATOR")).status(), "low level");
+            equal("NORMAL", g.alertState(), "back to normal");
+            equal("NORMAL", z.riskLevel, "zone risk drops below the watch band");
+        });
+        test("gauge validation: range, tenant, unknown id, source", () -> {
+            equal(400, svc.ingestTelemetry(gaugeSample("G01", ORG1, -1.0, TS, "SIMULATOR")).status(), "negative");
+            equal(400, svc.ingestTelemetry(gaugeSample("G01", ORG1, 1000.1, TS, "SIMULATOR")).status(), "too high");
+            equal(400, svc.ingestTelemetry(gaugeSample("G01", ORG1, "60", TS, "SIMULATOR")).status(), "string level");
+            equal(409, svc.ingestTelemetry(gaugeSample("G01", ORG2, 60.0, TS, "SIMULATOR")).status(), "foreign tenant");
+            equal(404, svc.ingestTelemetry(gaugeSample("G99", ORG1, 60.0, TS, "SIMULATOR")).status(), "unknown gauge");
+            equal(400, svc.ingestTelemetry(gaugeSample("G01", ORG1, 60.0, TS, "official")).status(), "bad source");
         });
         test("telemetry is not written to the audit ledger (audit = business transitions only)", () -> {
             int before = (int) svc.getStore().auditLedger.verifyChainIntegrity().get("total_blocks");
-            svc.ingestTelemetry(sample("M01", ORG, 10.0645, 105.5586, 70, 5, TS));
+            svc.ingestTelemetry(sample("V01", ORG1, 20.9668, 105.8718, 70, 5, TS, "SIMULATOR"));
+            svc.ingestTelemetry(gaugeSample("G02", ORG1, 100.0, TS, "SIMULATOR"));
             equal(before, (int) svc.getStore().auditLedger.verifyChainIntegrity().get("total_blocks"), "ledger unchanged");
         });
-        test("fleet roster lists every machine with the fields the simulator needs", () -> {
+        test("asset roster lists vehicles and gauges with what the simulator needs; targets are straight-line zone centres", () -> {
             @SuppressWarnings("unchecked")
-            List<Map<String, Object>> fleet = (List<Map<String, Object>>) svc.listFleetForIngest().get("machines");
-            equal(svc.getStore().machines.size(), fleet.size(), "all machines");
-            for (String k : new String[]{"machine_id", "organization_id", "status", "lat", "lon", "fuel_pct"}) {
-                isTrue(fleet.get(0).containsKey(k), "field " + k);
+            List<Map<String, Object>> assets = (List<Map<String, Object>>) svc.listAssetsForIngest().get("assets");
+            equal(svc.getStore().vehicles.size() + svc.getStore().gauges.size(), assets.size(), "all assets");
+            Map<String, Object> v01 = assets.stream().filter(a -> "V01".equals(a.get("asset_id"))).findFirst().orElseThrow();
+            for (String k : new String[]{"asset_kind", "asset_id", "organization_id", "status", "lat", "lon", "fuel_pct", "target_lat", "target_lon"}) {
+                isTrue(v01.containsKey(k), "vehicle field " + k);
             }
+            equal(svc.getStore().zones.get("Z01").centerLat, v01.get("target_lat"), "V01 heads for the zone of its active order");
+            Map<String, Object> g01 = assets.stream().filter(a -> "G01".equals(a.get("asset_id"))).findFirst().orElseThrow();
+            for (String k : new String[]{"level_cm", "warn_level_cm", "critical_level_cm", "zone_id"}) isTrue(g01.containsKey(k), "gauge field " + k);
         });
+    }
 
-        suite("AgriOpsService - RBAC, tenancy and scheduling rules");
-        AgriOpsService s = newService();
-        AuthContext coord = new AuthContext("usr_coord_01", "coord_htx01", ORG, "COORDINATOR");
-        AuthContext coord2 = new AuthContext("usr_coord_02", "coord_htx02", "HTX_SOCTRANG_02", "COORDINATOR");
-        AuthContext farmerBa = new AuthContext("usr_farmer_ba", "farmer_ba", ORG, "FARMER");
-        AuthContext owner = new AuthContext("usr_owner_tu", "owner_tu", ORG, "MACHINE_OWNER");
-        AuthContext operator = new AuthContext("usr_op_minh", "op_minh", ORG, "OPERATOR");
-        AuthContext repair = new AuthContext("usr_repair_01", "repair_01", ORG, "REPAIR_TEAM");
+    private static void reportAndDispatchRules() {
+        suite("FloodOpsService - intake, verification and dispatch (RBAC, validation, conflicts)");
+        FloodOpsService s = newService();
 
-        test("a farmer can request service on their own field, and only there", () -> {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("field_id", "F01");
-            body.put("requested_start", "2026-12-01T08:00:00Z");
-            body.put("requested_end", "2026-12-01T12:00:00Z");
-            HttpResult ok = s.createServiceRequest(farmerBa, body);
-            equal(201, ok.status(), "own field (201 Created)");
-            body.put("field_id", "F02");
-            equal(403, s.createServiceRequest(farmerBa, body).status(), "neighbour's field (RLS owner check)");
+        test("a reporter files a report: the server picks the nearest zone and starts the workflow", () -> {
+            HttpResult r = s.createFloodReport(LAN, reportBody(20.9665, 105.8712, 45, "EVACUATION"));
+            equal(201, r.status(), "created");
+            equal("Z01", r.body().get("zone_id"), "nearest zone centre");
+            equal("NEAREST_ZONE_CENTER_STRAIGHT_LINE", r.body().get("zone_match"), "how the zone was chosen");
+            String id = String.valueOf(r.body().get("report_id"));
+            FloodReport rep = s.getStore().reports.get(id);
+            equal("RECEIVED", rep.status, "initial status");
+            equal("usr_reporter_lan", rep.reporterUserId, "owner is the caller");
+            isTrue(s.getStore().bpmnEngine.listByTenant(ORG1).stream()
+                    .anyMatch(p -> id.equals(p.get("business_key")) && "taskDispatcherVerify".equals(p.get("current_step_id"))), "workflow waits for verification");
         });
-        test("roles outside FARMER/COORDINATOR cannot create requests", () -> {
-            Map<String, Object> body = Map.of("field_id", "F01");
-            equal(403, s.createServiceRequest(operator, body).status(), "operator");
-            equal(403, s.createServiceRequest(repair, body).status(), "repair team");
-            equal(403, s.createServiceRequest(owner, body).status(), "machine owner");
+        test("a reporter cannot name a zone: zone_id is ignored and the position decides", () -> {
+            Map<String, Object> b = reportBody(20.9665, 105.8712, 45, "EVACUATION");
+            b.put("zone_id", "Z02");
+            equal("Z01", s.createFloodReport(LAN, b).body().get("zone_id"), "server-side matching");
         });
-        test("unknown fields and other tenants' fields are indistinguishable (404)", () -> {
-            equal(404, s.createServiceRequest(coord, Map.of("field_id", "F-NOPE")).status(), "unknown");
-            equal(404, s.createServiceRequest(coord, Map.of("field_id", "F_ST01")).status(), "other tenant's field");
+        test("a dispatcher may name the zone and the report is marked as taken by phone", () -> {
+            Map<String, Object> b = reportBody(20.9665, 105.8712, 45, "EVACUATION");
+            b.put("zone_id", "Z02");
+            HttpResult r = s.createFloodReport(HOA, b);
+            equal("Z02", r.body().get("zone_id"), "named zone");
+            equal("PHONE", s.getStore().reports.get(String.valueOf(r.body().get("report_id"))).channel, "channel");
+            b.put("zone_id", "Z91");
+            equal(404, s.createFloodReport(HOA, b).status(), "another tenant's zone does not exist for this dispatcher");
         });
-        test("dispatch is coordinator-only", () -> {
-            for (AuthContext a : List.of(farmerBa, owner, operator, repair)) {
-                equal(403, s.dispatchAssignment(a, Map.of("machine_id", "M01")).status(), a.role());
-            }
+        test("invalid reports are refused with a specific 400 (no silent defaults)", () -> {
+            equal(400, s.createFloodReport(LAN, reportBody(120, 105.8, 45, "EVACUATION")).status(), "latitude");
+            equal(400, s.createFloodReport(LAN, reportBody(20.9, 105.8, -1, "EVACUATION")).status(), "negative depth");
+            equal(400, s.createFloodReport(LAN, reportBody(20.9, 105.8, 5000, "EVACUATION")).status(), "absurd depth");
+            equal(400, s.createFloodReport(LAN, reportBody(20.9, 105.8, 45, "SOMETHING")).status(), "need type");
+            Map<String, Object> noDepth = reportBody(20.9, 105.8, 45, "EVACUATION");
+            noDepth.remove("depth_cm");
+            equal("INVALID_DEPTH", s.createFloodReport(LAN, noDepth).body().get("error"), "missing depth");
+            Map<String, Object> people = reportBody(20.9, 105.8, 45, "EVACUATION");
+            people.put("people_affected", 2.5);
+            equal(400, s.createFloodReport(LAN, people).status(), "fractional people");
         });
-        String reqId = s.getStore().serviceRequests.values().stream()
-                .filter(r -> ORG.equals(r.organizationId)).findFirst().orElseThrow().requestId;
-        test("dispatch rejects unknown requests (404) and hides other tenants' machines (409 MACHINE_NOT_FOUND)", () -> {
-            equal(404, s.dispatchAssignment(coord, Map.of("request_id", "REQ-NOPE", "machine_id", "M01")).status(), "unknown request");
-            HttpResult r = s.dispatchAssignment(coord, Map.of("request_id", reqId, "machine_id", "M_ST01", "operator_id", "OP-01"));
-            equal(409, r.status(), "status");
-            equal("MACHINE_NOT_FOUND", r.body().get("error"), "tenant-hidden machine");
+        test("a position far from every monitored zone is refused, not assigned to a random zone", () -> {
+            HttpResult r = s.createFloodReport(LAN, reportBody(21.2, 105.5, 45, "EVACUATION"));
+            equal(422, r.status(), "outside");
+            equal("OUTSIDE_MONITORED_AREA", r.body().get("error"), "code");
         });
-        test("dispatch refuses a machine under maintenance", () -> {
-            HttpResult r = s.dispatchAssignment(coord, Map.of("request_id", reqId, "machine_id", "M04", "operator_id", "OP-04"));
-            equal(409, r.status(), "status");
-            equal("MACHINE_UNAVAILABLE", r.body().get("error"), "code");
-        });
-        test("every blocked action leaves an audit trail", () -> {
+        test("roles outside the allow-list cannot file reports (403) and the attempt is audited", () -> {
             int before = (int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks");
-            s.dispatchAssignment(farmerBa, Map.of("machine_id", "M01"));
-            isTrue((int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks") > before, "RBAC denial audited");
-            equal(Boolean.TRUE, s.getStore().auditLedger.verifyChainIntegrity().get("chain_valid"), "chain still valid");
+            equal(403, s.createFloodReport(BINH, reportBody(20.9665, 105.8712, 45, "EVACUATION")).status(), "field team");
+            equal(403, s.createFloodReport(GIANG, reportBody(20.9665, 105.8712, 45, "EVACUATION")).status(), "resource manager");
+            equal(403, s.createFloodReport(ADMIN, reportBody(20.9665, 105.8712, 45, "EVACUATION")).status(), "platform admin has no business actions");
+            equal(before + 3, (int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks"), "three RBAC_BLOCKED records");
         });
+        test("only a dispatcher verifies; tenant and state are enforced", () -> {
+            String id = String.valueOf(s.createFloodReport(LAN, reportBody(20.9665, 105.8712, 45, "EVACUATION")).body().get("report_id"));
+            equal(403, s.verifyFloodReport(LAN, id, body("decision", "VERIFIED", "priority", "HIGH")).status(), "reporter");
+            equal(403, s.verifyFloodReport(BINH, id, body("decision", "VERIFIED", "priority", "HIGH")).status(), "field team");
+            equal(404, s.verifyFloodReport(TUAN, id, body("decision", "VERIFIED", "priority", "HIGH")).status(), "other tenant's dispatcher");
+            equal(400, s.verifyFloodReport(HOA, id, body("decision", "MAYBE")).status(), "decision");
+            equal(400, s.verifyFloodReport(HOA, id, body("decision", "VERIFIED")).status(), "priority is required");
+            equal(400, s.verifyFloodReport(HOA, id, body("decision", "VERIFIED", "priority", "ASAP")).status(), "priority value");
+            equal(400, s.verifyFloodReport(HOA, id, body("decision", "REJECTED")).status(), "a rejection needs a reason");
+            equal(200, s.verifyFloodReport(HOA, id, body("decision", "VERIFIED", "priority", "URGENT", "note", "gọi lại xác nhận")).status(), "verified");
+            equal("URGENT", s.getStore().reports.get(id).priority, "priority stored");
+            equal(409, s.verifyFloodReport(HOA, id, body("decision", "VERIFIED", "priority", "HIGH")).status(), "cannot verify twice");
+        });
+        test("a rejected report closes its workflow and cannot be dispatched", () -> {
+            String id = String.valueOf(s.createFloodReport(LAN, reportBody(20.9665, 105.8712, 45, "EVACUATION")).body().get("report_id"));
+            equal(200, s.verifyFloodReport(HOA, id, body("decision", "REJECTED", "note", "trùng tin báo khác")).status(), "rejected");
+            equal("REJECTED", s.getStore().reports.get(id).status, "status");
+            isTrue(s.getStore().bpmnEngine.listByTenant(ORG1).stream()
+                    .anyMatch(p -> id.equals(p.get("business_key")) && "COMPLETED".equals(p.get("status"))), "workflow completed");
+            equal(409, dispatch(s, id, "V02", "T02", W1S, W1E).status(), "dispatching a rejected report");
+        });
+        test("dispatch needs a verified report and a complete, ordered time window", () -> {
+            String raw = String.valueOf(s.createFloodReport(LAN, reportBody(20.9665, 105.8712, 45, "EVACUATION")).body().get("report_id"));
+            equal(409, dispatch(s, raw, "V02", "T02", W1S, W1E).status(), "unverified report");
+            String id = verifiedReport(s, LAN, "EVACUATION");
+            equal(400, s.createDispatchOrder(HOA, body("report_id", id, "vehicle_id", "V02")).status(), "missing fields");
+            equal(400, dispatch(s, id, "V02", "T02", "soon", "later").status(), "bad times");
+            equal(400, dispatch(s, id, "V02", "T02", W1E, W1S).status(), "end before start");
+            equal(403, s.createDispatchOrder(LAN, body("report_id", id, "vehicle_id", "V02", "team_id", "T02", "start_time", W1S, "end_time", W1E)).status(), "reporter");
+            equal(403, s.createDispatchOrder(GIANG, body("report_id", id, "vehicle_id", "V02", "team_id", "T02", "start_time", W1S, "end_time", W1E)).status(), "resource manager does not approve dispatches");
+            equal(404, dispatch(s, "FR-NOPE", "V02", "T02", W1S, W1E).status(), "unknown report");
+            equal(404, dispatch(s, id, "V02", "T99", W1S, W1E).status(), "unknown team");
+        });
+        test("double booking is blocked: same vehicle, same team, unavailable vehicle, unsuitable vehicle, foreign vehicle", () -> {
+            String a = verifiedReport(s, LAN, "EVACUATION");
+            String b = verifiedReport(s, HUNG, "EVACUATION");
+            HttpResult ok = dispatch(s, a, "V02", "T02", W1S, W1E);
+            equal(201, ok.status(), "first booking: " + ok.body());
+            HttpResult vehicleBusy = dispatch(s, b, "V02", "T03", "2030-01-01T09:00:00Z", "2030-01-01T11:00:00Z");
+            equal(409, vehicleBusy.status(), "same vehicle");
+            equal("RESOURCE_TIME_OVERLAP", vehicleBusy.body().get("error"), "code");
+            notNull(vehicleBusy.body().get("conflict_details"), "reports the blocking order");
+            HttpResult teamBusy = dispatch(s, b, "V01", "T02", W1S, W1E);
+            equal(409, teamBusy.status(), "same team");
+            equal("HOLDER_TIME_OVERLAP", teamBusy.body().get("error"), "code");
+            equal("RESOURCE_UNAVAILABLE", dispatch(s, b, "V05", "T03", W1S, W1E).body().get("error"), "vehicle in maintenance");
+            equal(422, dispatch(s, b, "V04", "T03", W1S, W1E).status(), "a pump cannot evacuate");
+            equal("RESOURCE_NOT_FOUND", dispatch(s, b, "V91", "T03", W1S, W1E).body().get("error"), "another tenant's vehicle");
+            equal("DISPATCHED", s.getStore().reports.get(a).status, "first report dispatched");
+            equal("VERIFIED", s.getStore().reports.get(b).status, "second report untouched by the failed attempts");
+            back2back(s, b);
+        });
+        test("every refused dispatch is written to the audit trail with the conflict as evidence", () -> {
+            boolean found = s.getStore().auditLedger.listRecentByTenant(ORG1, 200).stream()
+                    .anyMatch(r -> String.valueOf(r.get("action")).startsWith("CONFLICT_BLOCKED_"));
+            isTrue(found, "CONFLICT_BLOCKED_* record present");
+        });
+    }
 
-        test("rescue candidates use each machine's own registered operator, never the broken machine's driver", () -> {
-            AgriOpsService fresh = newService();
-            HttpResult r = fresh.reportMachineIncident(coord, incidentBody("M01"));
-            equal(201, r.status(), "incident accepted");
-            List<?> options = (List<?>) r.body().get("candidate_options");
-            isTrue(!options.isEmpty(), "there are rescue options");
-            Map<?, ?> top = (Map<?, ?>) options.get(0);
-            equal("M02", top.get("machine_id"), "best rescuer");
-            equal("OP-02", top.get("operator_id"), "M02 is driven by its own operator OP-02, not by M01's driver OP-01");
-            for (Object o : options) {
-                isFalse("OP-01".equals(((Map<?, ?>) o).get("operator_id")), "OP-01 (driver of the broken M01) is never proposed");
-            }
-        });
-        test("a machine with no registered operator is skipped instead of being given a guessed driver", () -> {
-            AgriOpsService fresh = newService();
-            HarvesterMachine m02 = fresh.getStore().machines.get("M02");
-            // simulates a machine reloaded from a database that lost its operator link (the original defect)
-            fresh.getStore().machines.put("M02", new HarvesterMachine(m02.machineId, m02.organizationId, m02.ownerUserId, m02.name,
-                    m02.machineType, m02.model, m02.capacityHaPerHr, m02.status, m02.fuelPct, m02.healthPct,
-                    m02.currentLat, m02.currentLng, null, m02.telemetryUpdatedAt));
-            HttpResult r = fresh.reportMachineIncident(coord, incidentBody("M01"));
-            for (Object o : (List<?>) r.body().get("candidate_options")) {
-                isFalse("M02".equals(((Map<?, ?>) o).get("machine_id")), "operator-less M02 must not be proposed");
-            }
-        });
-        test("approving a rescue replan swaps the shift and keeps the rescuer's own operator", () -> {
-            AgriOpsService fresh = newService();
-            HttpResult inc = fresh.reportMachineIncident(coord, incidentBody("M01"));
-            String incId = String.valueOf(inc.body().get("incident_id"));
-            Map<?, ?> top = (Map<?, ?>) ((List<?>) inc.body().get("candidate_options")).get(0);
-            HttpResult ok = fresh.approveRescueReplan(coord, incId, Map.of("option_id", top.get("option_id")));
-            equal(200, ok.status(), "approved");
-            String newId = String.valueOf(ok.body().get("new_assignment_id"));
-            equal("OP-02", fresh.getStore().assignments.get(newId).operatorId, "new shift uses M02's operator");
-            equal("SUPERSEDED", fresh.getStore().assignments.get(String.valueOf(ok.body().get("superseded_assignment_id"))).status, "old shift superseded");
-        });
+    /** Back-to-back windows touching at an endpoint are allowed (half-open ranges, like the GiST constraint). */
+    private static void back2back(FloodOpsService s, String reportId) {
+        HttpResult r = dispatch(s, reportId, "V02", "T02", W1E, "2030-01-01T12:00:00Z");
+        equal(201, r.status(), "starts exactly when the previous order ends: " + r.body());
+    }
 
-        suite("Seed data consistency (true-scale 3D twin relies on it)");
-        test("every seeded field polygon has the area the field declares (within 2%)", () -> {
-            for (var f : newService().getStore().fields.values()) {
-                double got = org.openagrios.core.dataservices.SpatialMatchingEngine.ringAreaHa(f.polygon.get(0));
-                near(f.areaHa, got, f.areaHa * 0.02, "field " + f.fieldId + " declares " + f.areaHa + " ha but its polygon is " + got + " ha");
-            }
-        });
-        test("seeded field polygons do not overlap each other", () -> {
-            var fields = new java.util.ArrayList<>(newService().getStore().fields.values());
-            for (int i = 0; i < fields.size(); i++) {
-                for (int j = i + 1; j < fields.size(); j++) {
-                    var a = fields.get(i).polygon.get(0); var b = fields.get(j).polygon.get(0);
-                    boolean separated = a.get(2).get(0) < b.get(0).get(0) || b.get(2).get(0) < a.get(0).get(0)
-                            || a.get(2).get(1) < b.get(0).get(1) || b.get(2).get(1) < a.get(0).get(1);
-                    isTrue(separated, fields.get(i).fieldId + " overlaps " + fields.get(j).fieldId);
-                }
-            }
-        });
+    private static void fieldAndConfirmationRules() {
+        suite("FloodOpsService - field updates, completion and confirmation");
+        FloodOpsService s = newService();
+        String id = verifiedReport(s, LAN, "EVACUATION");
+        String orderId = String.valueOf(dispatch(s, id, "V02", "T02", W1S, W1E).body().get("order_id"));
 
-        suite("AgriOpsService - digital twin visibility");
-        test("coordinators see only their own cooperative's machines", () -> {
-            List<String> ids = twinIds(s, coord);
-            isTrue(ids.contains("M01") && ids.contains("M04"), "own fleet");
-            isFalse(ids.contains("M_ST01"), "no cross-tenant machine");
-            equal(List.of("M_ST01"), twinIds(s, coord2), "the other cooperative sees only its own");
+        test("only the team that leads the order (or a dispatcher) updates it; others see 404 and an audit record", () -> {
+            equal(403, s.updateOrderStatus(LAN, orderId, body("status", "IN_PROGRESS", "progress_pct", 10)).status(), "reporter");
+            equal(403, s.updateOrderStatus(GIANG, orderId, body("status", "IN_PROGRESS", "progress_pct", 10)).status(), "resource manager");
+            int before = (int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks");
+            equal(404, s.updateOrderStatus(DUNG, orderId, body("status", "IN_PROGRESS", "progress_pct", 10)).status(), "another team's order");
+            equal(before + 1, (int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks"), "RLS_BLOCKED record");
+            equal(404, s.updateOrderStatus(CUONG, "ORD-NOPE", body("status", "IN_PROGRESS", "progress_pct", 10)).status(), "unknown order");
         });
-        test("farmers and repair crews get no machine entities; owners only their own; operators only theirs", () -> {
-            equal(List.of(), twinIds(s, farmerBa), "farmer");
-            equal(List.of(), twinIds(s, repair), "repair team");
-            List<String> mine = twinIds(s, owner);
-            isTrue(mine.contains("M01") && mine.contains("M02"), "owned machines");
-            isFalse(mine.contains("M03") || mine.contains("M04"), "machines owned by the cooperative");
+        test("progress rules: valid transitions, non-decreasing progress, note required, completion needs 100% and an outcome", () -> {
+            equal(400, s.updateOrderStatus(CUONG, orderId, body("status", "DONE", "progress_pct", 10)).status(), "status value");
+            equal(400, s.updateOrderStatus(CUONG, orderId, body("status", "IN_PROGRESS")).status(), "progress is required");
+            equal(409, s.updateOrderStatus(CUONG, orderId, body("status", "COMPLETED", "progress_pct", 100, "outcome", "RESOLVED")).status(), "cannot complete before starting");
+            equal(200, s.updateOrderStatus(CUONG, orderId, body("status", "IN_PROGRESS", "progress_pct", 20)).status(), "start");
+            equal("WORKING", s.getStore().vehicles.get("V02").status, "vehicle now working");
+            equal("ON_MISSION", s.getStore().teams.get("T02").status(), "team on mission");
+            equal("IN_PROGRESS", s.getStore().reports.get(id).status, "report in progress");
+            equal(400, s.updateOrderStatus(CUONG, orderId, body("status", "IN_PROGRESS", "progress_pct", 40)).status(), "a field note is required for progress updates");
+            equal(409, s.updateOrderStatus(CUONG, orderId, body("status", "IN_PROGRESS", "progress_pct", 10, "note", "x")).status(), "progress cannot decrease");
+            equal(200, s.updateOrderStatus(CUONG, orderId, body("status", "IN_PROGRESS", "progress_pct", 60, "note", "đã đưa 3 người")).status(), "progress");
+            equal(400, s.updateOrderStatus(CUONG, orderId, body("status", "COMPLETED", "progress_pct", 80, "outcome", "RESOLVED")).status(), "not at 100%");
+            equal(400, s.updateOrderStatus(CUONG, orderId, body("status", "COMPLETED", "progress_pct", 100)).status(), "outcome required");
         });
-        test("NGSI-LD entities expose location as [lng, lat]", () -> {
+        final String[] resolutionId = new String[1];
+        test("completion frees the vehicle and team, opens a pending resolution and waits for the reporter", () -> {
+            HttpResult r = s.updateOrderStatus(CUONG, orderId, body("status", "COMPLETED", "progress_pct", 100, "outcome", "RESOLVED", "final_depth_cm", 5));
+            equal(200, r.status(), "completed: " + r.body());
+            resolutionId[0] = String.valueOf(r.body().get("resolution_id"));
+            equal("IDLE", s.getStore().vehicles.get("V02").status, "vehicle idle");
+            equal("AVAILABLE", s.getStore().teams.get("T02").status(), "team available");
+            equal("AWAITING_CONFIRMATION", s.getStore().reports.get(id).status, "report");
+            equal("PENDING", s.getStore().resolutions.get(resolutionId[0]).confirmationStatus, "resolution");
+            equal("COMPLETED", s.getStore().orders.get(orderId).status, "order");
+        });
+        test("only the reporter of THAT report (or a dispatcher) confirms; others cannot even tell it exists", () -> {
+            equal(404, s.confirmResolution(HUNG, body("resolution_id", resolutionId[0], "decision", "CONFIRMED")).status(), "another reporter");
+            equal(404, s.confirmResolution(MAI, body("resolution_id", resolutionId[0], "decision", "CONFIRMED")).status(), "another tenant's reporter");
+            equal(403, s.confirmResolution(CUONG, body("resolution_id", resolutionId[0], "decision", "CONFIRMED")).status(), "the field team cannot confirm its own work");
+            equal(400, s.confirmResolution(LAN, body("resolution_id", resolutionId[0], "decision", "LATER")).status(), "decision");
+            equal(400, s.confirmResolution(LAN, body("resolution_id", resolutionId[0], "decision", "DISPUTED")).status(), "a dispute needs a reason");
+            HttpResult r = s.confirmResolution(LAN, body("resolution_id", resolutionId[0], "decision", "CONFIRMED"));
+            equal(200, r.status(), "confirmed: " + r.body());
+            equal("RESOLVED", s.getStore().reports.get(id).status, "report resolved");
+            equal("CONFIRMED", s.getStore().resolutions.get(resolutionId[0]).confirmationStatus, "resolution");
+            equal(409, s.confirmResolution(LAN, body("resolution_id", resolutionId[0], "decision", "CONFIRMED")).status(), "no second confirmation");
+        });
+        test("closing the case completes only that case's workflow and keeps the audit chain valid", () -> {
+            long done = s.getStore().bpmnEngine.listByTenant(ORG1).stream().filter(p -> "COMPLETED".equals(p.get("status"))).count();
+            equal(1L, done, "exactly one workflow completed; the other open cases stay active");
+            equal(Boolean.TRUE, s.getStore().auditLedger.verifyChainIntegrity().get("chain_valid"), "hash chain intact");
+            boolean sealed = s.getStore().auditLedger.listRecentByTenant(ORG1, 300).stream()
+                    .anyMatch(r -> "CONFIRM_RESOLUTION_AND_SEAL_LEDGER".equals(r.get("action")));
+            isTrue(sealed, "seal record");
+        });
+        test("a disputed result sends the case back to the dispatcher", () -> {
+            String id2 = verifiedReport(s, HUNG, "EVACUATION");
+            String o2 = String.valueOf(dispatch(s, id2, "V02", "T02", "2030-02-01T08:00:00Z", "2030-02-01T10:00:00Z").body().get("order_id"));
+            s.updateOrderStatus(CUONG, o2, body("status", "IN_PROGRESS", "progress_pct", 30));
+            String res = String.valueOf(s.updateOrderStatus(CUONG, o2, body("status", "COMPLETED", "progress_pct", 100, "outcome", "PARTIAL")).body().get("resolution_id"));
+            equal(200, s.confirmResolution(HUNG, body("resolution_id", res, "decision", "DISPUTED", "notes", "nước vẫn còn cao")).status(), "disputed");
+            equal("VERIFIED", s.getStore().reports.get(id2).status, "back to dispatch");
+            equal("DISPUTED", s.getStore().resolutions.get(res).confirmationStatus, "resolution");
+            isTrue(s.getStore().bpmnEngine.listByTenant(ORG1).stream()
+                    .anyMatch(p -> id2.equals(p.get("business_key")) && "taskDispatcherDispatch".equals(p.get("current_step_id"))), "workflow back at dispatch");
+        });
+        test("a dispatcher can confirm on behalf of a reporter who cannot (e.g. no phone)", () -> {
+            String id3 = verifiedReport(s, HUNG, "EVACUATION");
+            String o3 = String.valueOf(dispatch(s, id3, "V03", "T02", "2030-03-01T08:00:00Z", "2030-03-01T10:00:00Z").body().get("order_id"));
+            s.updateOrderStatus(CUONG, o3, body("status", "IN_PROGRESS", "progress_pct", 50));
+            String res = String.valueOf(s.updateOrderStatus(CUONG, o3, body("status", "COMPLETED", "progress_pct", 100, "outcome", "RESOLVED")).body().get("resolution_id"));
+            equal(200, s.confirmResolution(HOA, body("resolution_id", res, "decision", "CONFIRMED")).status(), "by dispatcher");
+            equal("usr_dispatcher_hoa", s.getStore().resolutions.get(res).confirmedBy, "who confirmed is recorded");
+        });
+    }
+
+    private static void incidentRules() {
+        suite("FloodOpsService - vehicle incident, ranked replacements and re-plan");
+        FloodOpsService s = newService();
+        final HttpResult[] reported = new HttpResult[1];
+
+        test("a field team can only report an incident on a vehicle it works with; others get 404", () -> {
+            equal(404, s.reportFieldIncident(CUONG, incidentBody("V01")).status(), "another team's vehicle");
+            equal(404, s.reportFieldIncident(CUONG, incidentBody("V99")).status(), "unknown vehicle");
+            equal(403, s.reportFieldIncident(LAN, incidentBody("V01")).status(), "reporter");
+            equal(403, s.reportFieldIncident(GIANG, incidentBody("V01")).status(), "resource manager");
+            Map<String, Object> noType = incidentBody("V01");
+            noType.put("incident_type", "BORED");
+            equal(400, s.reportFieldIncident(BINH, noType).status(), "incident type");
+            Map<String, Object> noDown = incidentBody("V01");
+            noDown.remove("estimated_downtime_hours");
+            equal(400, s.reportFieldIncident(BINH, noDown).status(), "downtime is required");
+            equal("IN_PROGRESS", s.getStore().orders.get("ORD-0001").status, "refused reports changed nothing");
+        });
+        test("the incident marks the vehicle BREAKDOWN, the order IMPACTED, and ranks only suitable, free, crewed replacements", () -> {
+            reported[0] = s.reportFieldIncident(BINH, incidentBody("V01"));
+            equal(201, reported[0].status(), "reported: " + reported[0].body());
+            equal("BREAKDOWN", s.getStore().vehicles.get("V01").status, "vehicle");
+            equal("IMPACTED", s.getStore().orders.get("ORD-0001").status, "order");
+            equal("IMPACTED", s.getStore().reports.get("FR-0001").status, "report");
             @SuppressWarnings("unchecked")
-            List<Map<String, Object>> ents = (List<Map<String, Object>>) s.getDigitalTwinEntities(coord).get("entities");
-            Map<String, Object> m01 = ents.stream().filter(e -> "urn:ngsi-ld:HarvesterMachine:M01".equals(e.get("id"))).findFirst().orElseThrow();
-            List<?> coords = (List<?>) ((Map<?, ?>) ((Map<?, ?>) m01.get("location")).get("value")).get("coordinates");
-            HarvesterMachine m = s.getStore().machines.get("M01");
-            equal(m.currentLng, coords.get(0), "longitude first");
-            equal(m.currentLat, coords.get(1), "latitude second");
+            List<Map<String, Object>> options = (List<Map<String, Object>>) reported[0].body().get("candidate_options");
+            List<String> vehicles = ids(options, "vehicle_id");
+            isTrue(vehicles.contains("V02") && vehicles.contains("V03"), "a free boat and a free truck are offered");
+            isFalse(vehicles.contains("V01"), "never the broken vehicle");
+            isFalse(vehicles.contains("V04"), "a pump cannot evacuate");
+            isFalse(vehicles.contains("V05"), "a vehicle in maintenance is not offered");
+            isFalse(vehicles.contains("V91"), "never another tenant's vehicle");
+            equal("V02", vehicles.get(0), "the boat designed for evacuation ranks first");
+            for (Map<String, Object> o : options) {
+                equal("STRAIGHT_LINE_HAVERSINE", o.get("distance_kind"), "distance is declared as straight-line");
+                isTrue(((Number) o.get("score")).doubleValue() > 0, "scored");
+                isTrue(String.valueOf(o.get("explanations")).contains("Haversine"), "the ranking says how distance was measured");
+            }
         });
-        test("simulation ticks never move another tenant's machines", () -> {
-            HarvesterMachine m01 = s.getStore().machines.get("M01");
-            double lat = m01.currentLat, lng = m01.currentLng, fuel = m01.fuelPct;
-            int ticks = s.getStore().tickCount;
-            s.tickSimulation(coord2);
-            equal(ticks + 1, s.getStore().tickCount, "clock advanced");
-            equal(lat, m01.currentLat, "lat");
-            equal(lng, m01.currentLng, "lng");
-            equal(fuel, m01.fuelPct, "fuel");
+        test("the same vehicle cannot be reported broken twice", () ->
+                equal(409, s.reportFieldIncident(BINH, incidentBody("V01")).status(), "already broken"));
+        test("approval is a human decision: option_id is mandatory, must exist, and only a dispatcher may approve", () -> {
+            String inc = String.valueOf(reported[0].body().get("incident_id"));
+            equal(403, s.approveReplan(BINH, inc, body("option_id", "x")).status(), "field team");
+            equal(403, s.approveReplan(GIANG, inc, body("option_id", "x")).status(), "resource manager");
+            equal(404, s.approveReplan(TUAN, inc, body("option_id", "x")).status(), "another tenant");
+            equal(400, s.approveReplan(HOA, inc, body()).status(), "the system never auto-dispatches");
+            equal(404, s.approveReplan(HOA, inc, body("option_id", "OPT-NOPE")).status(), "unknown option");
+        });
+        test("approving supersedes the old order, issues -R1 for the new vehicle and team, and reschedules the report", () -> {
+            String inc = String.valueOf(reported[0].body().get("incident_id"));
+            HttpResult r = s.approveReplan(HOA, inc, body("option_id", "OPT-V02-T02-ORD-0001"));
+            equal(200, r.status(), "approved: " + r.body());
+            equal("ORD-0001-R1", r.body().get("new_order_id"), "replacement id");
+            DispatchOrder oldO = s.getStore().orders.get("ORD-0001");
+            DispatchOrder newO = s.getStore().orders.get("ORD-0001-R1");
+            equal("SUPERSEDED", oldO.status, "old");
+            equal("ORD-0001-R1", oldO.supersededByOrderId, "link forward");
+            equal("ORD-0001", newO.replacesOrderId, "link back");
+            equal("V02", newO.vehicleId, "vehicle");
+            equal("T02", newO.teamId, "team");
+            equal("CONFIRMED", newO.status, "ready for the field team");
+            equal("RESCHEDULED", s.getStore().reports.get("FR-0001").status, "report");
+            equal("REPLAN_APPROVED", s.getStore().incidents.get(inc).status, "incident");
+            equal("MOVING", s.getStore().vehicles.get("V02").status, "replacement heads out");
+            equal(409, s.approveReplan(HOA, inc, body("option_id", "OPT-V02-T02-ORD-0001")).status(), "cannot approve twice");
+        });
+        test("the repair ticket belongs to the vehicle's manager; closing it frees the vehicle", () -> {
+            String inc = String.valueOf(reported[0].body().get("incident_id"));
+            equal(403, s.updateRepairTicket(DUNG, inc, body("diagnosis", "x")).status(), "field team");
+            equal(403, s.updateRepairTicket(LAN, inc, body("diagnosis", "x")).status(), "reporter");
+            equal(400, s.updateRepairTicket(GIANG, inc, body()).status(), "diagnosis required");
+            equal(200, s.updateRepairTicket(GIANG, inc, body("diagnosis", "thay chân vịt")).status(), "in repair");
+            equal("UNDER_REPAIR", s.getStore().incidents.get(inc).status, "status");
+            equal("BREAKDOWN", s.getStore().vehicles.get("V01").status, "still broken until resolved");
+            equal(200, s.updateRepairTicket(GIANG, inc, body("diagnosis", "đã thay xong", "is_resolved", true)).status(), "resolved");
+            equal("IDLE", s.getStore().vehicles.get("V01").status, "vehicle back in service");
+            equal(409, s.updateRepairTicket(GIANG, inc, body("diagnosis", "again")).status(), "ticket is closed");
+        });
+        test("no feasible replacement is reported honestly (422) instead of dispatching something unsuitable", () -> {
+            FloodOpsService s2 = newService();
+            for (String v : new String[]{"V02", "V03", "V04", "V05"}) s2.getStore().vehicles.get(v).status = "MAINTENANCE";
+            HttpResult r = s2.reportFieldIncident(BINH, incidentBody("V01"));
+            equal(201, r.status(), "reported");
+            equal(Boolean.TRUE, r.body().get("no_feasible_option"), "flag");
+            equal(422, s2.approveReplan(HOA, String.valueOf(r.body().get("incident_id")), body("option_id", "any")).status(), "nothing to approve");
+        });
+    }
+
+    private static Map<String, Object> incidentBody(String vehicleId) {
+        return body("vehicle_id", vehicleId, "severity", "CRITICAL", "incident_type", "PROPELLER_FOULED",
+                "description", "unit test", "estimated_downtime_hours", 6);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void visibilityRules() {
+        suite("FloodOpsService - who sees what (mirrors the row-level security policies)");
+        FloodOpsService s = newService();
+
+        test("a reporter sees only their own reports, the zones of those reports, and the vehicle serving them", () -> {
+            equal(List.of("FR-0001", "FR-0003"), stateIds(s, LAN, "reports", "report_id"), "own reports only");
+            equal(List.of("Z01"), stateIds(s, LAN, "zones", "zone_id"), "zones of own reports only");
+            equal(List.of("ORD-0001"), stateIds(s, LAN, "orders", "order_id"), "orders of own reports");
+            equal(List.of("V01"), stateIds(s, LAN, "vehicles", "vehicle_id"), "only the vehicle assigned to them");
+            equal(List.of(), stateIds(s, LAN, "teams", "team_id"), "no teams");
+            equal(List.of(), stateIds(s, LAN, "incidents", "incident_id"), "no incidents");
+            equal(3, ((List<?>) s.getState(LAN).get("shelters")).size(), "shelters are public-safety information");
+            equal(3, ((List<?>) s.getState(LAN).get("gauges")).size(), "gauges are public-safety information");
+            equal(List.of(), (List<?>) s.getState(LAN).get("evidence_objects"), "no storage listing");
+            Map<String, Object> st = s.getState(LAN);
+            isFalse(JsonCodec.toJson(st).contains("FR-0002"), "the other reporter's report appears nowhere in the payload");
+            isFalse(JsonCodec.toJson(st).contains("FR-0004"), "nor the other one");
+        });
+        test("the other reporter sees a disjoint set", () -> {
+            equal(List.of("FR-0002", "FR-0004"), stateIds(s, HUNG, "reports", "report_id"), "own reports");
+            equal(List.of("Z02", "Z03"), stateIds(s, HUNG, "zones", "zone_id"), "own zones");
+            equal(List.of("ORD-0002"), stateIds(s, HUNG, "orders", "order_id"), "own order");
+            equal(List.of("V03"), stateIds(s, HUNG, "vehicles", "vehicle_id"), "a CONFIRMED order shows its vehicle");
+        });
+        test("a dispatcher sees the whole organisation and nothing of another tenant", () -> {
+            equal(List.of("FR-0001", "FR-0002", "FR-0003", "FR-0004"), stateIds(s, HOA, "reports", "report_id"), "reports");
+            equal(5, ((List<?>) s.getState(HOA).get("vehicles")).size(), "all five vehicles");
+            equal(List.of("FR-0091"), stateIds(s, TUAN, "reports", "report_id"), "other tenant has its own data");
+            equal(List.of("V91"), stateIds(s, TUAN, "vehicles", "vehicle_id"), "other tenant's vehicle only");
+            equal(List.of("Z91"), stateIds(s, TUAN, "zones", "zone_id"), "other tenant's zone only");
+            equal(List.of(), stateIds(s, MAI, "orders", "order_id"), "other tenant's reporter");
+        });
+        test("a field team sees its own team, its orders, its vehicles and the reports behind them", () -> {
+            equal(List.of("T01"), stateIds(s, BINH, "teams", "team_id"), "own team");
+            equal(List.of("ORD-0001"), stateIds(s, BINH, "orders", "order_id"), "own order");
+            equal(List.of("FR-0001"), stateIds(s, BINH, "reports", "report_id"), "report behind own order");
+            equal(List.of("V01"), stateIds(s, BINH, "vehicles", "vehicle_id"), "own vehicle");
+            equal(List.of(), stateIds(s, DUNG, "orders", "order_id"), "a team without orders sees none");
+            equal(List.of("T03"), stateIds(s, DUNG, "teams", "team_id"), "its own team only");
+        });
+        test("a resource manager sees the fleet and orders but never citizens' reports or resolutions", () -> {
+            equal(5, ((List<?>) s.getState(GIANG).get("vehicles")).size(), "fleet");
+            equal(3, ((List<?>) s.getState(GIANG).get("teams")).size(), "teams");
+            equal(List.of(), stateIds(s, GIANG, "reports", "report_id"), "no reports");
+            equal(List.of(), stateIds(s, GIANG, "resolutions", "resolution_id"), "no resolutions");
+        });
+        test("the platform admin is limited to the tenant of the token but has no business privileges", () -> {
+            equal(4, ((List<?>) s.getState(ADMIN).get("reports")).size(), "tenant data");
+            isFalse(stateIds(s, ADMIN, "reports", "report_id").contains("FR-0091"), "not another tenant");
+        });
+        test("audit logs: staff see the tenant's trail, others only their own actions", () -> {
+            isFalse(((List<?>) s.getState(HOA).get("audit_logs")).isEmpty(), "dispatcher sees the trail");
+            for (Map<String, Object> rec : (List<Map<String, Object>>) s.getState(LAN).get("audit_logs")) {
+                equal("reporter_lan", rec.get("actor_user_id"), "only own records");
+            }
+            equal(Boolean.TRUE, ((Map<String, Object>) s.getState(LAN).get("audit_chain_proof")).get("chain_valid"), "proof of the whole chain is shared");
+        });
+        test("the state is labelled with its data sources and a plain-language notice", () -> {
+            Map<String, Object> st = s.getState(HOA);
+            Map<String, Object> sources = (Map<String, Object>) st.get("data_sources");
+            equal(Boolean.TRUE, sources.get("contains_simulated_data"), "simulated data is declared");
+            equal("STRAIGHT_LINE_HAVERSINE", sources.get("distance_kind"), "distance kind");
+            contains(String.valueOf(st.get("data_notice")), "MÔ PHỎNG", "notice");
+            for (Map<String, Object> v : (List<Map<String, Object>>) st.get("vehicles")) {
+                equal(Boolean.TRUE, v.get("position_is_simulated"), "vehicle " + v.get("vehicle_id") + " is not a real device");
+            }
+        });
+        test("digital twin: tenant and role scoped, with the data source on every entity", () -> {
+            List<String> lan = twinIds(s, LAN);
+            isTrue(lan.contains("V01") && lan.contains("G01"), "own vehicle and public gauges");
+            isFalse(lan.contains("V02"), "not other vehicles");
+            equal(8, twinIds(s, GIANG).size(), "five vehicles and three gauges");
+            equal(List.of("V91"), twinIds(s, TUAN), "other tenant has one vehicle and no gauge");
+            for (Map<String, Object> e : (List<Map<String, Object>>) s.getDigitalTwinEntities(HOA).get("entities")) {
+                notNull(e.get("dataSource"), "dataSource on " + e.get("id"));
+            }
+        });
+        test("demo reset is closed by default and reserved to the platform admin", () -> {
+            equal(403, s.resetDemo(HOA).status(), "dispatcher");
+            equal(403, s.resetDemo(LAN).status(), "reporter");
+            HttpResult r = s.resetDemo(ADMIN);
+            if (!"true".equalsIgnoreCase(System.getenv("OPENDXOS_ALLOW_DEMO_RESET"))) {
+                equal("RESET_DISABLED", r.body().get("error"), "disabled unless OPENDXOS_ALLOW_DEMO_RESET=true");
+            }
         });
     }
 
     @SuppressWarnings("unchecked")
-    private static List<String> twinIds(AgriOpsService s, AuthContext a) {
+    private static List<String> twinIds(FloodOpsService s, AuthContext a) {
         List<String> out = new ArrayList<>();
         for (Map<String, Object> e : (List<Map<String, Object>>) s.getDigitalTwinEntities(a).get("entities")) {
             String id = String.valueOf(e.get("id"));
             out.add(id.substring(id.lastIndexOf(':') + 1));
         }
         return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void seedRules() {
+        suite("Seed data and single sources of truth");
+        FloodOpsService s = newService();
+        File root = FloodOpsServer.resolveProjectRoot();
+
+        test("every seeded zone is a closed ring that contains its own centre, and zones of a tenant do not overlap", () -> {
+            var zones = new ArrayList<>(s.getStore().zones.values());
+            for (FloodZone z : zones) {
+                List<List<Double>> ring = z.polygon.get(0);
+                equal(ring.get(0), ring.get(ring.size() - 1), "closed " + z.zoneId);
+                isTrue(ring.get(0).get(0) < z.centerLng && z.centerLng < ring.get(2).get(0), "centre inside (lng) " + z.zoneId);
+                isTrue(ring.get(0).get(1) < z.centerLat && z.centerLat < ring.get(2).get(1), "centre inside (lat) " + z.zoneId);
+            }
+            for (int i = 0; i < zones.size(); i++) {
+                for (int j = i + 1; j < zones.size(); j++) {
+                    var a = zones.get(i).polygon.get(0); var b = zones.get(j).polygon.get(0);
+                    boolean separated = a.get(2).get(0) < b.get(0).get(0) || b.get(2).get(0) < a.get(0).get(0)
+                            || a.get(2).get(1) < b.get(0).get(1) || b.get(2).get(1) < a.get(0).get(1);
+                    isTrue(separated, zones.get(i).zoneId + " overlaps " + zones.get(j).zoneId);
+                }
+            }
+        });
+        test("every foreign key of the seed resolves in memory (teams, managers, reporters, zones, vehicles, orders)", () -> {
+            FloodDataStore st = s.getStore();
+            var userIds = new java.util.HashSet<String>();
+            st.usersByUsername.values().forEach(u -> userIds.add(u.userId()));
+            st.teams.values().forEach(t -> isTrue(userIds.contains(t.leadUserId()), "team lead " + t.teamId()));
+            st.vehicles.values().forEach(v -> {
+                isTrue(userIds.contains(v.managerUserId), "manager of " + v.vehicleId);
+                isTrue(v.assignedTeamId == null || st.teams.containsKey(v.assignedTeamId), "team of " + v.vehicleId);
+                equal(v.organizationId, st.teams.get(v.assignedTeamId).organizationId(), "vehicle and team share a tenant: " + v.vehicleId);
+            });
+            st.reports.values().forEach(r -> {
+                isTrue(userIds.contains(r.reporterUserId), "reporter of " + r.reportId);
+                equal(r.organizationId, st.zones.get(r.zoneId).organizationId, "report and zone share a tenant: " + r.reportId);
+            });
+            st.orders.values().forEach(o -> {
+                equal(st.reports.get(o.reportId).reporterUserId, o.reporterUserId, "denormalised reporter matches: " + o.orderId);
+                equal(st.vehicles.get(o.vehicleId).organizationId, o.organizationId, "order and vehicle share a tenant: " + o.orderId);
+            });
+            st.gauges.values().forEach(g -> isTrue(st.zones.containsKey(g.zoneId), "zone of gauge " + g.stationId));
+            st.usersByUsername.values().forEach(u -> isTrue(FloodRoles.ALL.contains(u.role()), "known role " + u.username()));
+        });
+        test("the seed is labelled: nothing in it claims to be an observation", () -> {
+            s.getStore().vehicles.values().forEach(v -> equal("SEED", v.telemetrySource, "vehicle " + v.vehicleId));
+            s.getStore().zones.values().forEach(z -> equal("SEED", z.waterLevelSource, "zone " + z.zoneId));
+            s.getStore().gauges.values().forEach(g -> equal("SIMULATOR", g.source, "gauge " + g.stationId));
+            s.getStore().shelters.values().forEach(sh -> equal("SEED", sh.occupancySource, "shelter " + sh.shelterId));
+        });
+        test("the Keycloak realm and the application seed define exactly the same users, roles and tenants", () -> {
+            Map<String, Object> realm = JsonCodec.parseObject(java.nio.file.Files.readString(new File(root, "infra/keycloak/openagrios-realm.json").toPath()));
+            List<Map<String, Object>> users = (List<Map<String, Object>>) realm.get("users");
+            equal(s.getStore().usersByUsername.size(), users.size(), "same number of users");
+            for (Map<String, Object> ru : users) {
+                String name = String.valueOf(ru.get("username"));
+                var seeded = s.getStore().usersByUsername.get(name);
+                notNull(seeded, "seed has " + name);
+                equal(seeded.userId(), ru.get("id"), "id of " + name);
+                equal(List.of(seeded.role()), ru.get("realmRoles"), "role of " + name);
+                equal(List.of(seeded.organizationId()), ((Map<String, Object>) ru.get("attributes")).get("organization_id"), "tenant of " + name);
+            }
+            List<String> realmRoles = new ArrayList<>();
+            for (Map<String, Object> r : (List<Map<String, Object>>) ((Map<String, Object>) realm.get("roles")).get("realm")) realmRoles.add(String.valueOf(r.get("name")));
+            equal(new java.util.TreeSet<>(FloodRoles.ALL), new java.util.TreeSet<>(realmRoles), "the roles of the realm are exactly the roles the application registers");
+        });
+        test("infra/db/schema.sql is the only DDL: it creates every table the application needs, with forced row-level security", () -> {
+            String sql = java.nio.file.Files.readString(new File(root, "infra/db/schema.sql").toPath());
+            for (String t : FloodRepository.requiredTables()) {
+                isTrue(sql.contains("CREATE TABLE IF NOT EXISTS " + t + " ("), "schema creates " + t);
+            }
+            for (String t : FloodRepository.TABLES) {
+                isTrue(sql.contains("ALTER TABLE " + t + " ENABLE ROW LEVEL SECURITY;"), "RLS enabled on " + t);
+                isTrue(sql.contains("ALTER TABLE " + t + " FORCE ROW LEVEL SECURITY;"), "RLS forced on " + t);
+            }
+            isTrue(sql.contains("DROP POLICY IF EXISTS"), "policies are re-created idempotently");
+            String pgSource = java.nio.file.Files.readString(new File(root, "core/data-services/PostgreSqlDataService.java").toPath());
+            isFalse(pgSource.contains("CREATE TABLE"), "no second copy of the DDL in Java");
+        });
+        test("Tier-1 boundary: the platform core names no business domain", () -> {
+            String[] forbidden = {"flood", "rescue", "harvest", "farmer", "coordinator", "reporter", "dispatcher", "field_team",
+                    "resource_manager", "machine", "crop", "combine", "water-level", "gauge", "shelter", "vehicle"};
+            List<String> hits = new ArrayList<>();
+            try (var walk = java.nio.file.Files.walk(new File(root, "core").toPath())) {
+                for (var p : (Iterable<java.nio.file.Path>) walk.filter(f -> f.toString().endsWith(".java"))::iterator) {
+                    String text = java.nio.file.Files.readString(p).toLowerCase(java.util.Locale.ROOT);
+                    for (String word : forbidden) {
+                        int at = text.indexOf(word);
+                        while (at >= 0) {
+                            int ls = text.lastIndexOf('\n', at) + 1;
+                            String line = text.substring(ls, text.indexOf('\n', at) < 0 ? text.length() : text.indexOf('\n', at)).trim();
+                            if (!(word.equals("machine") && line.contains("state machine"))) hits.add(p.getFileName() + " [" + word + "]: " + line);
+                            at = text.indexOf(word, at + word.length());
+                        }
+                    }
+                }
+            }
+            isTrue(hits.isEmpty(), "domain words found in core/: " + hits);
+        });
     }
 
     // ------------------------------------------------------------------ HTTP layer
@@ -543,7 +985,7 @@ final class PlatformTests {
     private static void httpLayer() throws Exception {
         suite("HTTP layer (real server on an ephemeral port)");
         KeycloakOidcEngine.setAuthModeForTesting(AuthMode.DEV_MOCK_STANDALONE);
-        OpenAgriOsServer server = new OpenAgriOsServer(OpenAgriOsServer.resolveProjectRoot());
+        FloodOpsServer server = new FloodOpsServer(FloodOpsServer.resolveProjectRoot());
         int port;
         try (java.net.ServerSocket ss = new java.net.ServerSocket(0)) {
             port = ss.getLocalPort();
@@ -564,13 +1006,13 @@ final class PlatformTests {
                 equal(401, http(base, "GET", "/api/v1/state", null, "Authorization", "Bearer garbage").statusCode(), "garbage token");
                 equal(401, http(base, "GET", "/api/v1/analytics/summary", null).statusCode(), "analytics without token");
             });
-            test("analytics is forbidden to non-coordinators even with a valid token", () -> {
-                var farmer = new KeycloakOidcEngine.UserAccount("usr_farmer_ba", "farmer_ba", "pw", "Ba", "b@x", "HTX_CANTHO_01", "FARMER");
-                String tok = KeycloakOidcEngine.issueJwt(farmer);
-                equal(403, http(base, "GET", "/api/v1/analytics/summary", null, "Authorization", "Bearer " + tok).statusCode(), "farmer");
+            test("analytics is forbidden to everyone but dispatchers and the platform admin, even with a valid token", () -> {
+                var reporter = new KeycloakOidcEngine.UserAccount("usr_reporter_lan", "reporter_lan", "pw", "Lan", "l@x", "ORG_HN_PILOT_01", "REPORTER");
+                String tok = KeycloakOidcEngine.issueJwt(reporter);
+                equal(403, http(base, "GET", "/api/v1/analytics/summary", null, "Authorization", "Bearer " + tok).statusCode(), "reporter");
             });
             test("analytics reports 503 (not a crash) when the cold tier is not configured", () -> {
-                var coord = new KeycloakOidcEngine.UserAccount("usr_coord_01", "coord_htx01", "pw", "Lan", "l@x", "HTX_CANTHO_01", "COORDINATOR");
+                var coord = new KeycloakOidcEngine.UserAccount("usr_dispatcher_hoa", "dispatcher_hoa", "pw", "Hoa", "h@x", "ORG_HN_PILOT_01", "DISPATCHER");
                 String tok = KeycloakOidcEngine.issueJwt(coord);
                 HttpResponse<String> r = http(base, "GET", "/api/v1/analytics/summary", null, "Authorization", "Bearer " + tok);
                 equal(503, r.statusCode(), "status");
@@ -581,7 +1023,61 @@ final class PlatformTests {
                     return; // environment deliberately provides a token; the guard is covered by the e2e suite
                 }
                 equal(503, http(base, "POST", "/api/v1/internal/telemetry", "{}").statusCode(), "telemetry");
-                equal(503, http(base, "GET", "/api/v1/internal/fleet", null, "X-Ingest-Token", "anything").statusCode(), "fleet");
+                equal(503, http(base, "GET", "/api/v1/internal/assets", null, "X-Ingest-Token", "anything").statusCode(), "asset roster");
+            });
+            test("a token with a role the application does not know is refused (401), never defaulted to a role", () -> {
+                var legacy = new KeycloakOidcEngine.UserAccount("usr_farmer_ba", "farmer_ba", "pw", "Ba", "b@x", "ORG_HN_PILOT_01", "FARMER");
+                String tok = KeycloakOidcEngine.issueJwt(legacy);
+                equal(401, http(base, "GET", "/api/v1/state", null, "Authorization", "Bearer " + tok).statusCode(), "unknown role");
+            });
+            test("business routes enforce roles through the real router", () -> {
+                var reporter = new KeycloakOidcEngine.UserAccount("usr_reporter_lan", "reporter_lan", "pw", "Lan", "l@x", "ORG_HN_PILOT_01", "REPORTER");
+                String tok = KeycloakOidcEngine.issueJwt(reporter);
+                String h = "Authorization";
+                equal(403, http(base, "POST", "/api/v1/dispatch-orders", "{}", h, "Bearer " + tok).statusCode(), "reporter cannot dispatch");
+                equal(403, http(base, "POST", "/api/v1/flood-reports/FR-0001/verify", "{}", h, "Bearer " + tok).statusCode(), "reporter cannot verify");
+                equal(403, http(base, "POST", "/api/v1/sim/reset", "{}", h, "Bearer " + tok).statusCode(), "reporter cannot reset the demo data");
+                equal(400, http(base, "POST", "/api/v1/flood-reports", "{}", h, "Bearer " + tok).statusCode(), "empty report is a validation error");
+                equal(404, http(base, "POST", "/api/v1/nonexistent", "{}", h, "Bearer " + tok).statusCode(), "unknown route");
+                equal(200, http(base, "GET", "/api/v1/state", null, h, "Bearer " + tok).statusCode(), "own state");
+            });
+            test("every request of the Postman collection targets a route the server really has", () -> {
+                Map<String, Object> col = JsonCodec.parseObject(java.nio.file.Files.readString(
+                        new File(FloodOpsServer.resolveProjectRoot(), "tests/postman/OpenDXOS_FloodOps.postman_collection.json").toPath()));
+                int checked = 0;
+                for (Object folder : (List<?>) col.get("item")) {
+                    for (Object item : (List<?>) ((Map<?, ?>) folder).get("item")) {
+                        Map<?, ?> request = (Map<?, ?>) ((Map<?, ?>) item).get("request");
+                        String raw = String.valueOf(((Map<?, ?>) request.get("url")).get("raw")).replace("{{base_url}}", "");
+                        if (!raw.startsWith("/api/v1")) continue;                      // /trace/* belongs to the Tier-3 module
+                        String path = raw.replaceAll("\\{\\{[^}]*\\}\\}", "x");
+                        String method = String.valueOf(request.get("method"));
+                        String token = null;
+                        Map<?, ?> auth = (Map<?, ?>) request.get("auth");
+                        if (auth != null && "bearer".equals(auth.get("type"))) {
+                            String var = String.valueOf(((Map<?, ?>) ((List<?>) auth.get("bearer")).get(0)).get("value"));
+                            String user = var.replace("{{", "").replace("_token}}", "");
+                            if (user.equals("replacement_team")) user = "team_binh";
+                            String role = user.startsWith("reporter") ? "REPORTER" : user.startsWith("dispatcher") ? "DISPATCHER"
+                                    : user.startsWith("team") ? "FIELD_TEAM" : "RESOURCE_MANAGER";
+                            String org = (user.endsWith("tuan") || user.endsWith("mai") || user.endsWith("hai")) ? "ORG_HN_PILOT_02" : "ORG_HN_PILOT_01";
+                            token = KeycloakOidcEngine.issueJwt(new KeycloakOidcEngine.UserAccount("usr_" + user, user, "pw", user, user + "@x", org, role));
+                        }
+                        String payload = "{}";
+                        if (request.get("body") != null) {
+                            payload = String.valueOf(((Map<?, ?>) request.get("body")).get("raw")).replaceAll("\\{\\{[^}]*\\}\\}", "x");
+                        }
+                        HttpResponse<String> r = token == null
+                                ? http(base, method, path, "GET".equals(method) ? null : payload)
+                                : http(base, method, path, "GET".equals(method) ? null : payload, "Authorization", "Bearer " + token);
+                        Map<String, Object> answer = JsonCodec.parseObject(r.body());
+                        // an unknown ROUTE answers {"error":"NOT_FOUND","path":...}; a record the caller cannot see answers NOT_FOUND without "path"
+                        boolean unknownRoute = "NOT_FOUND".equals(answer.get("error")) && answer.containsKey("path");
+                        isFalse(unknownRoute || r.statusCode() == 405, method + " " + path + " is not a route of the server (" + r.statusCode() + " " + answer.get("error") + ")");
+                        checked++;
+                    }
+                }
+                isTrue(checked >= 30, "the collection exercises the API (" + checked + " requests checked)");
             });
             test("health exposes event-bus and cold-tier status", () -> {
                 HttpResponse<String> r = http(base, "GET", "/api/v1/health", null);

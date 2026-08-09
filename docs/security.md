@@ -26,7 +26,7 @@ OpenAgriOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn 
 +-----------------------------------------------------------------------------------------+
 | OpenAgriOS Core API (Port 8000)                                                         |
 | - ZeroTrustGateway: Xác thực chữ ký RS256 qua Keycloak Token Introspection (RFC 7662)   |
-| - RBAC Guard: Kiểm tra quyền hạn theo vai trò (FARMER, COORDINATOR, OPERATOR, v.v.)     |
+| - RBAC Guard: Kiểm tra quyền hạn theo vai trò (REPORTER, DISPATCHER, FIELD_TEAM, RESOURCE_MANAGER)     |
 | - Session Context: Nạp TenantRlsContext (app.current_org_id, app.current_user_role)     |
 +-----------------------------------------------------------------------------------------+
                     |                                             |
@@ -84,19 +84,27 @@ CREATE ROLE openagrios_app WITH LOGIN PASSWORD 'strong_password_here'
 
 ### 3.2. Cưỡng chế RLS trên toàn bộ bảng thực thể (`FORCE ROW LEVEL SECURITY`)
 
-Tất cả các bảng nghiệp vụ (`fields`, `machines`, `operators`, `service_requests`, `assignments`, `incidents`, `work_acceptances`, `audit_records`) đều được kích hoạt chính sách:
+Tất cả bảng nghiệp vụ (`flood_zones`, `rescue_teams`, `rescue_vehicles`, `flood_reports`, `dispatch_orders`, `field_incidents`, `report_resolutions`, `safe_shelters`, `gauge_stations`) và `audit_records` đều được `ENABLE` và `FORCE ROW LEVEL SECURITY` trong [`infra/db/schema.sql`](../infra/db/schema.sql), kèm chính sách theo vai trò:
 
 ```sql
-ALTER TABLE fields ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fields FORCE ROW LEVEL SECURITY;
+ALTER TABLE flood_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flood_reports FORCE ROW LEVEL SECURITY;
+-- người báo tin chỉ thấy tin của chính mình; điều phối viên thấy cả đơn vị; đội hiện trường chỉ thấy tin đứng sau lệnh của đội mình
 ```
 
-Mỗi truy vấn đều được đóng gói trong một phiên giao dịch thiết lập ngữ cảnh:
+Mỗi giao dịch của dịch vụ đặt ngữ cảnh trước khi chạy câu lệnh:
+
 ```sql
-SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
-SET LOCAL app.current_user_role = 'COORDINATOR';
+SET LOCAL app.current_org_id = 'ORG_HN_PILOT_01';
+SET LOCAL app.current_user_role = 'REPORTER';
+SET LOCAL app.current_user_id = 'usr_reporter_lan';
 ```
-Dữ liệu của các hợp tác xã khác hoặc dữ liệu nhạy cảm của các nông hộ khác ("Fog of War") bị cô lập hoàn toàn ở cấp độ nhân cơ sở dữ liệu PostgreSQL.
+
+Ngữ cảnh rỗng, sai hoặc vai trò lạ cho **0 hàng** (mặc định từ chối, không phải mặc định cho phép). Chính sách không đệ quy (lệnh điều phối mang bản sao `reporter_user_id` để chính sách của tin báo và của lệnh không trỏ vào nhau; PostgreSQL từ chối chính sách đệ quy). Dữ liệu của đơn vị khác hoặc của người báo tin khác bị cô lập ở nhân PostgreSQL, và cũng **không được gửi đi** từ API (không có lớp che ở trình duyệt). Kiểm thử E2E truy vấn trực tiếp bằng vai trò DB không phải superuser cho từng vai trò ([`tests/e2e_full_stack_test.sh`](../tests/e2e_full_stack_test.sh), Assertion 4).
+
+Thao tác báo sự cố phương tiện ghi lan sang lệnh/tin của đội khác nên được ghi dưới quyền `DISPATCHER` **trong cùng đơn vị** của người báo (việc cho phép đã kiểm tra ở Java trước đó); không có đường ghi nào dùng `PLATFORM_ADMIN` cho thao tác của người dùng.
+
+**Các lỗ hổng của nguyên mẫu cũ đã đóng:** token thiếu `organization_id` không còn bị gán mặc định vào một tenant; token không có vai trò đã đăng ký không còn bị gán vai trò thấp nhất; `POST /api/v1/sim/reset` không còn mở cho mọi người dùng đã đăng nhập (chỉ `PLATFORM_ADMIN` và chỉ khi `OPENDXOS_ALLOW_DEMO_RESET=true`, đóng trong production); tài khoản dev-mock không còn rơi về một tài khoản mặc định.
 
 ---
 

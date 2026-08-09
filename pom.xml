@@ -79,7 +79,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>org.openagrios.apps.agriops.OpenAgriOsServer</mainClass>
+                            <mainClass>org.openagrios.apps.floodops.FloodOpsServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

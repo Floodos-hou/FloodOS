@@ -35,7 +35,7 @@ jobs:
     - name: Run Unit Tests (Java + Python, incl. DuckDB/Parquet round-trips)
       run: bash tests/run_unit_tests.sh
 
-    - name: Run In-Process Integration & Acceptance Tests (10/10 Suites)
+    - name: Run In-Process Acceptance Tests (Hanoi FloodOps golden path over real HTTP)
       run: |
         java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
 

@@ -1,827 +1,422 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 OpenAgriOS Contributors
-
+#
+# Full-stack integration test of OpenDXOS + Hanoi FloodOps on the REAL Docker stack:
+# APISIX -> Keycloak (PKCE) -> Core API -> PostgreSQL (row-level security) -> Flowable -> SeaweedFS -> ClamAV
+# -> Mosquitto/ingestor -> Kafka -> Parquet/DuckDB. Nothing is mocked.
 set -euo pipefail
 
 echo "============================================================================"
-echo "OPENAGRIOS FULL-STACK CONTAINER INTEGRATION TEST RUNNER"
+echo "OPENDXOS / HANOI FLOODOPS - FULL-STACK CONTAINER INTEGRATION TEST RUNNER"
 echo "============================================================================"
 
-# Ensure cleanup on script exit
+DC="docker compose -f compose.yaml"
+GW="http://localhost:9080"
+REDIRECT_ENC="http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback"
+REDIRECT="http://localhost:9080/auth/callback"
+PASSWORD="123456"   # development password of the demo realm (infra/keycloak/openagrios-realm.json)
+
 cleanup() {
     echo "============================================================================"
     echo "CONTAINER LOGS INSPECTION BEFORE TEARDOWN:"
     echo "============================================================================"
-    echo "--- CORE API LOGS ---"
-    docker compose -f compose.yaml logs --tail 100 core-api || true
-    echo "--- POSTGRES LOGS ---"
-    docker compose -f compose.yaml logs --tail 30 postgres || true
-    echo "--- KEYCLOAK LOGS ---"
-    docker compose -f compose.yaml logs --tail 30 keycloak || true
+    echo "--- CORE API LOGS ---";   $DC logs --tail 60 core-api || true
+    echo "--- POSTGRES LOGS ---";   $DC logs --tail 20 postgres || true
+    echo "--- KEYCLOAK LOGS ---";   $DC logs --tail 20 keycloak || true
     echo "============================================================================"
     if [ "${CI:-false}" = "true" ] || [ "${PURGE_VOLUMES:-false}" = "true" ]; then
-        echo "Tearing down Docker Compose containers and purging volumes (CI/purge mode)..."
-        docker compose -f compose.yaml down -v --remove-orphans || true
+        echo "Tearing down containers and purging volumes (CI/purge mode)..."
+        $DC down -v --remove-orphans || true
     else
-        echo "Tearing down Docker Compose containers (preserving persistent database and storage volumes in local dev)..."
-        docker compose -f compose.yaml down --remove-orphans || true
+        echo "Tearing down containers (persistent database and storage volumes are preserved)..."
+        $DC down --remove-orphans || true
     fi
 }
 trap cleanup EXIT
 
-# The demo device simulator (profile "demo") keeps moving machines; the telemetry assertions need a quiet twin
-docker compose -f compose.yaml --profile demo rm -sf device-simulator >/dev/null 2>&1 || true
+pass() { echo "[PASS] $1"; }
+fail() { echo "[FAIL] $1"; exit 1; }
+expect() { # description actual expected
+    if [ "$2" = "$3" ]; then echo "    [OK] $1"; else echo "    got '$2' but expected '$3'"; fail "$1"; fi
+}
+psql_q() { $DC exec -T postgres psql -U openagrios -d openagrios_db -At -c "$1" | tr -d '\r'; }
+# Runs SQL as the NON-superuser application role with an explicit RLS session (what the core API does per request).
+rls() { # org role user sql
+    $DC exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A \
+        -c "SET LOCAL app.current_org_id='$1'; SET LOCAL app.current_user_role='$2'; SET LOCAL app.current_user_id='$3'; $4" | tail -n 1 | tr -d '\r' | xargs
+}
+jget() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null; }
+# gateway call: prints the HTTP status; the body is left in /tmp/e2e_body
+gw() { # method path token [json]
+    curl -s -m 60 -o /tmp/e2e_body -w '%{http_code}' -X "$1" "$GW/api/v1$2" \
+        -H "Authorization: Bearer $3" -H 'Content-Type: application/json' ${4:+-d "$4"}
+}
+body() { cat /tmp/e2e_body; }
+
+pkce_login() { # username -> access token on stdout (client-owned verifier, S256, anti-CSRF state)
+    local user="$1" verifier challenge state resp astate code tok
+    verifier=$(head -c 48 /dev/urandom | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+    challenge=$(printf '%s' "$verifier" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+    state="st-$(date +%s)-$RANDOM"
+    resp=$(curl -s -f "$GW/api/v1/auth/pkce/authorize-url?state=$state&code_challenge=$challenge&redirect_uri=$REDIRECT_ENC")
+    astate=$(echo "$resp" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
+    code=$(curl -s -X POST "$GW/api/v1/auth/pkce/authorize-code" -H 'Content-Type: application/json' \
+        -d "{\"username\":\"$user\",\"password\":\"$PASSWORD\",\"code_challenge\":\"$challenge\",\"state\":\"$astate\",\"redirect_uri\":\"$REDIRECT\"}" \
+        | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+    [ -n "$code" ] || return 1
+    tok=$(curl -s -X POST "$GW/api/v1/auth/pkce/token" -H 'Content-Type: application/json' \
+        -d "{\"code\":\"$code\",\"code_verifier\":\"$verifier\",\"state\":\"$astate\",\"redirect_uri\":\"$REDIRECT\"}" \
+        | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+    [ -n "$tok" ] || return 1
+    echo "$tok"
+}
+
+# The demo device simulator (profile "demo") keeps moving vehicles; the telemetry assertions need a quiet twin.
+$DC --profile demo rm -sf device-simulator >/dev/null 2>&1 || true
 echo "[1/5] Building and starting all containers in detached mode..."
-docker compose -f compose.yaml up -d --build
+$DC up -d --build
 
 echo "[2/5] Awaiting service healthchecks..."
+wait_for() { # description tries command...
+    local what="$1" tries="$2"; shift 2
+    for i in $(seq 1 "$tries"); do
+        if "$@" >/dev/null 2>&1; then echo " -> $what is ready"; return 0; fi
+        echo " ... waiting for $what ($i/$tries)"; sleep 3
+    done
+    fail "$what never became ready"
+}
+wait_for "PostgreSQL" 30 $DC exec -T postgres pg_isready -U openagrios -d openagrios_db
+wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/openagrios/.well-known/openid-configuration
+wait_for "Flowable REST" 40 curl -sf -u rest-admin:test http://localhost:8081/flowable-rest/service/repository/deployments
+wait_for "Core API" 60 curl -sf http://localhost:8000/api/v1/health
+wait_for "APISIX gateway" 40 curl -sf "$GW/api/v1/health"
 
-# 1. PostgreSQL (Port 5432)
-echo "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-    if docker compose -f compose.yaml exec -T postgres pg_isready -U openagrios -d openagrios_db >/dev/null 2>&1; then
-        echo " -> PostgreSQL is healthy and accepting connections!"
-        break
-    fi
-    echo " ... waiting for PostgreSQL ($i/30)"
-    sleep 2
-done
-
-# 2. Keycloak (Port 8080)
-echo "Waiting for Keycloak OIDC Discovery endpoint..."
-for i in {1..40}; do
-    if curl -s -f http://localhost:8080/realms/openagrios/.well-known/openid-configuration >/dev/null 2>&1; then
-        echo " -> Keycloak OIDC realm 'openagrios' is ready!"
-        break
-    fi
-    echo " ... waiting for Keycloak ($i/40)"
-    sleep 3
-done
-
-# 3. SeaweedFS S3 Object Storage (Port 9000)
-echo "Waiting for SeaweedFS S3 Object Storage..."
-for i in {1..20}; do
-    if curl -s http://localhost:9000/ >/dev/null 2>&1 || exec 3<>/dev/tcp/127.0.0.1/9000 2>/dev/null; then
-        echo " -> SeaweedFS S3 storage endpoint is online!"
-        break
-    fi
-    echo " ... waiting for SeaweedFS ($i/20)"
-    sleep 2
-done
-
-# 4. Flowable BPMN Engine (Port 8081)
-echo "Waiting for Flowable REST BPMN Engine..."
-for i in {1..30}; do
-    if curl -s -f -u rest-admin:test http://localhost:8081/flowable-rest/service/repository/deployments >/dev/null 2>&1; then
-        echo " -> Flowable REST Engine is online!"
-        break
-    fi
-    echo " ... waiting for Flowable ($i/30)"
-    sleep 2
-done
-
-# 5. Core API (Port 8000)
-echo "Waiting for OpenAgriOS Core API..."
-for i in {1..30}; do
-    if curl -s -f http://localhost:8000/api/v1/health >/dev/null 2>&1; then
-        echo " -> Core API is healthy!"
-        break
-    fi
-    echo " ... waiting for Core API ($i/30)"
-    sleep 2
-done
-
-# 6. APISIX Zero-Trust Gateway (Port 9080)
-echo "Waiting for APISIX Gateway..."
-for i in {1..30}; do
-    if curl -s -f http://localhost:9080/api/v1/health >/dev/null 2>&1; then
-        echo " -> APISIX Gateway routing is active!"
-        break
-    fi
-    echo " ... waiting for APISIX ($i/30)"
-    sleep 2
-done
+# A Keycloak container created before the FloodOps realm existed still holds the old realm (it is imported at first start
+# only): detect that and recreate the identity-bound services so the run needs no manual step.
+if ! pkce_login reporter_lan >/dev/null 2>&1; then
+    echo "Keycloak has no FloodOps users yet: recreating keycloak, core-api and apisix so the realm is re-imported..."
+    $DC up -d --force-recreate keycloak core-api apisix >/dev/null
+    wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/openagrios/.well-known/openid-configuration
+    wait_for "Core API" 60 curl -sf http://localhost:8000/api/v1/health
+    wait_for "APISIX gateway" 40 curl -sf "$GW/api/v1/health"
+fi
 
 echo "[3/5] Docker container process inspection:"
-docker compose -f compose.yaml ps -a
+$DC ps -a
 
 echo "[4/5] Executing Live Stack Integration Assertions..."
 
-# Assertion 1: Core API Health & BPMN definitions
-HEALTH_JSON=$(curl -s -f http://localhost:8000/api/v1/health)
-echo "Core API Health Response: $HEALTH_JSON"
-if echo "$HEALTH_JSON" | grep -q '"status":"HEALTHY"'; then
-    echo "[PASS] Assertion 1: Core API /api/v1/health reports HEALTHY status."
-else
-    echo "[FAIL] Assertion 1: Core API is not healthy."
-    exit 1
-fi
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 1: platform health, registered roles, BPMN definitions from infra/bpmn
+HEALTH=$(curl -s -f http://localhost:8000/api/v1/health)
+echo "$HEALTH" | grep -q '"status":"HEALTHY"' || fail "Assertion 1: Core API is not healthy."
+expect "roles are registered by the application" "$(echo "$HEALTH" | jget "','.join(d['registered_roles'])")" "PLATFORM_ADMIN,DISPATCHER,RESOURCE_MANAGER,FIELD_TEAM,REPORTER"
+echo "$HEALTH" | grep -q 'flood_report_lifecycle' || fail "Assertion 1: flood_report_lifecycle BPMN not loaded."
+echo "$HEALTH" | grep -q 'dispatch_replan' || fail "Assertion 1: dispatch_replan BPMN not loaded."
+pass "Assertion 1: Core API HEALTHY; roles registered by the application; both BPMN processes loaded."
 
-# Assertion 2: PostgreSQL Multi-Tenant Tables & Seed Data
-COUNT_FIELDS=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios -d openagrios_db -t -c "SELECT COUNT(*) FROM fields;")
-echo "PostgreSQL 'fields' row count: $COUNT_FIELDS"
-if [ "$COUNT_FIELDS" -gt 0 ]; then
-    echo "[PASS] Assertion 2: PostgreSQL 16 schema loaded and seeded successfully ($COUNT_FIELDS fields)."
-else
-    echo "[FAIL] Assertion 2: PostgreSQL fields table is empty."
-    exit 1
-fi
-
-# Assertion 3: Verify dedicated openagrios_app non-superuser role
-APP_ROLE_CHECK=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios -d openagrios_db -t -c "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='openagrios_app';")
-echo "Role openagrios_app permissions (rolsuper, rolbypassrls): $APP_ROLE_CHECK"
-if echo "$APP_ROLE_CHECK" | grep -E 'f[[:space:]]+\|[[:space:]]+f'; then
-    echo "[PASS] Assertion 3: Dedicated openagrios_app role verified (NOSUPERUSER, NOBYPASSRLS)."
-else
-    echo "[FAIL] Assertion 3: openagrios_app role permissions mismatch."
-    exit 1
-fi
-
-# The gateway starts after its upstreams (core API, operations portal, 3D twin) are healthy: give it time to load its routes
-echo "Waiting for the APISIX gateway to serve the health route..."
-for i in {1..45}; do
-    if curl -s -f -m 5 http://localhost:9080/api/v1/health >/dev/null 2>&1; then
-        echo " -> APISIX gateway is routing!"
-        break
-    fi
-    echo " ... waiting for APISIX ($i/45)"
-    sleep 2
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 2: one schema file, applied idempotently, on top of whatever the volume already holds
+for t in organizations users audit_records flood_zones flood_reports rescue_teams rescue_vehicles dispatch_orders field_incidents report_resolutions safe_shelters gauge_stations; do
+    expect "table $t exists" "$(psql_q "SELECT to_regclass('public.$t') IS NOT NULL;")" "t"
 done
-
-# Assertion 4: APISIX Gateway reverse proxy route
-GW_HEALTH=$(curl -s -f http://localhost:9080/api/v1/health)
-if echo "$GW_HEALTH" | grep -q '"status":"HEALTHY"'; then
-    echo "[PASS] Assertion 4: APISIX Gateway successfully routed /api/v1/health to Core API."
-else
-    echo "[FAIL] Assertion 4: APISIX routing failed."
-    exit 1
-fi
-
-# Assertion 5: PKCE Session Generation Endpoint
-PKCE_JSON=$(curl -s -f http://localhost:8000/api/v1/auth/pkce/authorize-url)
-if echo "$PKCE_JSON" | grep -q '"code_challenge"'; then
-    echo "[PASS] Assertion 5: PKCE Authorization endpoint active and generated valid code_challenge."
-else
-    echo "[FAIL] Assertion 5: PKCE authorize endpoint failed."
-    exit 1
-fi
-
-# Assertion 6: Flowable REST Engine deployment verification
-FLOWABLE_DEPLOYMENTS=$(curl -s -u rest-admin:test http://localhost:8081/flowable-rest/service/repository/deployments)
-if echo "$FLOWABLE_DEPLOYMENTS" | grep -q '"data"'; then
-    echo "[PASS] Assertion 6: Flowable REST Engine v7.0.0 is online and process definitions deployed."
-else
-    echo "[FAIL] Assertion 6: Flowable REST deployments query failed."
-    exit 1
-fi
-
-# Assertion 7: Live Multi-Tenant & Multi-User RLS query check on PostgreSQL container
-echo "Verifying Live Multi-Tenant & Multi-User Row-Level Security on PostgreSQL..."
-FARMER_BA_SEES=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -t -c "
-    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
-    SET LOCAL app.current_user_role = 'FARMER';
-    SET LOCAL app.current_user_id = 'usr_farmer_ba';
-    SELECT COUNT(*) FROM service_requests;
-" | grep -o '[0-9]\+' | tail -n 1)
-echo "Farmer Ba visible requests: $FARMER_BA_SEES"
-
-FARMER_NAM_SEES=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -t -c "
-    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
-    SET LOCAL app.current_user_role = 'FARMER';
-    SET LOCAL app.current_user_id = 'usr_farmer_nam';
-    SELECT COUNT(*) FROM service_requests;
-" | grep -o '[0-9]\+' | tail -n 1)
-echo "Farmer Nam visible requests: $FARMER_NAM_SEES"
-
-SOCTRANG_SEES=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -t -c "
-    SET LOCAL app.current_org_id = 'HTX_SOCTRANG_02';
-    SET LOCAL app.current_user_role = 'COORDINATOR';
-    SET LOCAL app.current_user_id = 'usr_coord_02';
-    SELECT COUNT(*) FROM service_requests;
-" | grep -o '[0-9]\+' | tail -n 1)
-echo "Soc Trang Coordinator visible requests: $SOCTRANG_SEES"
-
-FARMER_BA_FIELDS=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "
-    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
-    SET LOCAL app.current_user_role = 'FARMER';
-    SET LOCAL app.current_user_id = 'usr_farmer_ba';
-    SELECT string_agg(field_id, ',' ORDER BY field_id) FROM fields;
-" | tail -n 1 | xargs)
-FARMER_TAM_FIELDS=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "
-    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
-    SET LOCAL app.current_user_role = 'FARMER';
-    SET LOCAL app.current_user_id = 'usr_farmer_tam';
-    SELECT string_agg(field_id, ',' ORDER BY field_id) FROM fields;
-" | tail -n 1 | xargs)
-echo "Farmer Ba visible fields: $FARMER_BA_FIELDS"
-echo "Farmer Tam visible fields: $FARMER_TAM_FIELDS"
-
-if [ "$FARMER_BA_SEES" -gt 0 ] && [ "$FARMER_NAM_SEES" -eq 0 ] && [ "$SOCTRANG_SEES" -eq 0 ] \
-    && [ "$FARMER_BA_FIELDS" = "F01,F03,F07" ] \
-    && [ "$FARMER_TAM_FIELDS" = "F02,F04,F05,F06,F08,F09,F10" ]; then
-    echo "[PASS] Assertion 7: Live tenant and user RLS verified for service requests and field ownership."
-else
-    echo "[FAIL] Assertion 7: RLS isolation leak detected."
-    exit 1
-fi
-
-# Assertion 8: End-to-end Live Golden Path via APISIX Gateway (:9080) & Full PKCE Flow (RFC 7636 & RFC 9700)
-echo "Executing Live Golden Path across APISIX Gateway (:9080) with Full RFC 7636 PKCE Flow..."
-
-# 1. Step 1: Initialize PKCE Parameters with anti-CSRF State Token through APISIX Gateway
-PKCE_STATE="csrf-token-$(date +%s)-$$"
-echo " -> Step 1: Initializing PKCE parameters with anti-CSRF state: $PKCE_STATE..."
-PKCE_GW_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE&redirect_uri=http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback")
-
-CODE_CHALLENGE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_challenge":"\([^"]*\)".*/\1/p')
-CODE_VERIFIER=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"code_verifier":"\([^"]*\)".*/\1/p')
-RETURNED_STATE=$(echo "$PKCE_GW_RESP" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
-
-if [ -n "$CODE_CHALLENGE" ] && [ -n "$CODE_VERIFIER" ]; then
-    echo "    [OK] PKCE parameters generated: challenge_method=S256, state=$RETURNED_STATE"
-else
-    echo "PKCE session response: $PKCE_GW_RESP"
-    echo "[FAIL] Assertion 8: Failed to initialize PKCE parameters via APISIX Gateway."
-    exit 1
-fi
-
-echo " -> Step 2: Acquiring genuine Keycloak Authorization Code (RFC 7636)..."
-AUTH_CODE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
-    -H "Content-Type: application/json" \
-    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
-AUTH_CODE=$(echo "$AUTH_CODE_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
-
-if [ -n "$AUTH_CODE" ]; then
-    echo "    [OK] Acquired genuine Keycloak Authorization Code: $AUTH_CODE"
-else
-    echo "Keycloak auth code acquisition response: $AUTH_CODE_RESP"
-    echo "[FAIL] Assertion 8: Failed to acquire genuine Keycloak authorization code."
-    exit 1
-fi
-
-# 2. Step 3: Verify PKCE Security Guard: Tampered / Mismatched code_verifier must be rejected by Keycloak (RFC 7636 Section 4.6)
-echo " -> Step 3: Testing PKCE Security Guard against Keycloak (Anti-Tampering & Anti-CSRF)..."
-TAMPERED_VERIFIER="tampered_code_verifier_1234567890123456789012345678901234567890"
-TAMPERED_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
-    -H "Content-Type: application/json" \
-    -d "{\"code\":\"$AUTH_CODE\",\"code_verifier\":\"$TAMPERED_VERIFIER\",\"state\":\"$PKCE_STATE\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
-
-if echo "$TAMPERED_RESP" | grep -q -E "INVALID_GRANT|KEYCLOAK_TOKEN_EXCHANGE_FAILED"; then
-    echo "    [OK] PKCE Anti-Tampering verified: Keycloak upstream strictly rejected mismatched verifier."
-else
-    echo "Tampered verifier response: $TAMPERED_RESP"
-    echo "[FAIL] Assertion 8: Keycloak failed to reject tampered code_verifier."
-    exit 1
-fi
-
-# 3. Step 4: Re-create a fresh PKCE Session & acquire a fresh Keycloak Authorization Code
-# (RFC 7636 Section 4.6: Authorization codes are single-use; the previous code was consumed or invalidated)
-PKCE_STATE_VALID="csrf-valid-$(date +%s)-$$"
-# Browser-equivalent client: the verifier is generated and kept locally; only the S256 challenge is sent (RFC 7636 / RFC 9700)
-CODE_VERIFIER_VALID=$(head -c 48 /dev/urandom | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-CODE_CHALLENGE_VALID=$(printf '%s' "$CODE_VERIFIER_VALID" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-PKCE_FRESH_RESP=$(curl -s -f "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=$PKCE_STATE_VALID&code_challenge=$CODE_CHALLENGE_VALID&redirect_uri=http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback")
-if echo "$PKCE_FRESH_RESP" | grep -q '"code_verifier"'; then
-    echo "[FAIL] Assertion 8: Server returned a code_verifier although the client supplied its own code_challenge."
-    exit 1
-fi
-if ! echo "$PKCE_FRESH_RESP" | grep -q "\"code_challenge\":\"$CODE_CHALLENGE_VALID\""; then
-    echo "[FAIL] Assertion 8: Server did not echo the client-owned code_challenge."
-    exit 1
-fi
-BAD_CHALLENGE_HTTP=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9080/api/v1/auth/pkce/authorize-url?state=x&code_challenge=not-a-valid-challenge")
-if [ "$BAD_CHALLENGE_HTTP" != "400" ]; then
-    echo "[FAIL] Assertion 8: Malformed code_challenge must be rejected with HTTP 400 (got $BAD_CHALLENGE_HTTP)."
-    exit 1
-fi
-AUTH_STATE_VALID=$(echo "$PKCE_FRESH_RESP" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
-
-AUTH_CODE_FRESH_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/authorize-code \
-    -H "Content-Type: application/json" \
-    -d "{\"username\":\"coord_htx01\",\"password\":\"123456\",\"code_challenge\":\"$CODE_CHALLENGE_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
-AUTH_CODE_VALID=$(echo "$AUTH_CODE_FRESH_RESP" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
-
-if [ -z "$AUTH_CODE_VALID" ]; then
-    echo "Keycloak auth code acquisition response: $AUTH_CODE_FRESH_RESP"
-    echo "[FAIL] Assertion 8: Failed to acquire fresh Keycloak authorization code."
-    exit 1
-fi
-
-# 4. Step 5: Exchange genuine Authorization Code + valid code_verifier for Live Keycloak Token via APISIX Gateway
-echo " -> Step 4: Exchanging genuine Keycloak Authorization Code + valid code_verifier for Live Bearer Token..."
-TOKEN_EXCHANGE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/auth/pkce/token \
-    -H "Content-Type: application/json" \
-    -d "{\"code\":\"$AUTH_CODE_VALID\",\"code_verifier\":\"$CODE_VERIFIER_VALID\",\"state\":\"$AUTH_STATE_VALID\",\"redirect_uri\":\"http://localhost:9080/auth/callback\"}")
-
-ACCESS_TOKEN=$(echo "$TOKEN_EXCHANGE_RESP" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
-if [ -z "$ACCESS_TOKEN" ]; then
-    echo "PKCE token exchange response: $TOKEN_EXCHANGE_RESP"
-    echo "[FAIL] Assertion 8: PKCE Token exchange via APISIX failed."
-    exit 1
-fi
-echo "    [OK] Successfully exchanged PKCE authorization code for Live Keycloak Bearer Token!"
-
-# 5. Step 5: Access Protected Core API through APISIX (exercises APISIX token introspection with Keycloak)
-echo " -> Step 4: Accessing protected endpoint /api/v1/state via APISIX Gateway (Zero-Trust Introspection)..."
-STATE_RESP=$(curl -s http://localhost:9080/api/v1/state \
-    -H "Authorization: Bearer $ACCESS_TOKEN")
-if echo "$STATE_RESP" | grep -q '"organization_name"'; then
-    echo "    [OK] APISIX token introspection with Keycloak succeeded; protected state accessed!"
-else
-    echo "Protected state response: $STATE_RESP"
-    echo "[FAIL] Assertion 8: APISIX Zero-Trust introspection failed on /api/v1/state."
-    exit 1
-fi
-
-# 6. Step 6: Create Service Request through APISIX Gateway with PKCE Bearer Token
-echo " -> Step 5: Submitting Service Request with PKCE-acquired Bearer Token via APISIX..."
-REQ_ID="REQ-E2E-$(date +%s)"
-CREATE_RESP=$(curl -s -X POST http://localhost:9080/api/v1/requests \
-    -H "Authorization: Bearer $ACCESS_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"request_id\": \"$REQ_ID\",
-        \"field_id\": \"F01\",
-        \"area_ha\": 2.5,
-        \"requested_start\": \"2026-11-20T08:00:00Z\",
-        \"requested_end\": \"2026-11-20T12:00:00Z\",
-        \"priority\": \"URGENT\",
-        \"notes\": \"Live Golden Path E2E Test through APISIX and RFC 7636 PKCE\"
-    }")
-
-CREATED_REQ_ID=$(echo "$CREATE_RESP" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')
-if [ -n "$CREATED_REQ_ID" ] && echo "$CREATE_RESP" | grep -q '"ok":true'; then
-    echo "    [OK] Service request $CREATED_REQ_ID created successfully via APISIX Gateway!"
-else
-    echo "Create request response: $CREATE_RESP"
-    echo "[FAIL] Assertion 8: Failed to create service request via APISIX."
-    exit 1
-fi
-
-# 7. Step 7: Verify the record is persisted into PostgreSQL
-echo " -> Step 6: Verifying record persistence in PostgreSQL database..."
-PG_REQ_COUNT=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios -d openagrios_db -t -c "SELECT COUNT(*) FROM service_requests WHERE request_id='$CREATED_REQ_ID';" | grep -o '[0-9]\+' | tail -n 1)
-if [ "$PG_REQ_COUNT" -gt 0 ]; then
-    echo "[PASS] Assertion 8: Live Golden Path verified end-to-end (APISIX -> RFC 7636 PKCE Session -> Keycloak OIDC -> APISIX Zero-Trust Introspection -> Core API -> PostgreSQL Persistence)."
-else
-    echo "[FAIL] Assertion 8: Service request $REQ_ID was not found in PostgreSQL."
-    exit 1
-fi
-
-# Assertion 11: hot -> cold data pipeline (Core API -> Kafka -> Parquet on S3 -> DuckDB analytics)
-echo "Verifying hot/cold data pipeline (Kafka -> Parquet on SeaweedFS S3 -> DuckDB)..."
-BUS_PUBLISHED=0
-for i in {1..20}; do
-    BUS_PUBLISHED=$(curl -s http://localhost:8000/api/v1/health | python3 -c "import sys,json; print(json.load(sys.stdin)['core_services']['event_bus']['published'])" 2>/dev/null || echo 0)
-    if [ "${BUS_PUBLISHED:-0}" -gt 0 ]; then break; fi
-    sleep 2
+SCHEMA_RUNS=0
+for run in 1 2; do
+    # MSYS_NO_PATHCONV keeps Git-Bash on Windows from rewriting the container path
+    MSYS_NO_PATHCONV=1 $DC exec -T postgres psql -v ON_ERROR_STOP=1 -q -U openagrios -d openagrios_db -f /docker-entrypoint-initdb.d/02-schema.sql >/dev/null 2>&1 && SCHEMA_RUNS=$((SCHEMA_RUNS + 1))
 done
-if [ "${BUS_PUBLISHED:-0}" -le 0 ]; then
-    echo "[FAIL] Assertion 11: Core API published no events to the Kafka event bus."
-    exit 1
-fi
-echo "    [OK] Core API published $BUS_PUBLISHED audit event(s) to Kafka."
-
-LAKE_EVENTS=0
-for i in {1..30}; do
-    LAKE_JSON=$(curl -s http://localhost:9080/api/v1/analytics/summary -H "Authorization: Bearer $ACCESS_TOKEN" || true)
-    LAKE_EVENTS=$(echo "$LAKE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['audit']['events'])" 2>/dev/null || echo 0)
-    if [ "${LAKE_EVENTS:-0}" -gt 0 ]; then break; fi
-    sleep 3
+expect "schema.sql re-applies cleanly twice (idempotent migration)" "$SCHEMA_RUNS" "2"
+for t in flood_zones flood_reports rescue_teams rescue_vehicles dispatch_orders field_incidents report_resolutions safe_shelters gauge_stations audit_records; do
+    expect "row-level security is enabled and FORCED on $t" "$(psql_q "SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname='$t';")" "t"
 done
-if [ "${LAKE_EVENTS:-0}" -le 0 ]; then
-    echo "Analytics summary response: $LAKE_JSON"
-    echo "[FAIL] Assertion 11: No audit events reached the cold Parquet lake."
-    exit 1
-fi
-echo "    [OK] DuckDB counted $LAKE_EVENTS audit event(s) in the Parquet lake."
+expect "the application role is not a superuser and cannot bypass RLS" "$(psql_q "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='openagrios_app';")" "f"
+pass "Assertion 2: single-source schema verified (all tables, idempotent re-apply, RLS forced, least-privilege app role)."
 
-PARQUET_KEYS=$(curl -s "http://localhost:9000/openagrios-lake?prefix=audit/" | grep -oE 'audit/dt=[0-9-]+/(part|compact)-[^<"]*\.parquet' | sort -u | wc -l || true)
-if [ "$PARQUET_KEYS" -le 0 ]; then
-    echo "[FAIL] Assertion 11: No .parquet objects found in the S3 lake bucket."
-    exit 1
-fi
-echo "    [OK] $PARQUET_KEYS Parquet object(s) stored in s3://openagrios-lake/audit/."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 3: the identity flow (RFC 7636 PKCE through the gateway against the real Keycloak)
+V=$(head -c 48 /dev/urandom | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+C=$(printf '%s' "$V" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+AU=$(curl -s -f "$GW/api/v1/auth/pkce/authorize-url?state=s1&code_challenge=$C&redirect_uri=$REDIRECT_ENC")
+echo "$AU" | grep -q '"code_verifier"' && fail "Assertion 3: the server returned a code_verifier although the client owns it."
+expect "a malformed code_challenge is refused" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/auth/pkce/authorize-url?state=x&code_challenge=nope")" "400"
+CODE=$(curl -s -X POST "$GW/api/v1/auth/pkce/authorize-code" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"reporter_lan\",\"password\":\"$PASSWORD\",\"code_challenge\":\"$C\",\"state\":\"s1\",\"redirect_uri\":\"$REDIRECT\"}" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+[ -n "$CODE" ] || fail "Assertion 3: Keycloak issued no authorization code."
+BAD=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/v1/auth/pkce/token" -H 'Content-Type: application/json' \
+    -d "{\"code\":\"$CODE\",\"code_verifier\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"state\":\"s1\",\"redirect_uri\":\"$REDIRECT\"}")
+[ "$BAD" != "200" ] || fail "Assertion 3: a tampered code_verifier was accepted."
+echo "    [OK] a tampered code_verifier is rejected ($BAD)"
+expect "wrong password gets no authorization code" "$(curl -s -X POST "$GW/api/v1/auth/pkce/authorize-code" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"reporter_lan\",\"password\":\"wrong\",\"code_challenge\":\"$C\",\"state\":\"s1\",\"redirect_uri\":\"$REDIRECT\"}" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')" ""
+expect "a former rice-harvest account no longer exists in the realm" "$(curl -s -X POST "$GW/api/v1/auth/pkce/authorize-code" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"farmer_ba\",\"password\":\"$PASSWORD\",\"code_challenge\":\"$C\",\"state\":\"s1\",\"redirect_uri\":\"$REDIRECT\"}" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')" ""
+expect "the gateway refuses protected calls without a token" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/state")" "401"
+T_ADMIN=$(pkce_login platform_admin) || fail "Assertion 3: platform_admin could not sign in."
+T_LAN=$(pkce_login reporter_lan) || fail "Assertion 3: reporter_lan could not sign in."
+T_HUNG=$(pkce_login reporter_hung) || fail "Assertion 3: reporter_hung could not sign in."
+T_HOA=$(pkce_login dispatcher_hoa) || fail "Assertion 3: dispatcher_hoa could not sign in."
+T_BINH=$(pkce_login team_binh) || fail "Assertion 3: team_binh could not sign in."
+T_CUONG=$(pkce_login team_cuong) || fail "Assertion 3: team_cuong could not sign in."
+T_DUNG=$(pkce_login team_dung) || fail "Assertion 3: team_dung could not sign in."
+T_GIANG=$(pkce_login resource_giang) || fail "Assertion 3: resource_giang could not sign in."
+T_MAI=$(pkce_login reporter_mai) || fail "Assertion 3: reporter_mai could not sign in."
+T_TUAN=$(pkce_login dispatcher_tuan) || fail "Assertion 3: dispatcher_tuan could not sign in."
+pass "Assertion 3: PKCE flow verified against real Keycloak (tampering and bad credentials refused; 10 demo identities signed in)."
 
-DAY_JSON=$(curl -s http://localhost:9080/api/v1/analytics/actions-by-day -H "Authorization: Bearer $ACCESS_TOKEN")
-if ! echo "$DAY_JSON" | grep -q '"engine": *"DuckDB"'; then
-    echo "actions-by-day response: $DAY_JSON"
-    echo "[FAIL] Assertion 11: actions-by-day analytics query failed."
-    exit 1
-fi
+# Start every run from the documented seed (the reset endpoint is open only to PLATFORM_ADMIN and only in development).
+expect "a dispatcher may not reset the demo data" "$(gw POST /sim/reset "$T_HOA" '{}')" "403"
+expect "the platform admin resets the demo data" "$(gw POST /sim/reset "$T_ADMIN" '{}')" "200"
 
-UNAUTH_HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9080/api/v1/analytics/summary)
-if [ "$UNAUTH_HTTP" != "401" ] && [ "$UNAUTH_HTTP" != "403" ]; then
-    echo "[FAIL] Assertion 11: analytics reachable without a token via the gateway (HTTP $UNAUTH_HTTP)."
-    exit 1
-fi
-if curl -s -m 3 -o /dev/null http://localhost:8090/health 2>/dev/null; then
-    echo "[FAIL] Assertion 11: lake-archiver port 8090 is exposed on the host (Zero-Trust violation)."
-    exit 1
-fi
-echo "[PASS] Assertion 11: Hot/cold pipeline verified (events -> Kafka -> Parquet in S3 -> DuckDB query; gateway-protected, archiver not host-exposed)."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 4: row-level security enforced by PostgreSQL itself, per role, as the non-superuser application role
+SEES_LAN=$(rls ORG_HN_PILOT_01 REPORTER usr_reporter_lan "SELECT string_agg(report_id, ',' ORDER BY report_id) FROM flood_reports;")
+SEES_HUNG=$(rls ORG_HN_PILOT_01 REPORTER usr_reporter_hung "SELECT string_agg(report_id, ',' ORDER BY report_id) FROM flood_reports;")
+expect "reporter_lan sees only FR-0001 and FR-0003" "$SEES_LAN" "FR-0001,FR-0003"
+expect "reporter_hung sees only FR-0002 and FR-0004" "$SEES_HUNG" "FR-0002,FR-0004"
+expect "reporter_lan sees only the zone of their own reports" "$(rls ORG_HN_PILOT_01 REPORTER usr_reporter_lan "SELECT string_agg(zone_id, ',' ORDER BY zone_id) FROM flood_zones;")" "Z01"
+expect "reporter_lan sees only the vehicle serving them" "$(rls ORG_HN_PILOT_01 REPORTER usr_reporter_lan "SELECT string_agg(vehicle_id, ',' ORDER BY vehicle_id) FROM rescue_vehicles;")" "V01"
+expect "a reporter sees no team and no incident" "$(rls ORG_HN_PILOT_01 REPORTER usr_reporter_lan "SELECT (SELECT count(*) FROM rescue_teams) + (SELECT count(*) FROM field_incidents);")" "0"
+expect "the dispatcher sees all four reports of the tenant" "$(rls ORG_HN_PILOT_01 DISPATCHER usr_dispatcher_hoa "SELECT count(*) FROM flood_reports WHERE report_id IN ('FR-0001','FR-0002','FR-0003','FR-0004');")" "4"
+expect "the dispatcher never sees another tenant's report" "$(rls ORG_HN_PILOT_01 DISPATCHER usr_dispatcher_hoa "SELECT count(*) FROM flood_reports WHERE report_id='FR-0091';")" "0"
+expect "the other tenant sees only its own report" "$(rls ORG_HN_PILOT_02 DISPATCHER usr_dispatcher_tuan "SELECT string_agg(report_id, ',' ORDER BY report_id) FROM flood_reports;")" "FR-0091"
+expect "a field team sees only the report behind its own order" "$(rls ORG_HN_PILOT_01 FIELD_TEAM usr_team_binh "SELECT string_agg(report_id, ',' ORDER BY report_id) FROM flood_reports;")" "FR-0001"
+expect "a field team without orders sees no report" "$(rls ORG_HN_PILOT_01 FIELD_TEAM usr_team_dung "SELECT count(*) FROM flood_reports;")" "0"
+expect "the resource manager sees the fleet but no citizen report" "$(rls ORG_HN_PILOT_01 RESOURCE_MANAGER usr_resource_giang "SELECT (SELECT count(*) FROM flood_reports)::text || '/' || (SELECT count(*) FROM rescue_vehicles WHERE organization_id='ORG_HN_PILOT_01');")" "0/5"
+expect "an unknown role sees nothing (deny by default)" "$(rls ORG_HN_PILOT_01 BOGUS usr_reporter_lan "SELECT count(*) FROM flood_reports;")" "0"
+expect "an empty session sees nothing (deny by default)" "$(rls '' '' '' "SELECT count(*) FROM flood_reports;")" "0"
+INSERT_OUT=$($DC exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "SET LOCAL app.current_org_id='ORG_HN_PILOT_01'; SET LOCAL app.current_user_role='REPORTER'; SET LOCAL app.current_user_id='usr_reporter_hung'; INSERT INTO flood_reports(report_id,organization_id,zone_id,reporter_user_id,lat,lng,depth_cm,need_type,correlation_id) VALUES ('FR-E2E-FAKE','ORG_HN_PILOT_01','Z01','usr_reporter_lan',20.9,105.8,10,'PUMPING','c');" 2>&1 || true)
+echo "$INSERT_OUT" | grep -qi "row-level security" || fail "Assertion 4: a reporter could write a report in someone else's name (got: $INSERT_OUT)."
+echo "    [OK] a reporter cannot insert a report owned by another user (row-level security rejects it)"
+OVERLAP_OUT=$($DC exec -T postgres psql -U openagrios -d openagrios_db -q -t -A -c "INSERT INTO dispatch_orders(order_id,organization_id,report_id,reporter_user_id,zone_id,vehicle_id,team_id,start_time,end_time,correlation_id,created_by) VALUES ('ORD-E2E-CLASH','ORG_HN_PILOT_01','FR-0001','usr_reporter_lan','Z01','V01','T03',now(),now()+interval '1 hour','c','usr_dispatcher_hoa');" 2>&1 || true)
+echo "$OVERLAP_OUT" | grep -qi "exclusion constraint" || fail "Assertion 4: the database let two active orders share vehicle V01 (got: $OVERLAP_OUT)."
+echo "    [OK] the database itself refuses a double-booked vehicle (GiST exclusion constraint)"
+pass "Assertion 4: PostgreSQL row-level security and exclusion constraints verified per role, tenant and session."
 
-# Assertion 12: OT telemetry ingestion (MQTT device -> Mosquitto ACL -> ingestor -> Core digital twin -> Kafka -> Parquet)
-echo "Verifying OT telemetry ingestion over MQTT..."
-MQTT_DEV_USER="${MQTT_DEVICE_USER:-device}"
-MQTT_DEV_PASS="${MQTT_DEVICE_PASSWORD:-device_dev_only}"
-twin_probe() {
-    curl -s http://localhost:9080/api/v1/digital-twin/entities -H "Authorization: Bearer $ACCESS_TOKEN" | python3 -c "
-import sys, json
-e = json.load(sys.stdin)['entities'][0]
-lng, lat = e['location']['value']['coordinates']
-print(e['id'].rsplit(':', 1)[1], e['organizationId']['value'], lat, lng, e['fuelLevel']['value'])" 2>/dev/null
-}
-read -r TW_MID TW_ORG TW_LAT TW_LNG TW_FUEL <<< "$(twin_probe)"
-if [ -z "${TW_MID:-}" ]; then
-    echo "[FAIL] Assertion 12: could not read a machine from the digital twin."
-    exit 1
-fi
-mqtt_publish() { # topic payload [user] [pass]
-    docker compose -f compose.yaml exec -T mosquitto mosquitto_pub -h 127.0.0.1 -q 1 \
-        -u "${3:-$MQTT_DEV_USER}" -P "${4:-$MQTT_DEV_PASS}" -t "$1" -m "$2"
-}
-twin_lat() { twin_probe | awk '{print $3}'; }
-
-# (a) Anonymous / wrong-credential clients must be refused by the broker.
-if docker compose -f compose.yaml exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t "openagrios/$TW_ORG/machines/$TW_MID/telemetry" -m '{}' >/dev/null 2>&1; then
-    echo "[FAIL] Assertion 12: Mosquitto accepted an anonymous publish."
-    exit 1
-fi
-if mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" '{}' device wrong-password >/dev/null 2>&1; then
-    echo "[FAIL] Assertion 12: Mosquitto accepted a publish with a wrong password."
-    exit 1
-fi
-echo "    [OK] Broker refuses anonymous and wrong-password clients."
-
-# (b) A genuine sample from an authenticated device moves the digital twin.
-NEW_LAT=$(python3 -c "print(round($TW_LAT + 0.0010, 6))")
-NEW_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" \
-    "{\"ts\":\"$NEW_TS\",\"lat\":$NEW_LAT,\"lon\":$TW_LNG,\"fuel_pct\":61.5,\"speed_kmh\":6.2}"
-SEEN_LAT=""
-for i in {1..15}; do
-    SEEN_LAT=$(twin_lat)
-    if [ "$SEEN_LAT" = "$NEW_LAT" ]; then break; fi
-    sleep 2
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 5: Flowable runs the processes from infra/bpmn
+for KEY in flood_report_lifecycle dispatch_replan_workflow; do
+    DEFS=$(curl -s -u rest-admin:test "http://localhost:8081/flowable-rest/service/repository/process-definitions?key=$KEY&latest=true")
+    [ "$(echo "$DEFS" | jget "d['total']")" -ge 1 ] || { echo "$DEFS" | cut -c1-300; fail "Assertion 5: $KEY is not deployed in Flowable."; }
+    echo "    [OK] Flowable holds the definition $KEY (latest version $(echo "$DEFS" | jget "d['data'][0]['version']"))"
 done
-if [ "$SEEN_LAT" != "$NEW_LAT" ]; then
-    echo "[FAIL] Assertion 12: digital twin of $TW_MID did not follow MQTT telemetry (expected lat $NEW_LAT, got '$SEEN_LAT')."
-    docker compose -f compose.yaml logs --tail 20 telemetry-ingestor || true
-    exit 1
-fi
-echo "    [OK] Telemetry for $TW_MID reached the digital twin (lat $TW_LAT -> $NEW_LAT)."
+# the definitions are deployed once per distinct file content, not once per restart
+CONTENT_DEPLOYMENTS=$(curl -s -u rest-admin:test "http://localhost:8081/flowable-rest/service/repository/deployments?size=200&name=flood_report_lifecycle-$(sha256sum infra/bpmn/flood_report_lifecycle.bpmn20.xml | cut -c1-12)" | jget "d['total']" || echo 0)
+[ "${CONTENT_DEPLOYMENTS:-0}" -ge 1 ] || fail "Assertion 5: no deployment named after the file content hash exists in Flowable."
+echo "    [OK] $CONTENT_DEPLOYMENTS deployment(s) named after the file content hash (checked again after the core restart)"
+INSTANCES=$(curl -s -u rest-admin:test "http://localhost:8081/flowable-rest/service/runtime/process-instances?processDefinitionKey=flood_report_lifecycle" | jget "d['total']")
+[ "${INSTANCES:-0}" -ge 1 ] || fail "Assertion 5: no flood_report_lifecycle instance is running in Flowable."
+pass "Assertion 5: Flowable REST has the FloodOps process definitions and live instances ($INSTANCES running)."
 
-# (c) Out-of-range and cross-tenant samples must be rejected and must not alter the twin.
-mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" "{\"ts\":\"$NEW_TS\",\"lat\":999,\"lon\":$TW_LNG,\"fuel_pct\":50}"
-mqtt_publish "openagrios/HTX_SOCTRANG_02/machines/$TW_MID/telemetry" "{\"ts\":\"$NEW_TS\",\"lat\":10.0,\"lon\":105.0,\"fuel_pct\":50}"
-mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" "not-json"
-REJECTED=0
-for i in {1..10}; do
-    METRICS=$(docker compose -f compose.yaml exec -T telemetry-ingestor python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8091/metrics').read().decode())" 2>/dev/null || true)
-    BY_CORE=$(echo "$METRICS" | awk '/^openagrios_telemetry_rejected_by_core_total /{print $2}')
-    INVALID=$(echo "$METRICS" | awk '/^openagrios_telemetry_rejected_invalid_total /{print $2}')
-    REJECTED=$(( ${BY_CORE:-0} + ${INVALID:-0} ))
-    if [ "${BY_CORE:-0}" -ge 2 ] && [ "${INVALID:-0}" -ge 1 ]; then break; fi
-    sleep 2
-done
-if [ "${BY_CORE:-0}" -lt 2 ] || [ "${INVALID:-0}" -lt 1 ]; then
-    echo "[FAIL] Assertion 12: expected >=2 core rejections and >=1 invalid payload, got by_core=${BY_CORE:-0} invalid=${INVALID:-0}."
-    exit 1
-fi
-if [ "$(twin_lat)" != "$NEW_LAT" ]; then
-    echo "[FAIL] Assertion 12: a rejected sample changed the digital twin."
-    exit 1
-fi
-echo "    [OK] Out-of-range, cross-tenant and malformed samples rejected (by_core=$BY_CORE, invalid=$INVALID); twin unchanged."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 6: the golden path through the gateway, one real identity per role
+echo "Executing the FloodOps golden path across APISIX with real Keycloak tokens..."
+expect "reporter_lan state is scoped" "$(gw GET /state "$T_LAN")" "200"
+S_LAN=$(body)
+echo "$S_LAN" | grep -q '"organization_name"' || fail "Assertion 6: protected state did not arrive through APISIX introspection."
+echo "$S_LAN" | grep -q 'FR-0002' && fail "Assertion 6: another resident's report leaked into reporter_lan's payload."
+echo "$S_LAN" | grep -q 'FR-0091' && fail "Assertion 6: another tenant's report leaked into reporter_lan's payload."
+echo "    [OK] the resident's payload holds only their own reports"
+echo "$S_LAN" | grep -q 'MÔ PHỎNG' || fail "Assertion 6: the state does not declare that the demo data is simulated."
 
-# (d) The internal endpoint is sealed at the edge and requires the shared secret inside the network.
-EDGE_HTTP=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:9080/api/v1/internal/telemetry -H 'Content-Type: application/json' -d '{}')
-DIRECT_HTTP=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/api/v1/internal/telemetry -H 'Content-Type: application/json' -H 'X-Ingest-Token: wrong' -d '{}')
-if [ "$EDGE_HTTP" != "404" ] || [ "$DIRECT_HTTP" != "401" ]; then
-    echo "[FAIL] Assertion 12: internal endpoint exposure wrong (edge=$EDGE_HTTP expected 404, direct-bad-token=$DIRECT_HTTP expected 401)."
-    exit 1
-fi
-echo "    [OK] /api/v1/internal/* returns 404 at the gateway and 401 without the ingest token."
+DAY=$(date -u -d "2040-01-01 +$((RANDOM % 3000)) days" +%Y-%m-%d)
+W_START="${DAY}T08:00:00Z"; W_END="${DAY}T10:00:00Z"; W_MID_S="${DAY}T09:00:00Z"; W_MID_E="${DAY}T11:00:00Z"
 
-# (e) The same samples are queryable from the cold Parquet lake via DuckDB.
-LAKE_SAMPLES=0
-for i in {1..30}; do
-    LAKE_SAMPLES=$(curl -s http://localhost:9080/api/v1/analytics/machine-utilization -H "Authorization: Bearer $ACCESS_TOKEN" | python3 -c "
-import sys, json
-rows = json.load(sys.stdin).get('rows', [])
-print(sum(r['samples'] for r in rows if r['machine_id'] == '$TW_MID'))" 2>/dev/null || echo 0)
-    if [ "${LAKE_SAMPLES:-0}" -ge 1 ]; then break; fi
-    sleep 3
-done
-if [ "${LAKE_SAMPLES:-0}" -lt 1 ]; then
-    echo "[FAIL] Assertion 12: telemetry for $TW_MID never reached the Parquet lake."
-    exit 1
-fi
-echo "    [OK] DuckDB machine-utilization sees $LAKE_SAMPLES telemetry sample(s) for $TW_MID in the lake."
+expect "a resident files a flood report" "$(gw POST /flood-reports "$T_LAN" '{"lat":20.9665,"lng":105.8712,"depth_cm":55,"need_type":"EVACUATION","people_affected":5,"description":"E2E: nước vào nhà"}')" "201"
+REPORT=$(body | jget "d['report_id']")
+expect "the server matched the zone by straight-line distance" "$(body | jget "d['zone_match']")" "NEAREST_ZONE_CENTER_STRAIGHT_LINE"
+expect "a resident cannot verify" "$(gw POST "/flood-reports/$REPORT/verify" "$T_LAN" '{"decision":"VERIFIED","priority":"HIGH"}')" "403"
+expect "a resident cannot dispatch" "$(gw POST /dispatch-orders "$T_LAN" '{}')" "403"
+expect "the resource manager cannot verify" "$(gw POST "/flood-reports/$REPORT/verify" "$T_GIANG" '{"decision":"VERIFIED","priority":"HIGH"}')" "403"
+expect "dispatching before verification is refused" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT\",\"vehicle_id\":\"V02\",\"team_id\":\"T02\",\"start_time\":\"$W_START\",\"end_time\":\"$W_END\"}")" "409"
+expect "the other tenant's dispatcher cannot even see the report" "$(gw POST "/flood-reports/$REPORT/verify" "$T_TUAN" '{"decision":"VERIFIED","priority":"HIGH"}')" "404"
+expect "the dispatcher verifies and prioritises" "$(gw POST "/flood-reports/$REPORT/verify" "$T_HOA" '{"decision":"VERIFIED","priority":"URGENT","note":"đã gọi xác nhận"}')" "200"
+expect "the dispatcher dispatches boat V02 with team T02" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT\",\"vehicle_id\":\"V02\",\"team_id\":\"T02\",\"start_time\":\"$W_START\",\"end_time\":\"$W_END\"}")" "201"
+ORDER=$(body | jget "d['order_id']")
 
-# Restore the original position/fuel (waiting out the core's 10 s Postgres write throttle) so later runs start clean.
-sleep 11
-mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" \
-    "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"lat\":$TW_LAT,\"lon\":$TW_LNG,\"fuel_pct\":$TW_FUEL,\"speed_kmh\":0}"
-for i in {1..15}; do
-    if [ "$(twin_lat)" = "$TW_LAT" ]; then break; fi
-    sleep 2
-done
-echo "[PASS] Assertion 12: OT telemetry verified (authenticated MQTT -> ingestor validation -> digital twin -> Kafka -> Parquet/DuckDB; rejects bad/cross-tenant data; internal endpoint sealed)."
+REPORT2=$(gw POST /flood-reports "$T_HUNG" '{"lat":20.9665,"lng":105.8712,"depth_cm":40,"need_type":"EVACUATION"}' >/dev/null; body | jget "d['report_id']")
+gw POST "/flood-reports/$REPORT2/verify" "$T_HOA" '{"decision":"VERIFIED","priority":"HIGH"}' >/dev/null
+expect "double booking of the vehicle is blocked" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT2\",\"vehicle_id\":\"V02\",\"team_id\":\"T03\",\"start_time\":\"$W_MID_S\",\"end_time\":\"$W_MID_E\"}")" "409"
+expect "  with the conflict code" "$(body | jget "d['error']")" "RESOURCE_TIME_OVERLAP"
+expect "double booking of the team is blocked" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT2\",\"vehicle_id\":\"V01\",\"team_id\":\"T02\",\"start_time\":\"$W_MID_S\",\"end_time\":\"$W_MID_E\"}")" "409"
+expect "  with the conflict code" "$(body | jget "d['error']")" "HOLDER_TIME_OVERLAP"
+expect "a vehicle in maintenance cannot be booked" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT2\",\"vehicle_id\":\"V05\",\"team_id\":\"T03\",\"start_time\":\"$W_START\",\"end_time\":\"$W_END\"}")" "409"
+expect "a pump cannot be sent to evacuate people" "$(gw POST /dispatch-orders "$T_HOA" "{\"report_id\":\"$REPORT2\",\"vehicle_id\":\"V04\",\"team_id\":\"T03\",\"start_time\":\"$W_START\",\"end_time\":\"$W_END\"}")" "422"
 
-# Assertion 9: Experience & Operations Web Portal (web-app via APISIX)
-echo "Checking Operations Web App through APISIX Gateway (:9080)..."
-WEB_HTML=$(curl -s http://localhost:9080/ || true)
-if echo "$WEB_HTML" | grep -q 'id="root"'; then
-    echo "[PASS] Assertion 9: Operations Web App (apps/web) successfully routed via APISIX Gateway."
-else
-    echo "[WARN] Assertion 9: Operations Web App root div check skipped or pending."
-fi
+expect "another team cannot see the order (404)" "$(gw POST "/dispatch-orders/$ORDER/status" "$T_DUNG" '{"status":"IN_PROGRESS","progress_pct":10}')" "404"
+expect "the right team starts the order" "$(gw POST "/dispatch-orders/$ORDER/status" "$T_CUONG" '{"status":"IN_PROGRESS","progress_pct":20}')" "200"
+expect "progress cannot go backwards" "$(gw POST "/dispatch-orders/$ORDER/status" "$T_CUONG" '{"status":"IN_PROGRESS","progress_pct":5,"note":"x"}')" "409"
 
-# Assertion 10: data written through the API survives a Core API restart (no re-seeding over real rows)
-echo "Restarting Core API to verify persistence across restarts..."
-docker compose -f compose.yaml restart core-api >/dev/null 2>&1
-for i in {1..40}; do
-    if curl -sf http://localhost:9080/api/v1/health >/dev/null 2>&1; then break; fi
-    sleep 3
-done
-STATE_AFTER_RESTART=$(curl -s http://localhost:9080/api/v1/state -H "Authorization: Bearer $ACCESS_TOKEN" || true)
-if echo "$STATE_AFTER_RESTART" | grep -q "\"request_id\":\"$CREATED_REQ_ID\""; then
-    echo "[PASS] Assertion 10: Request $CREATED_REQ_ID is still present after a Core API restart (state rehydrated from PostgreSQL)."
-else
-    echo "[FAIL] Assertion 10: Request $CREATED_REQ_ID was lost after a Core API restart (platform re-seeded over real data)."
-    exit 1
-fi
+expect "the field team reports a breakdown of V02" "$(gw POST /field-incidents "$T_CUONG" '{"vehicle_id":"V02","severity":"CRITICAL","incident_type":"PROPELLER_FOULED","description":"E2E vướng rác","estimated_downtime_hours":4}')" "201"
+INC=$(body | jget "d['incident_id']")
+OPT=$(body | jget "d['candidate_options'][0]['option_id']")
+OPT_KIND=$(body | jget "d['candidate_options'][0]['distance_kind']")
+OPT_VEH=$(body | jget "d['candidate_options'][0]['vehicle_id']")
+expect "the ranking declares straight-line distance" "$OPT_KIND" "STRAIGHT_LINE_HAVERSINE"
+[ "$OPT_VEH" != "V02" ] || fail "Assertion 6: the broken vehicle was offered as its own replacement."
+expect "the field team cannot approve a re-plan" "$(gw POST "/field-incidents/$INC/approve-replan" "$T_CUONG" "{\"option_id\":\"$OPT\"}")" "403"
+expect "approval needs an explicit option (no auto-dispatch)" "$(gw POST "/field-incidents/$INC/approve-replan" "$T_HOA" '{}')" "400"
+expect "the dispatcher approves the replacement" "$(gw POST "/field-incidents/$INC/approve-replan" "$T_HOA" "{\"option_id\":\"$OPT\"}")" "200"
+NEW_ORDER=$(body | jget "d['new_order_id']")
+expect "the replacement keeps the case lineage (-R1)" "${NEW_ORDER##*-}" "R1"
+expect "a field team cannot touch the repair ticket" "$(gw POST "/field-incidents/$INC/repair-ticket" "$T_DUNG" '{"diagnosis":"x"}')" "403"
+expect "the resource manager closes the repair ticket" "$(gw POST "/field-incidents/$INC/repair-ticket" "$T_GIANG" '{"diagnosis":"đã gỡ rác, thay chân vịt","is_resolved":true}')" "200"
 
-# Assertion 13: incident -> rescue replan on real PostgreSQL (regression for machines losing their operator link)
-echo "Verifying incident -> rescue replan persistence on PostgreSQL..."
-psql_q() { docker compose -f compose.yaml exec -T postgres psql -U openagrios -d openagrios_db -At -c "$1" | tr -d '\r'; }
-api() { # method path [json]
-    curl -s -X "$1" "http://localhost:9080/api/v1$2" -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"}
-}
-json() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null; }
+NEW_TEAM=$(psql_q "SELECT team_id FROM dispatch_orders WHERE order_id='$NEW_ORDER';")
+case "$NEW_TEAM" in T01) T_NEW="$T_BINH";; T02) T_NEW="$T_CUONG";; *) T_NEW="$T_DUNG";; esac
+expect "the replacement team starts" "$(gw POST "/dispatch-orders/$NEW_ORDER/status" "$T_NEW" '{"status":"IN_PROGRESS","progress_pct":30}')" "200"
+expect "the replacement team completes" "$(gw POST "/dispatch-orders/$NEW_ORDER/status" "$T_NEW" '{"status":"COMPLETED","progress_pct":100,"outcome":"RESOLVED","final_depth_cm":8}')" "200"
+RES=$(body | jget "d['resolution_id']")
+expect "another resident cannot confirm (404)" "$(gw POST /resolutions "$T_HUNG" "{\"resolution_id\":\"$RES\",\"decision\":\"CONFIRMED\"}")" "404"
+expect "the field team cannot confirm its own work" "$(gw POST /resolutions "$T_NEW" "{\"resolution_id\":\"$RES\",\"decision\":\"CONFIRMED\"}")" "403"
+expect "the resident confirms the resolution" "$(gw POST /resolutions "$T_LAN" "{\"resolution_id\":\"$RES\",\"decision\":\"CONFIRMED\"}")" "200"
+expect "the report is RESOLVED in PostgreSQL" "$(psql_q "SELECT status FROM flood_reports WHERE report_id='$REPORT';")" "RESOLVED"
+expect "the original order is SUPERSEDED in PostgreSQL" "$(psql_q "SELECT status FROM dispatch_orders WHERE order_id='$ORDER';")" "SUPERSEDED"
+expect "the replacement order is COMPLETED in PostgreSQL" "$(psql_q "SELECT status FROM dispatch_orders WHERE order_id='$NEW_ORDER';")" "COMPLETED"
+expect "the resolution is CONFIRMED in PostgreSQL" "$(psql_q "SELECT confirmation_status FROM report_resolutions WHERE resolution_id='$RES';")" "CONFIRMED"
 
-api POST /sim/reset '{}' >/dev/null
-STALE=$(psql_q "SELECT (SELECT count(*) FROM incidents) + (SELECT count(*) FROM assignments WHERE assignment_id LIKE '%-R1');")
-if [ "$STALE" != "0" ]; then
-    echo "[FAIL] Assertion 13: simulator reset left $STALE stale incident/replacement rows in PostgreSQL (they would resurrect on restart)."
-    exit 1
-fi
-echo "    [OK] Simulator reset removed all incident/replacement rows from PostgreSQL."
-OP_OF_M02=$(psql_q "SELECT assigned_operator_id FROM machines WHERE machine_id='M02';")
-if [ "$OP_OF_M02" != "OP-02" ]; then
-    echo "[FAIL] Assertion 13: machine M02 lost its registered operator in PostgreSQL (assigned_operator_id='$OP_OF_M02', expected OP-02)."
-    exit 1
-fi
-echo "    [OK] machines.assigned_operator_id is persisted (M02 -> OP-02)."
+expect "the audit chain verifies end to end" "$(gw GET /audit/verify "$T_HOA" >/dev/null; body | jget "d['chain_valid']")" "True"
+gw GET "/audit/lineage/CORR-$REPORT" "$T_HOA" >/dev/null
+LINEAGE=$(body)
+echo "$LINEAGE" | grep -q 'CREATE_FLOOD_REPORT' && echo "$LINEAGE" | grep -q 'CONFIRM_RESOLUTION_AND_SEAL_LEDGER' || fail "Assertion 6: the case lineage does not run from the report to the sealed confirmation."
+echo "    [OK] lineage CORR-$REPORT runs from the report to the sealed confirmation"
+pass "Assertion 6: golden path verified through APISIX with one real identity per role (RBAC, ownership, conflicts, re-plan, confirmation, audit)."
 
-INC_JSON=$(api POST /incidents '{"machine_id":"M01","severity":"CRITICAL","incident_type":"Dong co qua nong","description":"e2e","estimated_downtime_hours":24,"evidence_filename":"e2e.jpg"}')
-INC_ID=$(echo "$INC_JSON" | json "d['incident_id']")
-OPT_ID=$(echo "$INC_JSON" | json "d['candidate_options'][0]['option_id']")
-OPT_OP=$(echo "$INC_JSON" | json "d['candidate_options'][0]['operator_id']")
-if [ -z "$INC_ID" ] || [ "$OPT_OP" != "OP-02" ]; then
-    echo "Incident response: $INC_JSON"
-    echo "[FAIL] Assertion 13: incident not created, or top rescue option does not use M02's own operator OP-02 (got '$OPT_OP')."
-    exit 1
-fi
-APPROVE_JSON=$(api POST "/incidents/$INC_ID/approve-replan" "{\"option_id\":\"$OPT_ID\"}")
-NEW_ASG=$(echo "$APPROVE_JSON" | json "d['new_assignment_id']")
-if [ -z "$NEW_ASG" ]; then
-    echo "Approve response: $APPROVE_JSON"
-    echo "[FAIL] Assertion 13: rescue replan was not approved/persisted."
-    exit 1
-fi
-NEW_ROW=$(psql_q "SELECT machine_id||'/'||operator_id||'/'||status FROM assignments WHERE assignment_id='$NEW_ASG';")
-OLD_STATUS=$(psql_q "SELECT status FROM assignments WHERE assignment_id='ASG-102';")
-if [ "$NEW_ROW" != "M02/OP-02/CONFIRMED" ] || [ "$OLD_STATUS" != "SUPERSEDED" ]; then
-    echo "[FAIL] Assertion 13: PostgreSQL rows wrong (new=$NEW_ROW expected M02/OP-02/CONFIRMED, old ASG-102=$OLD_STATUS expected SUPERSEDED)."
-    exit 1
-fi
-CHAIN_OK=$(api GET /audit/verify | json "d['chain_valid']")
-api POST /sim/reset '{}' >/dev/null   # leave the persistent volume in the clean seeded state
-if [ "$CHAIN_OK" != "True" ]; then
-    echo "[FAIL] Assertion 13: audit hash chain invalid after the replan."
-    exit 1
-fi
-echo "[PASS] Assertion 13: Incident -> rescue replan persisted on PostgreSQL ($NEW_ASG = M02/OP-02, ASG-102 SUPERSEDED, audit chain valid)."
-
-# Assertion 14: the audit hash chain stays verifiable across Core API restarts and simulator resets
-echo "Verifying audit chain integrity across restarts and resets..."
-restart_core() {
-    docker compose -f compose.yaml restart core-api >/dev/null 2>&1
-    for i in {1..40}; do
-        if curl -sf http://localhost:9080/api/v1/health >/dev/null 2>&1; then return 0; fi
-        sleep 3
-    done
-    return 1
-}
-audit_proof() { api GET /audit/verify; }
-new_request() {
-    api POST /requests "{\"field_id\":\"F01\",\"requested_start\":\"2026-12-01T08:00:00Z\",\"requested_end\":\"2026-12-01T12:00:00Z\",\"priority\":\"NORMAL\",\"notes\":\"audit-restart-check\"}" >/dev/null
-}
-
-new_request
-BEFORE=$(audit_proof)
-B_VALID=$(echo "$BEFORE" | json "d['chain_valid']")
-B_BLOCKS=$(echo "$BEFORE" | json "d['total_blocks']")
-B_HASH=$(echo "$BEFORE" | json "d['latest_hash']")
-restart_core || { echo "[FAIL] Assertion 14: Core API did not come back after restart."; exit 1; }
-AFTER=$(audit_proof)
-A_VALID=$(echo "$AFTER" | json "d['chain_valid']")
-A_BLOCKS=$(echo "$AFTER" | json "d['total_blocks']")
-A_HASH=$(echo "$AFTER" | json "d['latest_hash']")
-if [ "$B_VALID" != "True" ] || [ "$A_VALID" != "True" ] || [ "$B_BLOCKS" != "$A_BLOCKS" ] || [ "$B_HASH" != "$A_HASH" ]; then
-    echo "before: $BEFORE"
-    echo "after : $AFTER"
-    echo "[FAIL] Assertion 14: chain not identical/valid after a Core API restart."
-    exit 1
-fi
-echo "    [OK] Chain of $A_BLOCKS blocks verified before and after a Core API restart (same latest hash)."
-
-# a simulator reset starts a NEW epoch (events restart at EVT-2026-0001): nothing may be silently dropped
-api POST /sim/reset '{}' >/dev/null
-new_request
-R_PROOF=$(audit_proof)
-R_BLOCKS=$(echo "$R_PROOF" | json "d['total_blocks']")
-PERSISTED=$(psql_q "SELECT count(*) FROM audit_records WHERE ledger_epoch = (SELECT ledger_epoch FROM audit_records WHERE ledger_epoch IS NOT NULL ORDER BY seq_no DESC LIMIT 1);")
-if [ "$PERSISTED" != "$R_BLOCKS" ]; then
-    echo "[FAIL] Assertion 14: in-memory chain has $R_BLOCKS blocks but PostgreSQL stored $PERSISTED for the current epoch (records were dropped)."
-    exit 1
-fi
-restart_core || { echo "[FAIL] Assertion 14: Core API did not come back after the second restart."; exit 1; }
-R_AFTER=$(audit_proof)
-if [ "$(echo "$R_AFTER" | json "d['chain_valid']")" != "True" ] || [ "$(echo "$R_AFTER" | json "d['total_blocks']")" != "$R_BLOCKS" ]; then
-    echo "after : $R_AFTER"
-    echo "[FAIL] Assertion 14: chain invalid or truncated after reset + restart."
-    exit 1
-fi
-EPOCHS=$(psql_q "SELECT count(DISTINCT ledger_epoch) FROM audit_records WHERE ledger_epoch IS NOT NULL;")
-if [ "${EPOCHS:-0}" -lt 2 ]; then
-    echo "[FAIL] Assertion 14: expected at least 2 ledger epochs in PostgreSQL after a reset, found $EPOCHS."
-    exit 1
-fi
-api POST /sim/reset '{}' >/dev/null
-echo "[PASS] Assertion 14: Audit chain verifiable after restarts and resets (epochs in DB: $EPOCHS; every record of the live epoch persisted)."
-
-# Assertion 15: Tier-3 traceability module (public, read-only, independently re-verifies the SHA-256 chain from the lake)
-echo "Verifying Tier-3 rice traceability module..."
-TRACE_ID="CORR-GOLDEN-F03"
-# give the lot a real journey: seeded request -> breakdown -> rescue replan approved
-api POST /sim/reset '{}' >/dev/null
-T_INC=$(api POST /incidents '{"machine_id":"M01","severity":"CRITICAL","incident_type":"Dong co qua nong","description":"e2e trace","estimated_downtime_hours":24,"evidence_filename":"e2e.jpg"}')
-T_INC_ID=$(echo "$T_INC" | json "d['incident_id']" || true)
-T_OPT=$(echo "$T_INC" | json "d['candidate_options'][0]['option_id']" || true)
-api POST "/incidents/$T_INC_ID/approve-replan" "{\"option_id\":\"$T_OPT\"}" >/dev/null
-TRACE_JSON=""
-TRACE_STATUS=""
-for i in {1..30}; do
-    TRACE_JSON=$(curl -s -m 60 "http://localhost:9080/trace/$TRACE_ID.json" || true)
-    TRACE_STATUS=$(echo "$TRACE_JSON" | json "d['verification']['status']" || true)
-    T_STEPS=$(echo "$TRACE_JSON" | json "d['summary']['steps']" || echo 0)
-    if [ "$TRACE_STATUS" = "VERIFIED" ] && [ "${T_STEPS:-0}" -ge 4 ]; then break; fi
-    sleep 3
-done
-if [ "$TRACE_STATUS" != "VERIFIED" ]; then
-    echo "Trace response: $TRACE_JSON" | cut -c1-600
-    echo "[FAIL] Assertion 15: public trace for $TRACE_ID is not VERIFIED (status='$TRACE_STATUS')."
-    exit 1
-fi
-T_STEPS=$(echo "$TRACE_JSON" | json "d['summary']['steps']" || echo 0)
-T_MATCH=$(echo "$TRACE_JSON" | json "d['verification']['records_match']==d['verification']['records_checked']" || echo False)
-if [ "${T_STEPS:-0}" -lt 4 ] || [ "$T_MATCH" != "True" ]; then
-    echo "[FAIL] Assertion 15: trace has too few steps ($T_STEPS, expected >= 4) or not every record hash matched."
-    exit 1
-fi
-if ! echo "$TRACE_JSON" | grep -q "Máy gặt gặp sự cố" || ! echo "$TRACE_JSON" | grep -q "xếp lại cho máy thay thế"; then
-    echo "[FAIL] Assertion 15: the public journey does not show the breakdown and the replacement shift."
-    exit 1
-fi
-echo "    [OK] $T_STEPS steps; every record hash recomputed independently and matched; ledger epoch continuous."
-if echo "$TRACE_JSON" | grep -qE 'usr_|actor_user_id'; then
-    echo "[FAIL] Assertion 15: public trace leaks user identities."
-    exit 1
-fi
-PAGE=$(curl -s "http://localhost:9080/trace/$TRACE_ID")
-if ! echo "$PAGE" | grep -q "ĐÃ XÁC MINH" || ! echo "$PAGE" | grep -q "<svg"; then
-    echo "[FAIL] Assertion 15: HTML trace page lacks the verified badge or the QR code."
-    exit 1
-fi
-if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9080/trace/CORR-NOPE-404.json)" != "404" ] \
-   || [ "$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost:9080/trace/a.json')" != "400" ]; then
-    echo "[FAIL] Assertion 15: unknown / malformed trace ids are not answered with 404 / 400."
-    exit 1
-fi
-if curl -s -m 3 -o /dev/null http://localhost:8095/health 2>/dev/null; then
-    echo "[FAIL] Assertion 15: traceability port 8095 is exposed on the host."
-    exit 1
-fi
-api POST /sim/reset '{}' >/dev/null   # leave the persistent volume in the clean seeded state
-echo "[PASS] Assertion 15: Tier-3 traceability verified (public page + QR, independent SHA-256 recomputation, identities redacted, ids validated, port not exposed)."
-
-# Assertion 16: malware gate (ClamAV) on client uploads: infected -> 422, clean -> accepted, scanner down -> 503 (fail-closed)
-echo "Verifying malware gate (ClamAV)..."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 7: malware gate on photos (ClamAV): infected -> 422, clean -> accepted, scanner down -> 503
+echo "Verifying the malware gate (ClamAV)..."
 SCAN_STATUS=""
-for i in {1..100}; do
-    SCAN_STATUS=$(curl -s -m 10 http://localhost:8000/api/v1/health | json "d['core_services']['malware_scanner']['status']" || true)
-    if [ "$SCAN_STATUS" = "UP" ]; then break; fi
+for i in $(seq 1 100); do
+    SCAN_STATUS=$(curl -s -m 10 http://localhost:8000/api/v1/health | jget "d['core_services']['malware_scanner']['status']" || true)
+    [ "$SCAN_STATUS" = "UP" ] && break
     sleep 3
 done
-if [ "$SCAN_STATUS" != "UP" ]; then
-    docker compose -f compose.yaml logs --tail 20 clamav || true
-    echo "[FAIL] Assertion 16: ClamAV never became ready (status='$SCAN_STATUS')."
-    exit 1
-fi
-echo "    [OK] clamd is up (signature database loaded)."
+[ "$SCAN_STATUS" = "UP" ] || { $DC logs --tail 20 clamav || true; fail "Assertion 7: ClamAV never became ready (status='$SCAN_STATUS')."; }
+EICAR_B64=$(printf '%s%s%s' 'X5O!P%@AP[4\PZX54(P^)7CC)7}$' 'EICAR-STANDARD-ANTIVIRUS' '-TEST-FILE!$H+H*' | base64 | tr -d '\n')
+PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+photo() { gw POST /flood-reports "$T_LAN" "{\"lat\":20.9665,\"lng\":105.8712,\"depth_cm\":30,\"need_type\":\"PUMPING\",\"evidence_filename\":\"nuoc.png\",\"evidence_data_url\":\"data:image/png;base64,$1\"}"; }
+BEFORE=$(psql_q "SELECT count(*) FROM flood_reports;")
+expect "an infected photo is refused with 422" "$(photo "$EICAR_B64")" "422"
+expect "  as MALWARE_DETECTED" "$(body | jget "d['error']")" "MALWARE_DETECTED"
+expect "  and no report was stored" "$(psql_q "SELECT count(*) FROM flood_reports;")" "$BEFORE"
+expect "  and the block is in the audit trail" "$(psql_q "SELECT count(*) > 0 FROM audit_records WHERE action='UPLOAD_BLOCKED_MALWARE';")" "t"
+expect "a clean photo is accepted" "$(photo "$PNG_B64")" "201"
+expect "a non-image upload is refused (415) before any scan" "$(gw POST /flood-reports "$T_LAN" "{\"lat\":20.9665,\"lng\":105.8712,\"depth_cm\":30,\"need_type\":\"PUMPING\",\"evidence_data_url\":\"data:application/pdf;base64,$PNG_B64\"}")" "415"
+$DC stop clamav >/dev/null 2>&1
+expect "with the scanner down the upload is refused (fail-closed)" "$(photo "$PNG_B64")" "503"
+$DC start clamav >/dev/null 2>&1
+pass "Assertion 7: malware gate verified (EICAR -> 422 + audit + nothing stored; clean -> 201; non-image -> 415; ClamAV down -> 503)."
 
-# The EICAR antivirus test string is assembled at run time so no file in the repository contains it.
-EICAR_A='X5O!P%@AP[4\PZX54(P^)7CC)7}$'; EICAR_B='EICAR-STANDARD-ANTIVIRUS'; EICAR_C='-TEST-FILE!$H+H*'
-EICAR_B64=$(printf '%s%s%s' "$EICAR_A" "$EICAR_B" "$EICAR_C" | base64 | tr -d '\n')
-CLEAN_B64=$(printf 'plain text evidence, no malware' | base64 | tr -d '\n')
-upload() { # base64 -> prints "<http_code> <body>"
-    curl -s -m 60 -o /tmp/e2e_upload_body -w '%{http_code}' -X POST http://localhost:9080/api/v1/incidents \
-        -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
-        -d "{\"machine_id\":\"M01\",\"severity\":\"CRITICAL\",\"incident_type\":\"Dong co qua nong\",\"description\":\"malware gate e2e\",\"estimated_downtime_hours\":24,\"evidence_filename\":\"evidence.bin\",\"evidence_data_url\":\"data:application/octet-stream;base64,$1\"}"
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 8: OT telemetry: authenticated MQTT -> ACL -> ingestor -> digital twin -> Kafka -> Parquet; every sample is labelled
+echo "Verifying telemetry ingestion over MQTT (vehicles and gauges, source is mandatory)..."
+MQTT_USER="${MQTT_DEVICE_USER:-device}"; MQTT_PASS="${MQTT_DEVICE_PASSWORD:-device_dev_only}"
+mqtt_pub() { # topic payload [user] [pass]
+    $DC exec -T mosquitto mosquitto_pub -h 127.0.0.1 -q 1 -u "${3:-$MQTT_USER}" -P "${4:-$MQTT_PASS}" -t "$1" -m "$2"
 }
-api POST /sim/reset '{}' >/dev/null
-CODE=$(upload "$EICAR_B64")
-BODY=$(cat /tmp/e2e_upload_body)
-if [ "$CODE" != "422" ] || [ "$(echo "$BODY" | json "d['error']" || true)" != "MALWARE_DETECTED" ]; then
-    echo "Upload response ($CODE): $BODY" | cut -c1-400
-    echo "[FAIL] Assertion 16: EICAR upload was not blocked with 422 MALWARE_DETECTED."
-    exit 1
-fi
-if [ "$(echo "$BODY" | json "d['audit_event']['action']" || true)" != "UPLOAD_BLOCKED_MALWARE" ]; then
-    echo "[FAIL] Assertion 16: the blocked upload was not audited."
-    exit 1
-fi
-INCIDENTS=$(psql_q "SELECT count(*) FROM incidents;")
-if [ "$INCIDENTS" != "0" ]; then
-    echo "[FAIL] Assertion 16: an incident row exists although the upload was blocked ($INCIDENTS)."
-    exit 1
-fi
-echo "    [OK] EICAR blocked (422, $(echo "$BODY" | json "d['signature']" || true)); nothing stored, no incident, block audited."
+twin_lat() { gw GET /digital-twin/entities "$T_HOA" >/dev/null; body | python3 -c "
+import sys, json
+for e in json.load(sys.stdin)['entities']:
+    if e['id'].endswith(':V03'):
+        print(e['location']['value']['coordinates'][1])" 2>/dev/null; }
+twin_field() { gw GET /digital-twin/entities "$T_HOA" >/dev/null; body | python3 -c "
+import sys, json
+for e in json.load(sys.stdin)['entities']:
+    if e['id'].endswith(':V03'):
+        print(e['dataSource']['value'])" 2>/dev/null; }
+ORG=ORG_HN_PILOT_01
+$DC exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t "openagrios/$ORG/vehicles/V03/telemetry" -m '{}' >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted an anonymous publish."
+mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" '{}' device wrong-password >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted a wrong password."
+echo "    [OK] the broker refuses anonymous and wrong-password clients"
+# MQTT 3.1.1 drops a denied PUBLISH silently (the client still gets a PUBACK), so the exit code proves nothing here:
+# check the ACL the broker actually loaded instead.
+ACL=$(MSYS_NO_PATHCONV=1 $DC exec -T mosquitto cat /mosquitto/config/acl)
+echo "$ACL" | grep -q 'topic write openagrios/+/vehicles/+/telemetry' || fail "Assertion 8: the device may not write the vehicles topic family."
+echo "$ACL" | grep -q 'topic write openagrios/+/gauges/+/telemetry' || fail "Assertion 8: the device may not write the gauges topic family."
+echo "$ACL" | grep -q 'topic read openagrios/+/vehicles/+/telemetry' || fail "Assertion 8: the ingestor may not read the vehicles topic family."
+echo "$ACL" | grep -qi 'machines' && fail "Assertion 8: the former machines/ topic family is still in the broker ACL."
+echo "    [OK] the broker ACL grants write to the two new topic families only (the former machines/ family is gone)"
+LAT0=$(twin_lat); NEW_LAT=$(python3 -c "print(round($LAT0 + 0.0010, 6))")
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":$NEW_LAT,\"lon\":105.86,\"fuel_pct\":61.5,\"speed_kmh\":6.2,\"source\":\"SIMULATOR\"}"
+SEEN=""; for i in $(seq 1 15); do SEEN=$(twin_lat); [ "$SEEN" = "$NEW_LAT" ] && break; sleep 2; done
+expect "a labelled sample moves the digital twin" "$SEEN" "$NEW_LAT"
+expect "the twin labels the position as SIMULATOR" "$(twin_field)" "SIMULATOR"
+# rejected samples must change nothing
+mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5}"
+mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"official\"}"
+mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":999,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
+mqtt_pub "openagrios/ORG_HN_PILOT_02/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
+sleep 6
+expect "samples with no/unknown source, out of range, or from the wrong tenant change nothing" "$(twin_lat)" "$NEW_LAT"
+# gauge: a reading moves the zone's water level and risk, labelled
+mqtt_pub "openagrios/$ORG/gauges/G03/telemetry" "{\"ts\":\"$TS\",\"level_cm\":130,\"source\":\"SIMULATOR\"}"
+Z=""; for i in $(seq 1 15); do gw GET /state "$T_HOA" >/dev/null; Z=$(body | jget "[z['water_level_cm'] for z in d['zones'] if z['zone_id']=='Z03'][0]"); [ "$Z" = "130.0" ] && break; sleep 2; done
+expect "a gauge reading updates the zone water level" "$Z" "130.0"
+expect "  labelled with its source" "$(body | jget "[z['water_level_source'] for z in d['zones'] if z['zone_id']=='Z03'][0]")" "SIMULATOR"
+expect "  and raises the risk level from the gauge thresholds" "$(body | jget "[z['risk_level'] for z in d['zones'] if z['zone_id']=='Z03'][0]")" "CRITICAL"
+EDGE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/v1/internal/telemetry" -H 'Content-Type: application/json' -d '{}')
+DIRECT=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/api/v1/internal/telemetry -H 'X-Ingest-Token: wrong' -H 'Content-Type: application/json' -d '{}')
+expect "the internal ingest endpoint is sealed at the edge" "$EDGE" "404"
+expect "and requires the shared secret inside the network" "$DIRECT" "401"
+pass "Assertion 8: telemetry verified (ACL, mandatory source label, twin update, rejections change nothing, gauge -> zone risk, internal endpoint sealed)."
 
-CODE=$(upload "$CLEAN_B64")
-if [ "$CODE" != "201" ]; then
-    echo "Upload response ($CODE): $(cat /tmp/e2e_upload_body)" | cut -c1-300
-    echo "[FAIL] Assertion 16: a clean file was not accepted."
-    exit 1
-fi
-echo "    [OK] clean evidence scanned and accepted (201)."
-api POST /sim/reset '{}' >/dev/null
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 9: hot -> cold data pipeline (Core -> Kafka -> Parquet on S3 -> DuckDB analytics), gateway protected
+echo "Verifying the hot/cold pipeline..."
+BUS=0; for i in $(seq 1 20); do BUS=$(curl -s http://localhost:8000/api/v1/health | jget "d['core_services']['event_bus']['published']" || echo 0); [ "${BUS:-0}" -gt 0 ] && break; sleep 2; done
+[ "${BUS:-0}" -gt 0 ] || fail "Assertion 9: the core published no events to Kafka."
+LAKE=0; for i in $(seq 1 30); do gw GET /analytics/summary "$T_HOA" >/dev/null; LAKE=$(body | jget "d['audit']['events']" || echo 0); [ "${LAKE:-0}" -gt 0 ] && break; sleep 3; done
+[ "${LAKE:-0}" -gt 0 ] || { body; fail "Assertion 9: no audit event reached the Parquet lake."; }
+echo "    [OK] DuckDB counted $LAKE audit event(s) in the lake"
+UTIL=""; for i in $(seq 1 30); do gw GET /analytics/asset-utilization "$T_HOA" >/dev/null; UTIL=$(body | jget "','.join(r['asset_id'] for r in d['rows'])" || true); echo "$UTIL" | grep -q 'V03' && break; sleep 3; done
+echo "$UTIL" | grep -q 'V03' || { body; fail "Assertion 9: vehicle telemetry never reached the Parquet lake."; }
+expect "vehicle samples in the lake carry their source" "$(body | jget "[r['sources'] for r in d['rows'] if r['asset_id']=='V03'][0].split(',')[0] in ('SIMULATOR','DEVICE')")" "True"
+gw GET /analytics/water-level-summary "$T_HOA" >/dev/null
+echo "$(body)" | grep -q '"engine": *"DuckDB"' || fail "Assertion 9: the water-level-summary query failed."
+expect "analytics needs a token" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/analytics/summary")" "401"
+expect "analytics is closed to residents" "$(gw GET /analytics/summary "$T_LAN")" "403"
+curl -s -m 3 -o /dev/null http://localhost:8090/health 2>/dev/null && fail "Assertion 9: the lake archiver port is exposed on the host."
+pass "Assertion 9: hot/cold pipeline verified (events -> Kafka -> Parquet in S3 -> DuckDB; role-protected, archiver not host-exposed)."
 
-docker compose -f compose.yaml stop clamav >/dev/null 2>&1
-CODE=$(upload "$CLEAN_B64")
-BODY=$(cat /tmp/e2e_upload_body)
-if [ "$CODE" != "503" ] || [ "$(echo "$BODY" | json "d['error']" || true)" != "MALWARE_SCANNER_UNAVAILABLE" ]; then
-    echo "Upload response ($CODE): $BODY" | cut -c1-300
-    echo "[FAIL] Assertion 16: with the scanner down the upload was not refused (fail-closed)."
-    exit 1
-fi
-if [ "$(psql_q "SELECT count(*) FROM incidents;")" != "0" ]; then
-    echo "[FAIL] Assertion 16: an incident was stored although the scanner was down."
-    exit 1
-fi
-docker compose -f compose.yaml start clamav >/dev/null 2>&1
-api POST /sim/reset '{}' >/dev/null
-echo "[PASS] Assertion 16: Malware gate verified (EICAR -> 422 + audit + nothing stored; clean -> 201; ClamAV down -> 503 fail-closed)."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 10: public Tier-3 case traceability re-verifies the SHA-256 chain independently
+echo "Verifying the public traceability module..."
+TR=""; for i in $(seq 1 30); do TR=$(curl -s -m 20 "$GW/trace/CORR-$REPORT.json" || true); echo "$TR" | grep -q '"trace_id"' && break; sleep 3; done
+echo "$TR" | grep -q '"trace_id"' || { echo "$TR" | cut -c1-300; fail "Assertion 10: the public trace JSON for CORR-$REPORT never became available."; }
+expect "the independent verifier found a continuous chain" "$(echo "$TR" | jget "d['verification']['epoch_continuous']")" "True"
+expect "  and every record of the case matches its hash" "$(echo "$TR" | jget "d['verification']['records_match'] == d['verification']['records_checked']")" "True"
+curl -s -m 20 "$GW/trace/CORR-$REPORT" | grep -q 'Truy xuất vụ việc ứng phó ngập lụt' || fail "Assertion 10: the trace page is not the flood-case module."
+echo "$TR" | grep -q 'usr_reporter_lan\|reporter_lan' && fail "Assertion 10: the public trace exposes a personal identity."
+pass "Assertion 10: the public trace page/JSON for CORR-$REPORT is served by Tier 3, re-verifies the SHA-256 chain and hides identities."
 
-# Assertion 17: Tier-2 app #2 (3D digital twin) is served by the gateway next to the operations portal
-echo "Verifying the 3D digital twin (Tier-2 app #2)..."
-TWIN_HTML=$(curl -s -m 20 http://localhost:9080/twin/ || true)
-if ! echo "$TWIN_HTML" | grep -q "Bản sao số 3D" || ! echo "$TWIN_HTML" | grep -q 'id="root"'; then
-    echo "[FAIL] Assertion 17: /twin/ did not return the digital twin page."
-    exit 1
-fi
-TWIN_JS=$(echo "$TWIN_HTML" | grep -oE '/twin/assets/[^"]+\.js' | head -1 || true)
-TWIN_JS_CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}|%{content_type}' "http://localhost:9080$TWIN_JS" || true)
-if [ -z "$TWIN_JS" ] || [ "${TWIN_JS_CODE%%|*}" != "200" ] || ! echo "$TWIN_JS_CODE" | grep -qi javascript; then
-    echo "[FAIL] Assertion 17: the twin bundle '$TWIN_JS' is not served as JavaScript ($TWIN_JS_CODE)."
-    exit 1
-fi
-if ! curl -s -m 20 http://localhost:9080/twin/some/deep/link | grep -q "Bản sao số 3D"; then
-    echo "[FAIL] Assertion 17: SPA fallback under /twin/ is broken."
-    exit 1
-fi
-# imagery may come only from the one satellite tile host; nothing else is opened up
-TWIN_CSP=$(curl -s -m 20 -D - -o /dev/null http://localhost:9080/twin/ | grep -i '^content-security-policy' || true)
-if ! echo "$TWIN_CSP" | grep -qF "img-src 'self' data: blob: https://tiles.maps.eox.at" || echo "$TWIN_CSP" | grep -q "script-src[^;]*unsafe"; then
-    echo "[FAIL] Assertion 17: unexpected Content-Security-Policy on /twin/: $TWIN_CSP"
-    exit 1
-fi
-PORTAL_HTML=$(curl -s -m 20 http://localhost:9080/ || true)
-if echo "$PORTAL_HTML" | grep -q "Bản sao số 3D" || ! echo "$PORTAL_HTML" | grep -q 'id="root"'; then
-    echo "[FAIL] Assertion 17: the operations portal at / was shadowed by the twin route."
-    exit 1
-fi
-# the twin only talks to the protected API: with no token the same data call is refused
-if [ "$(curl -s -m 20 -o /dev/null -w '%{http_code}' http://localhost:9080/api/v1/state)" != "401" ]; then
-    echo "[FAIL] Assertion 17: /api/v1/state is reachable without a token."
-    exit 1
-fi
-echo "[PASS] Assertion 17: 3D digital twin served at /twin/ (bundle, SPA fallback, CSP), portal untouched at /, API still token-protected."
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 11: state survives a restart of the core (loaded from PostgreSQL, workflow mirror rebuilt, ledger re-verified)
+echo "Restarting the Core API to verify persistence..."
+expect "a fresh report is created before the restart" "$(gw POST /flood-reports "$T_HUNG" '{"lat":20.9588,"lng":105.8838,"depth_cm":70,"need_type":"MEDICAL","people_affected":1}')" "201"
+PERSIST=$(body | jget "d['report_id']")
+gw POST "/flood-reports/$PERSIST/verify" "$T_HOA" '{"decision":"VERIFIED","priority":"URGENT"}' >/dev/null
+$DC restart core-api >/dev/null 2>&1
+for i in $(seq 1 40); do curl -sf "$GW/api/v1/health" >/dev/null 2>&1 && break; sleep 3; done
+gw GET /state "$T_HUNG" >/dev/null
+AFTER=$(body)
+echo "$AFTER" | grep -q "\"report_id\":\"$PERSIST\"" || fail "Assertion 11: report $PERSIST was lost across a core restart."
+expect "the report status was restored" "$(echo "$AFTER" | jget "[r['status'] for r in d['reports'] if r['report_id']=='$PERSIST'][0]")" "VERIFIED"
+gw GET /state "$T_HOA" >/dev/null
+expect "the workflow mirror was rebuilt and points at the dispatch step" "$(body | jget "[p['current_step_id'] for p in d['bpmn_instances'] if p['business_key']=='$PERSIST'][0]")" "taskDispatcherDispatch"
+expect "the audit chain still verifies after the restart" "$(gw GET /audit/verify "$T_HOA" >/dev/null; body | jget "d['chain_valid']")" "True"
+AFTER_DEPLOYMENTS=$(curl -s -u rest-admin:test "http://localhost:8081/flowable-rest/service/repository/deployments?size=200&name=flood_report_lifecycle-$(sha256sum infra/bpmn/flood_report_lifecycle.bpmn20.xml | cut -c1-12)" | jget "d['total']" || echo 0)
+expect "restarting the core did not deploy the unchanged BPMN again (idempotent deployment)" "$AFTER_DEPLOYMENTS" "$CONTENT_DEPLOYMENTS"
+pass "Assertion 11: state, workflow mirror and hash chain survive a core restart; BPMN deployment is idempotent (rehydrated from PostgreSQL)."
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Assertion 12: the remaining front-ends are still served by the gateway (they are the legacy UI, not yet reworked)
+PORTAL=$(curl -s -m 20 "$GW/" || true)
+echo "$PORTAL" | grep -q 'id="root"' || fail "Assertion 12: the operations portal is not served at /."
+expect "the API stays token-protected next to the static front-ends" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/state")" "401"
+echo "[WARN] apps/web and apps/twin3d still target the former rice-harvest API: they are served, but they are NOT FloodOps front-ends yet."
+pass "Assertion 12: static front-ends are served and the API remains protected."
 
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

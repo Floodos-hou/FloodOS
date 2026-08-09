@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **OpenAgriOS** platform will be documented in this file.
+All notable changes to the **OpenDXOS** platform (formerly OpenAgriOS) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### Backend migration: rice-harvest prototype -> OpenDXOS + Hanoi FloodOps (branch `feat/floodops-backend`)
+
+Platform name is now **OpenDXOS**; the demonstration application is **Hanoi FloodOps** (flood-response coordination for ONE pilot area in Hanoi). The former AgriOps application is removed, not kept as a second app. Technical identifiers (`openagrios` package/realm/database/containers, client ids `agriops-web` / `agriops-gateway`) are intentionally unchanged: they need a migration plan of their own.
+
+**Application** (`apps/floodops`, replaces `apps/agriops`)
+- Model: flood zones, flood reports, rescue teams, rescue vehicles, dispatch orders, field incidents, report resolutions, safe shelters, gauge stations. Every position/level carries a source label (`SEED`, `SIMULATOR`, `REPORTED`, `DEVICE`).
+- Flow: report -> verify/prioritise -> dispatch (conflict-checked) -> field updates -> incident and ranked re-plan (human approval, `option_id` mandatory) -> confirmation + ledger seal. API in `docs/api-spec.md`.
+- Roles `REPORTER`, `DISPATCHER`, `FIELD_TEAM`, `RESOURCE_MANAGER`, `PLATFORM_ADMIN`, registered by the application; a token with no registered role or without `organization_id` is refused.
+- Ranking of replacements (`RescueScoring`): 40 straight-line distance + 25 vehicle suitability + 20 capacity fit + 15 team rating, with explanations. Haversine is a straight-line distance, not a route.
+- BPMN: `flood_report_lifecycle` (SOP-01), `dispatch_replan` (SOP-02); the rice processes are removed from `infra/bpmn`.
+
+**Tier 1 core made domain-neutral**
+- `PostgreSqlDataService` no longer contains any table, DDL or domain method: generic RLS-aware `inTransaction/query/execute`, schema presence check (`missingTables`), platform tables only. Application SQL lives in `FloodRepository`.
+- `ScheduleConflictEngine` is a generic resource+holder+window engine; `SpatialMatchingEngine` keeps geodesy/geometry only; the rice scoring formula and `resolveFieldVisibility` are gone from the core.
+- `KeycloakOidcEngine`: role registry configured by the application (`configureRoleHierarchy`), no `FARMER` default, no hard-coded demo users, a token without a tenant is no longer placed in `HTX_CANTHO_01`, the first realm role is no longer taken as "the" role.
+- `BpmnWorkflowEngine`: loads every `*.bpmn20.xml`; deploys all definitions to Flowable at start-up, idempotently (deployment named after the content hash); `completeInstance` (one instance, not "all active instances of the tenant"); `restoreInstance` rebuilds the state mirror after a restart.
+- `AnalyticsLakeClient`: the application registers its own query names.
+- A unit test scans `core/` and fails if business-domain words appear.
+
+**Schema (single source of truth)**
+- `infra/db/schema.sql` is the only DDL; the duplicate DDL text block in Java is removed and the SQL seed rows are removed (data is seeded by `FloodDataStore`, identities by the realm; a test keeps the two lists identical).
+- New tables are named differently from the legacy ones and the legacy tables are NOT dropped. `organizations.org_type` and `users.role` constraints are re-created `NOT VALID` so rows written by the old version stay readable while new rows are enforced. Verified by applying the new schema on top of the old one and twice in a row.
+- RLS forced on all tables with per-role policies (a reporter sees only their own reports); no recursive policies; missing or unknown context returns zero rows. GiST exclusion on vehicle and on team.
+
+**Security fixes found during the audit**
+- `POST /api/v1/sim/reset` was open to every authenticated user; now `PLATFORM_ADMIN` only and only when `OPENDXOS_ALLOW_DEMO_RESET=true` (dev compose true, production override false).
+- Dev-mock PKCE fell back to a default account; removed. Production no longer falls back to a default tenant, role or user id.
+- Persisted writes throw in production (previously several `sync*` methods swallowed errors); a failed write reloads the working set from PostgreSQL.
+
+**Telemetry and data honesty**
+- MQTT topics are now `openagrios/<org>/vehicles/<id>/telemetry` and `.../gauges/<id>/telemetry` (ACL updated; the old `machines/` family is closed). Every message must carry `source` = `SIMULATOR` or `DEVICE`; the ingestor, the core and the lake-archiver all refuse anything else.
+- Device simulator: vehicles move in a straight line to their order's zone; gauges follow a bounded random walk; everything is labelled `SIMULATOR`.
+- Lake: telemetry is stored under `asset_telemetry/` (`asset_kind`, `asset_id`, `level_cm`, `source`); queries `asset-utilization` and `water-level-summary`. Files of the former `telemetry/` layout are never read or mixed in.
+
+**Tier 3**: `apps/traceability` now traces flood cases (case id = `CORR-<report_id>`); the hash golden vector shared with Java was recomputed on both sides.
+
+**Tests and docs**
+- Java unit suites rewritten for the new contract (RBAC, ownership, conflicts, re-plan, scope per role, telemetry labelling, boundary test, realm/seed equality, DDL single source, Postman contract); `AcceptanceTestRunner` rewritten as the full golden path over real HTTP; `tests/e2e_full_stack_test.sh` rewritten for the real Docker stack (see README section 8); Postman collection and environments regenerated (`OpenDXOS_*`).
+- README, `docs/api-spec.md`, `docs/architecture.md`, `docs/security.md`, `docs/demo-guide.md`, `docs/product-direction.md` rewritten to describe what exists, with an explicit Co / Mo phong / Chua co table.
+
+**Verified results (2026-11-02, Windows 11 + Docker Desktop, commands run from the repository root)**
+- `bash tests/run_unit_tests.sh` -> exit 0: Java 191/191; Node web 13/13 and twin3d 33/33 (these two test only the untouched legacy front-end logic); Python lake-archiver 45, telemetry 35, traceability 34, all OK.
+- `java -cp <classes> org.openagrios.tests.AcceptanceTestRunner` -> exit 0, 50 checks.
+- `bash tests/e2e_full_stack_test.sh` -> exit 0, 12 assertion groups, 118 sub-checks, on the real Docker stack (Keycloak, APISIX, PostgreSQL, Flowable, SeaweedFS, ClamAV, Mosquitto, Kafka, DuckDB). Defects it found and that were fixed: a foreign-key write order in approve-replan (invisible to the in-memory unit tests), Flowable pagination in the check itself, and an MQTT ACL check that could not fail.
+- The E2E was run against an existing volume that held the old rice-harvest data (schema and Flowable migration path exercised); it was not run against a freshly created empty volume in this session.
+- `git diff --check` -> no whitespace errors.
+
+**Known gaps (not done)**: FloodOps front-end (`apps/web` and `apps/twin3d` are the old rice UI and do not match the new API), Flowable user-task completion over REST, Prometheus/Grafana, GitOps, Internet deployment, real observation data, road routing, AI component, organisation admin API, offline queue. Legacy rice tables, legacy Flowable deployments and old Parquet files stay in existing volumes, unused.
 
 ### Hot/Cold Data Pipeline (feat/hot-cold-data-pipeline)
 - **Hot path**: `ImmutableAuditLedger` publishes every audit event to Apache Kafka topic `openagrios.audit.v1` through the new asynchronous `EventBusPublisher` (Kafka REST Proxy / Karapace over HTTP, bounded queue, retry with backoff, drop/fail counters exposed on `/api/v1/health`). The core stays free of extra Java dependencies.

@@ -30,7 +30,7 @@ javac -encoding UTF-8 -d target/classes @sources.txt
 
 ### Bước 2: Chạy Server Headless Core PaaS
 ```bash
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
+java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.floodops.FloodOpsServer
 ```
 Server sẽ lắng nghe tại cổng `8000` (truy cập `http://localhost:8000/api/v1/health` trên trình duyệt để kiểm tra trạng thái hoạt động).
 
@@ -49,34 +49,27 @@ java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTes
 
 ### Kết quả mong đợi:
 ```text
-============================================================================
-RUNNING OPENAGRIOS INTEGRATION TEST SUITE (JAVA 21)
-============================================================================
-[PASS] Core Platform Health & BPMN 2.0 XML Definitions verified.
-[PASS] OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.
-[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, expired token, wrong audience, and verified Keycloak production failure without mock fallback (HTTP 401).
-[PASS] Multi-Tenant RLS & Field-Level Visibility verified: [F01, F03, F07] unmasked, 7 masked.
-[PASS] Zero-Trust RBAC Guard verified (HTTP 403 Forbidden on unauthorized dispatch).
-[PASS] Time-Window Conflict Engine verified (HTTP 409: MACHINE_TIME_OVERLAP).
-[PASS] Unfeasible replacement fallback state verified.
-[PASS] Incident reported + S3 ETag (befbecf3) -> Rescue candidate M02 (93.8 pts, 1.37 km).
-[PASS] BPMN Replan approved -> Shift ASG-102 superseded by ASG-102-R1.
-[PASS] Immutable SHA-256 Audit Chain & Data Lineage verified (5 linked records).
-============================================================================
-ALL INTEGRATION TESTS PASSED SUCCESSFULLY!
-============================================================================
+HANOI FLOODOPS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)
+[1] Platform health, workflow definitions and registered roles ...
+[2] Authentication fails closed ...
+[3] Row-level scope per role ...
+[4] Report -> verify -> dispatch ...
+[5] Double booking is blocked ...
+[6] Field team works its own order only ...
+[7] Incident, ranked replacements and human approval ...
+[8] Completion and confirmation ...
+[9] The audit chain proves the case ...
+[10] Ingestion endpoints and the demo reset are closed to normal users ...
+ACCEPTANCE: <n> checks passed
 ```
+
+Số kiểm tra và kết quả của lần chạy gần nhất được ghi ở [`CHANGELOG.md`](../CHANGELOG.md).
 
 ---
 
 ## 4. Kiểm thử với Postman Collection
 
-1. Mở Postman, chọn **Import**.
-2. Chọn tệp: `tests/postman/OpenAgriOS_Tier1_Core.postman_collection.json`.
-3. Bộ sưu tập bao gồm 6 thư mục nghiệp vụ đã được thiết lập sẵn các kịch bản test tự động (Pre-request Script & Tests Tab) để tự động lưu Token Bearer vào biến môi trường:
-   - `01. Headless Core Discovery & Health`: Kiểm tra các dịch vụ Core.
-   - `02. Keycloak OIDC SSO Login`: Đăng nhập thử nghiệm các vai trò Nông hộ, Điều phối viên, Người vận hành, Đội kỹ thuật.
-   - `03. Kiểm tra Phân quyền RBAC & RLS`: Kiểm tra mã lỗi 403 khi vượt quyền và cách ly dữ liệu giữa các HTX.
-   - `04. Đặt lịch & Xung đột Khung giờ`: Kiểm tra mã lỗi 409 khi xếp máy trùng giờ.
-   - `05. Báo cáo Sự cố & Phê duyệt Điều động`: Đăng tải ảnh S3 và duyệt máy cứu hộ trên BPMN.
-   - `06. Nghiệm thu & Kiểm chứng Sổ cái SHA-256`: Đóng băng sổ cái và xác thực chuỗi băm mật mã.
+1. Mở Postman, chọn **Import** và nhập `tests/postman/OpenDXOS_FloodOps.postman_collection.json` cùng một trong hai môi trường `OpenDXOS_Gateway_Docker.postman_environment.json` (qua APISIX, :9080) hoặc `OpenDXOS_Core_Direct.postman_environment.json` (trực tiếp lõi, :8000, chỉ dùng khi phát triển).
+2. Lấy token PKCE cho từng vai trò (xem [`api-spec.md`](api-spec.md), mục 2) và điền vào các biến `*_token` của môi trường. Với bước "đội thay thế hoàn thành lệnh", điền `replacement_team_token` bằng token của đội được giao lệnh `-R1` (xem trong `GET /api/v1/state`).
+3. Bộ sưu tập có 8 thư mục (0 nền tảng, 1 người báo tin, 2 điều phối, 3 hiện trường, 4 điều phối lại và sửa chữa, 5 hoàn tất và xác nhận, 6 kiểm toán và phân tích, 7 bản sao số và điểm trú), mỗi yêu cầu có kịch bản kiểm tra tự động. Mỗi lần chạy dùng một khung giờ ngẫu nhiên trong tương lai nên chạy lặp lại không tự xung đột.
+4. Một kiểm thử đơn vị ([`PlatformTests`](../tests/unit/PlatformTests.java)) bảo đảm mọi yêu cầu trong bộ sưu tập trỏ tới route có thật của máy chủ.

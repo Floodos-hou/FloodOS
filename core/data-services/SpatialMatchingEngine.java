@@ -6,8 +6,8 @@ package org.openagrios.core.dataservices;
 import java.util.*;
 
 /**
- * Spatial Distance & Multi-Criteria Rescue Matching Engine.
- * Implements Haversine spherical geodesic distance and explainable candidate scoring.
+ * Domain-neutral geodesy and polygon helpers.
+ * Haversine gives the straight-line (great-circle) distance between two points. It is NOT a road or water route.
  */
 public final class SpatialMatchingEngine {
 
@@ -37,8 +37,8 @@ public final class SpatialMatchingEngine {
     }
 
     /**
-     * Rectangle of the STATED area (width : height = 1.3) centred on the given point, as a GeoJSON ring. Seed fields used
-     * to get a fixed ~790 m x 620 m box whatever their area, which a true-scale 3D view showed as 16x too large.
+     * Rectangle of the STATED area (width : height = 1.3) centred on the given point, as a GeoJSON ring. Seed polygons used
+     * to get a fixed ~790 m x 620 m box whatever their area.
      */
     public static List<List<List<Double>>> polygonForArea(double lat, double lng, double areaHa) {
         double areaM2 = Math.max(areaHa, 0.01) * 10_000.0;
@@ -68,12 +68,5 @@ public final class SpatialMatchingEngine {
 
     private static double round6(double v) {
         return Math.round(v * 1_000_000.0) / 1_000_000.0;
-    }
-
-    public static double computeMultiCriteriaScore(double distKm, double capacityHaPerHr, double operatorRating) {
-        double distScore = Math.max(0.0, 30.0 * (1.0 - distKm / 10.0));
-        double capScore = Math.min(25.0, capacityHaPerHr * 32.0);
-        double ratingScore = (operatorRating / 5.0) * 15.0;
-        return Math.round((30.0 + distScore + capScore + ratingScore) * 10.0) / 10.0;
     }
 }

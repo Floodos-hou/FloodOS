@@ -28,9 +28,14 @@ def audit_event(event_id="EVT-2026-0001", epoch="E1", org="ORG_A", corr="CORR-1"
     }
 
 
-def telemetry_event(machine="M01", org="ORG_A", ts="2026-11-20T10:00:00Z", lat=10.0, lon=105.0, fuel=80.0, speed=5.0):
-    return {"machine_id": machine, "organization_id": org, "ts": ts, "lat": lat, "lon": lon,
-            "fuel_pct": fuel, "speed_kmh": speed, "status": "WORKING", "source": "mqtt"}
+def telemetry_event(machine="V01", org="ORG_A", ts="2026-11-20T10:00:00Z", lat=10.0, lon=105.0, fuel=80.0, speed=5.0):
+    return {"asset_kind": "vehicle", "asset_id": machine, "organization_id": org, "ts": ts, "lat": lat, "lon": lon,
+            "fuel_pct": fuel, "speed_kmh": speed, "status": "WORKING", "source": "SIMULATOR"}
+
+
+def gauge_event(station="G01", org="ORG_A", ts="2026-11-20T10:00:00Z", level=60.0):
+    return {"asset_kind": "gauge", "asset_id": station, "organization_id": org, "ts": ts, "level_cm": level,
+            "source": "SIMULATOR"}
 
 
 class LakeTestCase(unittest.TestCase):
@@ -76,12 +81,36 @@ class TimestampAndRowTests(unittest.TestCase):
         del ev["ledger_epoch"]
         self.assertEqual("", archiver.audit_row(ev, datetime(2026, 1, 1))[1])
 
-    def test_telemetry_row_shape_and_default_source(self):
-        ev = telemetry_event()
-        del ev["source"]
-        row = archiver.telemetry_row(ev, datetime(2026, 1, 1))
+    def test_telemetry_row_shape_and_source(self):
+        row = archiver.telemetry_row(telemetry_event(), datetime(2026, 1, 1))
         self.assertEqual(len(archiver.TELEMETRY_COLUMNS), len(row))
-        self.assertEqual("unknown", row[8])
+        self.assertEqual("SIMULATOR", row[10])
+
+    def test_telemetry_row_rejects_a_sample_without_a_known_source(self):
+        for bad in (None, "", "mqtt", "simulator"):
+            ev = telemetry_event()
+            if bad is None:
+                del ev["source"]
+            else:
+                ev["source"] = bad
+            with self.assertRaises(ValueError, msg=f"source {bad!r} must be refused"):
+                archiver.telemetry_row(ev, datetime(2026, 1, 1))
+
+    def test_telemetry_row_rejects_unknown_asset_kind_and_missing_id(self):
+        ev = telemetry_event()
+        ev["asset_kind"] = "machine"
+        with self.assertRaises(ValueError):
+            archiver.telemetry_row(ev, datetime(2026, 1, 1))
+        ev = telemetry_event()
+        ev["asset_id"] = ""
+        with self.assertRaises(ValueError):
+            archiver.telemetry_row(ev, datetime(2026, 1, 1))
+
+    def test_gauge_row_carries_the_level_and_no_position(self):
+        row = archiver.telemetry_row(gauge_event(level=71.5), datetime(2026, 1, 1))
+        self.assertEqual("gauge", row[0])
+        self.assertEqual(71.5, row[8])
+        self.assertIsNone(row[4])
 
     def test_audit_row_rejects_unparseable_timestamp(self):
         with self.assertRaises(ValueError):
@@ -90,7 +119,7 @@ class TimestampAndRowTests(unittest.TestCase):
 
 class QueryTests(LakeTestCase):
     def test_empty_lake_is_a_valid_empty_answer_not_an_error(self):
-        for name in ("actions-by-day", "machine-utilization"):
+        for name in ("actions-by-day", "asset-utilization"):
             status, body = self.query(name)
             self.assertEqual(200, status, name)
             self.assertTrue(body["lake_empty"], name)
@@ -129,13 +158,13 @@ class QueryTests(LakeTestCase):
     def test_tenants_are_isolated(self):
         self.write("audit", [audit_event("A1", org="ORG_A"), audit_event("B1", org="ORG_B", corr="CORR-B", seq=2),
                              audit_event("B2", org="ORG_B", corr="CORR-B", seq=3)])
-        self.write("telemetry", [telemetry_event("M-A", org="ORG_A"), telemetry_event("M-B", org="ORG_B")])
+        self.write("asset_telemetry", [telemetry_event("V-A", org="ORG_A"), telemetry_event("V-B", org="ORG_B")])
         _, a = self.query("summary", "ORG_A")
         _, b = self.query("summary", "ORG_B")
         self.assertEqual(1, a["audit"]["events"])
         self.assertEqual(2, b["audit"]["events"])
-        _, util_a = self.query("machine-utilization", "ORG_A")
-        self.assertEqual(["M-A"], [r["machine_id"] for r in util_a["rows"]])
+        _, util_a = self.query("asset-utilization", "ORG_A")
+        self.assertEqual(["V-A"], [r["asset_id"] for r in util_a["rows"]])
         _, none = self.query("summary", "ORG_NOBODY")
         self.assertEqual(0, none["audit"]["events"])
 
@@ -151,30 +180,30 @@ class QueryTests(LakeTestCase):
         self.assertEqual(0, body["telemetry"]["samples"])
         self.assertIn("archiver", body)
 
-    def test_machine_utilization_computes_haversine_distance_per_machine(self):
+    def test_asset_utilization_computes_haversine_distance_per_vehicle(self):
         # 0.001 deg of latitude = 111.19 m; three points -> two 111.19 m legs
-        self.write("telemetry", [
-            telemetry_event("M01", ts="2026-11-20T10:00:00Z", lat=10.000, fuel=80),
-            telemetry_event("M01", ts="2026-11-20T10:00:02Z", lat=10.001, fuel=79),
-            telemetry_event("M01", ts="2026-11-20T10:00:04Z", lat=10.002, fuel=78),
-            telemetry_event("M02", ts="2026-11-20T10:00:00Z", lat=9.0, fuel=60, speed=0),
-            telemetry_event("M02", ts="2026-11-20T10:00:02Z", lat=9.0, fuel=60, speed=0),
+        self.write("asset_telemetry", [
+            telemetry_event("V01", ts="2026-11-20T10:00:00Z", lat=10.000, fuel=80),
+            telemetry_event("V01", ts="2026-11-20T10:00:02Z", lat=10.001, fuel=79),
+            telemetry_event("V01", ts="2026-11-20T10:00:04Z", lat=10.002, fuel=78),
+            telemetry_event("V02", ts="2026-11-20T10:00:00Z", lat=9.0, fuel=60, speed=0),
+            telemetry_event("V02", ts="2026-11-20T10:00:02Z", lat=9.0, fuel=60, speed=0),
         ])
-        _, body = self.query("machine-utilization")
-        rows = {r["machine_id"]: r for r in body["rows"]}
-        self.assertEqual(3, rows["M01"]["samples"])
-        self.assertAlmostEqual(0.222, rows["M01"]["distance_km"], places=2)
-        self.assertEqual(78.0, rows["M01"]["min_fuel_pct"])
-        self.assertEqual(0.0, rows["M02"]["distance_km"], "a stationary machine travels no distance")
-        self.assertEqual("M01", body["rows"][0]["machine_id"], "ordered by distance descending")
+        _, body = self.query("asset-utilization")
+        rows = {r["asset_id"]: r for r in body["rows"]}
+        self.assertEqual(3, rows["V01"]["samples"])
+        self.assertAlmostEqual(0.222, rows["V01"]["distance_km"], places=2)
+        self.assertEqual(78.0, rows["V01"]["min_fuel_pct"])
+        self.assertEqual(0.0, rows["V02"]["distance_km"], "a stationary vehicle travels no distance")
+        self.assertEqual("V01", body["rows"][0]["asset_id"], "ordered by distance descending")
 
-    def test_machine_utilization_orders_samples_by_time_not_arrival(self):
-        self.write("telemetry", [
-            telemetry_event("M01", ts="2026-11-20T10:00:04Z", lat=10.002),
-            telemetry_event("M01", ts="2026-11-20T10:00:00Z", lat=10.000),
-            telemetry_event("M01", ts="2026-11-20T10:00:02Z", lat=10.001),
+    def test_asset_utilization_orders_samples_by_time_not_arrival(self):
+        self.write("asset_telemetry", [
+            telemetry_event("V01", ts="2026-11-20T10:00:04Z", lat=10.002),
+            telemetry_event("V01", ts="2026-11-20T10:00:00Z", lat=10.000),
+            telemetry_event("V01", ts="2026-11-20T10:00:02Z", lat=10.001),
         ])
-        _, body = self.query("machine-utilization")
+        _, body = self.query("asset-utilization")
         self.assertAlmostEqual(0.222, body["rows"][0]["distance_km"], places=2)
 
 
@@ -189,13 +218,13 @@ class FlushTests(LakeTestCase):
     def setUp(self):
         super().setUp()
         with archiver.state_lock:
-            archiver.state["rows_archived"] = {"audit": 0, "telemetry": 0}
+            archiver.state["rows_archived"] = {"audit": 0, "asset_telemetry": 0}
             archiver.state["files_written"] = 0
             archiver.state["rejected_events"] = 0
 
     def test_offsets_are_committed_only_after_the_files_are_written(self):
         consumer = self.FakeConsumer()
-        archiver.flush(self.con, consumer, {"audit": [audit_event()], "telemetry": []}, {("openagrios.audit.v1", 0): 41})
+        archiver.flush(self.con, consumer, {"audit": [audit_event()], "asset_telemetry": []}, {("openagrios.audit.v1", 0): 41})
         self.assertEqual([{("openagrios.audit.v1", 0): 41}], consumer.commits)
         self.assertEqual(1, self.query("summary")[1]["audit"]["events"])
         self.assertEqual(1, archiver.state["rows_archived"]["audit"])
@@ -206,7 +235,7 @@ class FlushTests(LakeTestCase):
         archiver.write_parquet = lambda *a, **k: (_ for _ in ()).throw(IOError("object storage down"))
         try:
             with self.assertRaises(IOError):
-                archiver.flush(self.con, consumer, {"audit": [audit_event()], "telemetry": []}, {("t", 0): 7})
+                archiver.flush(self.con, consumer, {"audit": [audit_event()], "asset_telemetry": []}, {("t", 0): 7})
         finally:
             archiver.write_parquet = original
         self.assertEqual([], consumer.commits, "at-least-once: never commit before the data is durable")
@@ -214,14 +243,14 @@ class FlushTests(LakeTestCase):
     def test_one_malformed_event_is_counted_and_does_not_block_the_batch(self):
         consumer = self.FakeConsumer()
         bad = audit_event("BAD", created="not-a-date")
-        archiver.flush(self.con, consumer, {"audit": [audit_event("OK"), bad], "telemetry": []}, {("t", 0): 2})
+        archiver.flush(self.con, consumer, {"audit": [audit_event("OK"), bad], "asset_telemetry": []}, {("t", 0): 2})
         self.assertEqual(1, self.query("summary")[1]["audit"]["events"])
         self.assertEqual(1, archiver.state["rejected_events"])
         self.assertEqual(1, len(consumer.commits), "poison message must not wedge the partition")
 
     def test_empty_batch_writes_no_file(self):
         consumer = self.FakeConsumer()
-        archiver.flush(self.con, consumer, {"audit": [], "telemetry": []}, {})
+        archiver.flush(self.con, consumer, {"audit": [], "asset_telemetry": []}, {})
         self.assertEqual(0, archiver.state["files_written"])
 
     def test_files_are_hive_partitioned_by_day(self):
