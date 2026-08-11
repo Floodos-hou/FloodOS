@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2026 OpenAgriOS Contributors -->
+<!-- Copyright 2026 FloodOS Contributors -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://openagrios.org/bpmn">
+             targetNamespace="http://floodos.org/bpmn">
 
-  <!-- Hanoi FloodOps SOP-01: from a flood report to a confirmed, audit-sealed resolution. -->
+  <!-- FloodOS SOP-01: from a flood report to a confirmed, audit-sealed resolution. -->
   <process id="flood_report_lifecycle" name="Quy trình Tin báo ngập: tiếp nhận - xác minh - điều phối - xử lý - xác nhận (SOP-01)" isExecutable="true">
     <startEvent id="startReport" name="Tiếp nhận tin báo ngập" flowable:initiator="reporterUserId"/>
     <sequenceFlow id="rptFlow1" sourceRef="startReport" targetRef="taskDispatcherVerify"/>

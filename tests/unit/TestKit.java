@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
 import java.util.ArrayList;
 import java.util.List;

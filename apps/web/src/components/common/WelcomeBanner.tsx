@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React from 'react';
 import type { TacticalState, UserAccount } from '../../types';
 import { callName, greeting, orgLabel, roleLabel } from '../../utils/labels';
-import { OpenAgriLogo } from './OpenAgriLogo';
+import { FloodOsLogo } from './FloodOsLogo';
 
 interface Stat { icon: string; value: number | string; label: string; tone?: 'alert' }
 
@@ -73,7 +73,7 @@ export const WelcomeBanner: React.FC<{ user: UserAccount; state: TacticalState |
     <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-600 text-white shadow-xl ring-1 ring-emerald-900/20">
       {/* Decorative Brand Logo Watermark */}
       <div className="pointer-events-none absolute -bottom-10 -right-10 opacity-10 select-none" aria-hidden="true">
-        <OpenAgriLogo size={220} />
+        <FloodOsLogo size={220} />
       </div>
       <div className="relative z-10 flex flex-col gap-6 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">

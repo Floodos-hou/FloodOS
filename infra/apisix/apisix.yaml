@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 
 # ============================================================================
 # APACHE APISIX — ZERO-TRUST API GATEWAY CONFIGURATION (Apache-2.0 License)
@@ -9,7 +9,7 @@
 routes:
   # 0. Internal service-to-service endpoints are NEVER reachable through the edge (Zero-Trust).
   #    The telemetry ingestor talks to core-api directly on the container network with a shared secret.
-  - id: openagrios-block-internal-route
+  - id: floodos-block-internal-route
     name: "Block /api/v1/internal/* at the edge"
     priority: 100
     uris:
@@ -21,7 +21,7 @@ routes:
           body: '{"error":"NOT_FOUND"}'
 
   # 0b. Tier-3 public traceability pages (consumers scan a QR code: no login, read-only, rate limited, redacted by design)
-  - id: openagrios-public-trace-route
+  - id: floodos-public-trace-route
     name: "Public flood-case traceability (Tier 3)"
     priority: 30
     uris:
@@ -41,7 +41,7 @@ routes:
 
   # 0c. Tier-2 app #2 (3D digital twin): static SPA under /twin/, no token needed to load the page (the API calls it makes are
   #     protected by the normal OIDC route). Higher priority than the catch-all portal route.
-  - id: openagrios-twin-ui-route
+  - id: floodos-twin-ui-route
     name: "3D digital twin SPA"
     priority: 25
     uris:
@@ -54,8 +54,8 @@ routes:
         "twin-app:80": 1
 
   # 1. Public Discovery, Health, and Login Route (No Token Required)
-  - id: openagrios-public-discovery-route
-    name: "OpenAgriOS Public Manifest & Login Route"
+  - id: floodos-public-discovery-route
+    name: "FloodOS Public Manifest & Login Route"
     priority: 20
     uris:
       - "/api/v1"
@@ -83,8 +83,8 @@ routes:
         key: remote_addr
 
   # 2. Zero-Trust Protected Core API Route (Enforced via Keycloak OIDC Token Introspection)
-  - id: openagrios-protected-core-route
-    name: "OpenAgriOS Zero-Trust Protected Core API Route"
+  - id: floodos-protected-core-route
+    name: "FloodOS Zero-Trust Protected Core API Route"
     priority: 10
     uris:
       - "/api/v1/*"
@@ -105,20 +105,20 @@ routes:
         key_type: var
         key: remote_addr
       openid-connect:
-        client_id: "agriops-gateway"
-        client_secret: "${{KEYCLOAK_INTROSPECTION_CLIENT_SECRET:=agriops-gateway-secret-2026}}"
-        discovery: "http://keycloak:8080/realms/openagrios/.well-known/openid-configuration"
+        client_id: "floodos-gateway"
+        client_secret: "${{KEYCLOAK_INTROSPECTION_CLIENT_SECRET:=floodos-gateway-secret-2026}}"
+        discovery: "http://keycloak:8080/realms/floodos/.well-known/openid-configuration"
         bearer_only: true
-        realm: "openagrios"
-        introspection_endpoint: "http://keycloak:8080/realms/openagrios/protocol/openid-connect/token/introspect"
+        realm: "floodos"
+        introspection_endpoint: "http://keycloak:8080/realms/floodos/protocol/openid-connect/token/introspect"
       proxy-rewrite:
         headers:
           set:
             X-Gateway: "Apache-APISIX-ZeroTrust"
 
-  # 3. OpenAgriOS Experience & Operations Web Portal (H-P-D-I SPA)
-  - id: openagrios-web-ui-route
-    name: "OpenAgriOS Web UI SPA Route"
+  # 3. FloodOS Experience & Operations Web Portal (H-P-D-I SPA)
+  - id: floodos-web-ui-route
+    name: "FloodOS Web UI SPA Route"
     priority: 1
     uris:
       - "/*"

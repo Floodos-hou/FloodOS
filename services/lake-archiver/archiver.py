@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """
-OpenAgriOS cold-tier lake archiver.
+FloodOS cold-tier lake archiver.
 
 Hot path  : core-api -> Apache Kafka topics (via Kafka REST Proxy) (audit / telemetry events)
 Cold path : this service consumes the topics (at-least-once), writes Hive-partitioned
@@ -28,12 +28,12 @@ import duckdb
 
 EVENT_BUS_URL = os.environ.get("EVENT_BUS_URL", "http://kafka-rest:8082").rstrip("/")
 S3_ENDPOINT = os.environ.get("LAKE_S3_ENDPOINT", "object-storage:9000")
-BUCKET = os.environ.get("LAKE_BUCKET", "openagrios-lake")
+BUCKET = os.environ.get("LAKE_BUCKET", "floodos-lake")
 # Root URI of the lake. Defaults to the S3 bucket; tests point it at a local directory.
 LAKE_ROOT = os.environ.get("LAKE_ROOT", f"s3://{BUCKET}").rstrip("/")
-S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "openagrios")
-S3_SECRET = os.environ.get("LAKE_S3_SECRET_KEY", "openagrios-dev-only")
-GROUP = os.environ.get("LAKE_CONSUMER_GROUP", "openagrios-lake-archiver")
+S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "floodos")
+S3_SECRET = os.environ.get("LAKE_S3_SECRET_KEY", "floodos-dev-only")
+GROUP = os.environ.get("LAKE_CONSUMER_GROUP", "floodos-lake-archiver")
 BATCH_MAX = int(os.environ.get("LAKE_BATCH_MAX", "200"))
 FLUSH_SECONDS = float(os.environ.get("LAKE_FLUSH_SECONDS", "5"))
 PORT = int(os.environ.get("PORT", "8090"))
@@ -42,8 +42,8 @@ COMPACT_MIN_FILES = int(os.environ.get("LAKE_COMPACT_MIN_FILES", "20"))
 COMPACT_MIN_AGE_S = float(os.environ.get("LAKE_COMPACT_MIN_AGE_S", "120"))
 COMPACT_EVERY_S = float(os.environ.get("LAKE_COMPACT_EVERY_S", "300"))
 
-TOPIC_AUDIT = "openagrios.audit.v1"
-TOPIC_TELEMETRY = "openagrios.telemetry.v1"
+TOPIC_AUDIT = "floodos.audit.v1"
+TOPIC_TELEMETRY = "floodos.telemetry.v1"
 
 KAFKA_V2 = "application/vnd.kafka.v2+json"
 KAFKA_JSON = "application/vnd.kafka.json.v2+json"
@@ -567,19 +567,19 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/metrics":  # Prometheus text exposition
             snap = snapshot()
             lines = [
-                "# TYPE openagrios_lake_rows_archived_total counter",
-                f'openagrios_lake_rows_archived_total{{table="audit"}} {snap["rows_archived"]["audit"]}',
-                f'openagrios_lake_rows_archived_total{{table="asset_telemetry"}} {snap["rows_archived"]["asset_telemetry"]}',
-                "# TYPE openagrios_lake_files_written_total counter",
-                f"openagrios_lake_files_written_total {snap['files_written']}",
-                "# TYPE openagrios_lake_rejected_events_total counter",
-                f"openagrios_lake_rejected_events_total {snap['rejected_events']}",
-                "# TYPE openagrios_lake_files_compacted_total counter",
-                f"openagrios_lake_files_compacted_total {snap['files_compacted']}",
-                "# TYPE openagrios_lake_commit_failures_total counter",
-                f"openagrios_lake_commit_failures_total {snap['commit_failures']}",
-                "# TYPE openagrios_lake_consumer_connected gauge",
-                f"openagrios_lake_consumer_connected {1 if snap['consumer'] == 'connected' else 0}",
+                "# TYPE floodos_lake_rows_archived_total counter",
+                f'floodos_lake_rows_archived_total{{table="audit"}} {snap["rows_archived"]["audit"]}',
+                f'floodos_lake_rows_archived_total{{table="asset_telemetry"}} {snap["rows_archived"]["asset_telemetry"]}',
+                "# TYPE floodos_lake_files_written_total counter",
+                f"floodos_lake_files_written_total {snap['files_written']}",
+                "# TYPE floodos_lake_rejected_events_total counter",
+                f"floodos_lake_rejected_events_total {snap['rejected_events']}",
+                "# TYPE floodos_lake_files_compacted_total counter",
+                f"floodos_lake_files_compacted_total {snap['files_compacted']}",
+                "# TYPE floodos_lake_commit_failures_total counter",
+                f"floodos_lake_commit_failures_total {snap['commit_failures']}",
+                "# TYPE floodos_lake_consumer_connected gauge",
+                f"floodos_lake_consumer_connected {1 if snap['consumer'] == 'connected' else 0}",
             ]
             raw = ("\n".join(lines) + "\n").encode()
             self.send_response(200)

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """Regression tests for the archiver's consume -> write -> commit protocol and for lake compaction.
 
 Found on the real stack: the commit used the wrong JSON key for Karapace (HTTP 500 every time), so the same batch was
@@ -41,7 +41,7 @@ class ScriptedConsumer:
         self.commits.append(dict(offsets))
 
 
-def rec(offset, event, topic="openagrios.audit.v1"):
+def rec(offset, event, topic="floodos.audit.v1"):
     return {"topic": topic, "partition": 0, "offset": offset, "value": event}
 
 
@@ -51,11 +51,11 @@ class CommitProtocolTests(LakeTestCase):
         with unittest.mock.patch.object(archiver, "bus", lambda method, path, body=None, **kw: sent.append((method, path, body))):
             c = archiver.Consumer()
             c.instance = "i1"
-            c.commit({("openagrios.audit.v1", 0): 41})
+            c.commit({("floodos.audit.v1", 0): 41})
         method, path, body = sent[0]
         self.assertEqual("POST", method)
         self.assertTrue(path.endswith("/instances/i1/offsets"))
-        self.assertEqual({"offsets": [{"topic": "openagrios.audit.v1", "partition": 0, "offset": 41}]}, body)
+        self.assertEqual({"offsets": [{"topic": "floodos.audit.v1", "partition": 0, "offset": 41}]}, body)
 
     def test_commit_with_nothing_to_acknowledge_sends_no_request(self):
         sent = []
@@ -89,7 +89,7 @@ class PumpTests(LakeTestCase):
         self.assertEqual(2, archiver.state["rows_archived"]["audit"], "each row is written exactly once")
         self.assertEqual(1, len(archiver.list_keys("audit/")), "one file, not one per retry")
         self.assertEqual(2, archiver.state["commit_failures"])
-        self.assertEqual([{("openagrios.audit.v1", 0): 2}], consumer.commits, "committed once the broker accepts it")
+        self.assertEqual([{("floodos.audit.v1", 0): 2}], consumer.commits, "committed once the broker accepts it")
 
     def test_new_records_keep_flowing_while_commits_are_failing(self):
         consumer = ScriptedConsumer([[rec(1, audit_event("E1"))], [rec(2, audit_event("E2", seq=2))],
@@ -100,7 +100,7 @@ class PumpTests(LakeTestCase):
             pump.step()
         self.assertEqual(3, self.events())
         self.assertEqual(3, archiver.state["rows_archived"]["audit"])
-        self.assertEqual({("openagrios.audit.v1", 0): 3}, consumer.commits[-1], "the newest offset covers the earlier ones")
+        self.assertEqual({("floodos.audit.v1", 0): 3}, consumer.commits[-1], "the newest offset covers the earlier ones")
 
     def test_a_failed_write_keeps_the_batch_for_the_next_attempt_and_commits_nothing(self):
         consumer = ScriptedConsumer([[rec(1, audit_event("E1"))], [], []])
@@ -120,10 +120,10 @@ class PumpTests(LakeTestCase):
             self.assertEqual([], consumer.commits)
             pump.step()
         self.assertEqual(1, self.events(), "the batch survived the failure and was written once")
-        self.assertEqual([{("openagrios.audit.v1", 0): 1}], consumer.commits)
+        self.assertEqual([{("floodos.audit.v1", 0): 1}], consumer.commits)
 
     def test_both_topics_are_routed_to_their_own_tables_and_foreign_records_are_ignored(self):
-        consumer = ScriptedConsumer([[rec(1, audit_event("E1")), rec(2, telemetry_event(), topic="openagrios.telemetry.v1"),
+        consumer = ScriptedConsumer([[rec(1, audit_event("E1")), rec(2, telemetry_event(), topic="floodos.telemetry.v1"),
                                       {"topic": "other.topic", "partition": 0, "offset": 3, "value": {"x": 1}},
                                       rec(4, "not-an-object")], []])
         pump = archiver.Pump(self.con, consumer)

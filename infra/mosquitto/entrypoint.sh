@@ -1,9 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 #
 # Idempotent boot script: regenerates credentials + least-privilege ACL, then starts Mosquitto.
-#   device   : may only PUBLISH  openagrios/<org>/machines/<id>/telemetry
+#   device   : may only PUBLISH  floodos/<org>/machines/<id>/telemetry
 #   ingestor : may only SUBSCRIBE to that same topic family
 set -eu
 
@@ -22,12 +22,12 @@ mosquitto_passwd -b "$CONF/passwd" "$MQTT_INGESTOR_USER" "$MQTT_INGESTOR_PASSWOR
 
 cat > "$CONF/acl" <<ACL
 user $MQTT_DEVICE_USER
-topic write openagrios/+/vehicles/+/telemetry
-topic write openagrios/+/gauges/+/telemetry
+topic write floodos/+/vehicles/+/telemetry
+topic write floodos/+/gauges/+/telemetry
 
 user $MQTT_INGESTOR_USER
-topic read openagrios/+/vehicles/+/telemetry
-topic read openagrios/+/gauges/+/telemetry
+topic read floodos/+/vehicles/+/telemetry
+topic read floodos/+/gauges/+/telemetry
 ACL
 
 chown -R mosquitto:mosquitto "$CONF" /mosquitto/data 2>/dev/null || true

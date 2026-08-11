@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests;
+package org.floodos.tests;
 
-import org.openagrios.apps.floodops.FloodOpsServer;
-import org.openagrios.core.dataservices.JsonCodec;
-import org.openagrios.core.identity.KeycloakOidcEngine;
+import org.floodos.apps.floodos.FloodOSServer;
+import org.floodos.core.dataservices.JsonCodec;
+import org.floodos.core.identity.KeycloakOidcEngine;
 
 import java.io.File;
 import java.net.URI;
@@ -15,7 +15,7 @@ import java.net.http.HttpResponse;
 import java.util.*;
 
 /**
- * In-process acceptance suite for Hanoi FloodOps: the real HTTP server on an ephemeral port, the real router, the
+ * In-process acceptance suite for FloodOS: the real HTTP server on an ephemeral port, the real router, the
  * real RBAC / ownership / conflict rules and the real hash-chained ledger, with the development token issuer.
  * (The full-stack suite, tests/e2e_full_stack_test.sh, repeats the golden path against Docker with Keycloak, APISIX,
  * PostgreSQL row-level security, Flowable, SeaweedFS and Kafka.)
@@ -74,13 +74,13 @@ public final class AcceptanceTestRunner {
 
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
-        File root = FloodOpsServer.resolveProjectRoot();
-        FloodOpsServer server = new FloodOpsServer(root);
+        File root = FloodOSServer.resolveProjectRoot();
+        FloodOSServer server = new FloodOSServer(root);
         KeycloakOidcEngine.setAuthModeForTesting(KeycloakOidcEngine.AuthMode.DEV_MOCK_STANDALONE);
         server.start(TEST_PORT);
         try {
             System.out.println("============================================================================");
-            System.out.println("HANOI FLOODOPS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)");
+            System.out.println("HANOI FLOODOS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)");
             System.out.println("============================================================================");
 
             System.out.println("\n[1] Platform health, workflow definitions and registered roles");

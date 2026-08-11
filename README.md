@@ -1,4 +1,4 @@
-# OpenDXOS — Hệ điều hành Chuyển đổi số mã nguồn mở (DX-OS Open-Core) · Ứng dụng minh họa: Hanoi FloodOps
+# FloodOS — Hệ điều hành Chuyển đổi số mã nguồn mở (DX-OS Open-Core) cho điều phối ứng phó ngập lụt
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Java: 21 LTS](https://img.shields.io/badge/Java-21_LTS-orange.svg)](pom.xml)
@@ -7,18 +7,18 @@
 [![Standard: ETSI NGSI--LD](https://img.shields.io/badge/Standard-ETSI_NGSI--LD-informational.svg)](core/data-services/NgsiLdTwinMapper.java)
 
 > Bài dự thi **OLP 2026 — Phần mềm nguồn mở**: *Xây dựng Hệ điều hành Chuyển đổi số bằng Công nghệ Lõi nguồn mở (DX-OS Open-Core)*.
-> **OpenDXOS** là nền tảng lõi dùng chung (Tầng 1, headless). **Hanoi FloodOps** là ứng dụng nghiệp vụ minh họa điều phối ứng phó ngập lụt cho **một địa bàn thí điểm tại Hà Nội**, chạy trên nền tảng đó.
+> **FloodOS** gồm một **lõi nền tảng dùng chung** (Tầng 1, headless) và một **ứng dụng nghiệp vụ** điều phối ứng phó ngập lụt cho **một địa bàn thí điểm tại Hà Nội** chạy trên lõi đó.
 > Mọi dữ liệu trong bản demo là **mô phỏng**: không có cảm biến thật, không có dữ liệu quan trắc chính thức và không có định tuyến giao thông (xem mục 3).
 
 <p align="center">
-  <img src="docs/assets/architecture_diagram.svg" alt="Kiến trúc OpenDXOS theo mô hình DX-OS Open-Core" width="100%">
+  <img src="docs/assets/architecture_diagram.svg" alt="Kiến trúc FloodOS theo mô hình DX-OS Open-Core" width="100%">
 </p>
 
 ---
 
 ## 1. Bài toán và câu chuyện demo
 
-Khi mưa lớn hoặc nước dâng, một địa bàn phải làm liên tục năm việc: **tiếp nhận** tin báo của người dân, **xác minh và xếp ưu tiên**, **điều đội và phương tiện** mà không xếp trùng, **cập nhật hiện trường** và **điều phối lại** khi phương tiện hỏng, rồi **xác nhận xử lý xong** với dấu vết không thể sửa. Hanoi FloodOps cài đặt đúng chuỗi đó trên nền tảng DX-OS:
+Khi mưa lớn hoặc nước dâng, một địa bàn phải làm liên tục năm việc: **tiếp nhận** tin báo của người dân, **xác minh và xếp ưu tiên**, **điều đội và phương tiện** mà không xếp trùng, **cập nhật hiện trường** và **điều phối lại** khi phương tiện hỏng, rồi **xác nhận xử lý xong** với dấu vết không thể sửa. FloodOS cài đặt đúng chuỗi đó trên nền tảng DX-OS:
 
 `Báo tin → Xác minh/ưu tiên → Điều phối → Cập nhật hiện trường → Điều phối lại khi có sự cố → Xác nhận hoàn tất + niêm phong sổ cái`
 
@@ -37,14 +37,14 @@ Một vụ việc (chạy được bằng API thật và được kiểm thử t
 | Tầng | Thành phần trong repo | Ghi chú |
 |---|---|---|
 | **1. Lõi dịch vụ số (headless PaaS)** | [`core/`](core/) (Java 21, không phụ thuộc thư viện ngoài) cùng Keycloak, APISIX, PostgreSQL, Flowable, SeaweedFS, Kafka/Karapace, Mosquitto, ClamAV, lake DuckDB | Không có giao diện. **Không chứa từ nào của nghiệp vụ ngập lụt**: một kiểm thử tự động quét `core/` tìm từ miền ([PlatformTests](tests/unit/PlatformTests.java), mục "Tier-1 boundary"). |
-| **2. Không gian năng lực H-P-D-I** | API ứng dụng ở [`apps/floodops/`](apps/floodops/); giao diện còn lại ở [`apps/web`](apps/web), [`apps/twin3d`](apps/twin3d) | **Giao diện chưa được làm lại cho FloodOps** (xem mục 3 và 10). |
-| **3. Ứng dụng nghiệp vụ** | Hanoi FloodOps ([`apps/floodops/`](apps/floodops/)); truy xuất vụ việc công khai ([`apps/traceability/`](apps/traceability/)) | Quy tắc nghiệp vụ nằm ở đây, không nằm trong lõi. |
+| **2. Không gian năng lực H-P-D-I** | API ứng dụng ở [`apps/floodos/`](apps/floodos/); giao diện còn lại ở [`apps/web`](apps/web), [`apps/twin3d`](apps/twin3d) | **Giao diện chưa được làm lại cho FloodOS** (xem mục 3 và 10). |
+| **3. Ứng dụng nghiệp vụ** | FloodOS ([`apps/floodos/`](apps/floodos/)); truy xuất vụ việc công khai ([`apps/traceability/`](apps/traceability/)) | Quy tắc nghiệp vụ nằm ở đây, không nằm trong lõi. |
 
 Ranh giới được thực thi bằng mã, không chỉ bằng tài liệu:
 
-- Lõi chỉ biết *tổ chức, người dùng, vai trò đăng ký, tài nguyên đặt lịch, sự kiện, quy trình, tệp, sổ cái*. Vai trò do ứng dụng đăng ký lúc khởi động ([`FloodRoles.register()`](apps/floodops/FloodRoles.java)); token không có vai trò đã đăng ký bị từ chối (không có vai trò mặc định) và token thiếu `organization_id` không bao giờ được gán vào một tenant.
+- Lõi chỉ biết *tổ chức, người dùng, vai trò đăng ký, tài nguyên đặt lịch, sự kiện, quy trình, tệp, sổ cái*. Vai trò do ứng dụng đăng ký lúc khởi động ([`FloodRoles.register()`](apps/floodos/FloodRoles.java)); token không có vai trò đã đăng ký bị từ chối (không có vai trò mặc định) và token thiếu `organization_id` không bao giờ được gán vào một tenant.
 - Bộ kiểm tra xung đột lịch ([`ScheduleConflictEngine`](core/data-services/ScheduleConflictEngine.java)) làm việc với "tài nguyên + người giữ + khoảng thời gian", giống ràng buộc GiST trong PostgreSQL.
-- SQL của ứng dụng nằm ở [`FloodRepository`](apps/floodops/FloodRepository.java); lõi chỉ cung cấp phiên RLS và giao dịch ([`PostgreSqlDataService`](core/data-services/PostgreSqlDataService.java)).
+- SQL của ứng dụng nằm ở [`FloodRepository`](apps/floodos/FloodRepository.java); lõi chỉ cung cấp phiên RLS và giao dịch ([`PostgreSqlDataService`](core/data-services/PostgreSqlDataService.java)).
 - **DDL chỉ có một nguồn**: [`infra/db/schema.sql`](infra/db/schema.sql), được container PostgreSQL áp dụng lại **mỗi lần khởi động**, dù volume mới hay cũ. Mã Java không tạo bảng; nó kiểm tra bảng có đủ và dừng ngay nếu thiếu.
 
 ### Ánh xạ bốn nguyên lý kỹ thuật của đề
@@ -75,7 +75,7 @@ Ranh giới được thực thi bằng mã, không chỉ bằng tài liệu:
 | Dữ liệu seed (vùng, đội, xe, điểm trú, tin báo) | **Mô phỏng** | Tên hư cấu, tọa độ minh họa trong Hà Nội, không mô tả nơi ngập thật. Nhãn `SEED`. |
 | Quan trắc/dự báo chính thức của Hà Nội | **Chưa có** | Không dùng và không bịa nguồn. Enum nguồn có `DEVICE` để dành cho thiết bị thật. |
 | Định tuyến đường bộ/đường thủy, tránh vùng ngập | **Chưa có** | Khoảng cách là Haversine (đường chim bay). Không có PostGIS, không có routing. |
-| Giao diện FloodOps (cổng điều hành, bản đồ, điện thoại) | **Chưa có** | [`apps/web`](apps/web) và [`apps/twin3d`](apps/twin3d) vẫn là giao diện của nguyên mẫu thu hoạch lúa cũ; gateway vẫn phục vụ chúng nhưng chúng **không dùng được với API mới**. Đây là bước tiếp theo. |
+| Giao diện FloodOS (cổng điều hành, bản đồ, điện thoại) | **Chưa có** | [`apps/web`](apps/web) và [`apps/twin3d`](apps/twin3d) vẫn là giao diện của nguyên mẫu thu hoạch lúa cũ; gateway vẫn phục vụ chúng nhưng chúng **không dùng được với API mới**. Đây là bước tiếp theo. |
 | Giám sát Prometheus/Grafana, tự phục hồi, GitOps (ArgoCD) | **Chưa có** | Ingestor và lake-archiver có `/health` và `/metrics` dạng Prometheus, nhưng chưa có Prometheus/Grafana hay ArgoCD, chưa có bằng chứng phục hồi tự động. |
 | Triển khai Internet, mật khẩu mạnh, MFA, Vault | **Chưa có** | Mật khẩu `123456` chỉ dùng cho realm demo; `compose.prod.yaml` đòi bí mật tường minh nhưng realm vẫn là realm demo. |
 | Thành phần AI/RAG (không gian [I]) | **Chưa có** | "Gợi ý phương án thay thế" là **xếp hạng theo luật có giải thích**, không phải mô hình AI. |
@@ -92,9 +92,9 @@ Ranh giới được thực thi bằng mã, không chỉ bằng tài liệu:
 | `DISPATCHER` Điều phối viên | Xác minh/từ chối, đặt ưu tiên, điều đội+xe, duyệt phương án thay thế, cập nhật điểm trú, xác nhận thay người báo tin, xem phân tích lạnh | Toàn bộ dữ liệu của đơn vị mình. |
 | `FIELD_TEAM` Đội hiện trường | Bắt đầu/cập nhật/hoàn thành **lệnh của đội mình**; báo sự cố phương tiện mình đang dùng | Đội mình, lệnh và xe của đội, tin báo đứng sau lệnh đó, sự cố mình báo. |
 | `RESOURCE_MANAGER` Quản lý nguồn lực | Cập nhật và đóng phiếu sửa chữa gắn với mình. **Không duyệt điều động.** | Đội, xe, lệnh, sự cố. Không thấy tin báo của người dân. |
-| `PLATFORM_ADMIN` Quản trị nền tảng | Đặt lại dữ liệu demo (chỉ khi `OPENDXOS_ALLOW_DEMO_RESET=true`; đóng trong production) | Dữ liệu của tenant trong token; không có quyền nghiệp vụ (tách nhiệm vụ). |
+| `PLATFORM_ADMIN` Quản trị nền tảng | Đặt lại dữ liệu demo (chỉ khi `FLOODOS_ALLOW_DEMO_RESET=true`; đóng trong production) | Dữ liệu của tenant trong token; không có quyền nghiệp vụ (tách nhiệm vụ). |
 
-Quy tắc chung: bản ghi không thuộc phạm vi của người gọi trả **404** (không lộ sự tồn tại) và được ghi audit; vai trò không đủ quyền trả **403** và ghi `RBAC_BLOCKED_*` vào sổ cái. Các quy tắc này được hiện thực và kiểm thử ở ba nơi: dịch vụ Java ([`FloodOpsService`](apps/floodops/FloodOpsService.java)), chính sách RLS ([`schema.sql`](infra/db/schema.sql)) và realm Keycloak ([`openagrios-realm.json`](infra/keycloak/openagrios-realm.json)); một kiểm thử đối chiếu realm với seed của ứng dụng để hai danh sách không lệch nhau.
+Quy tắc chung: bản ghi không thuộc phạm vi của người gọi trả **404** (không lộ sự tồn tại) và được ghi audit; vai trò không đủ quyền trả **403** và ghi `RBAC_BLOCKED_*` vào sổ cái. Các quy tắc này được hiện thực và kiểm thử ở ba nơi: dịch vụ Java ([`FloodOSService`](apps/floodos/FloodOSService.java)), chính sách RLS ([`schema.sql`](infra/db/schema.sql)) và realm Keycloak ([`floodos-realm.json`](infra/keycloak/floodos-realm.json)); một kiểm thử đối chiếu realm với seed của ứng dụng để hai danh sách không lệch nhau.
 
 ---
 
@@ -115,7 +115,7 @@ Bảng của ứng dụng (tên mới, **không đụng** bảng của nguyên m
 | `POST /api/v1/shelters/{id}/occupancy` | DISPATCHER | Cập nhật số người ở điểm trú |
 | `GET /api/v1/state`, `/digital-twin/entities`, `/audit/verify`, `/audit/lineage/{id}`, `/analytics/{q}`, `/stream/events` | theo phạm vi vai trò | Trạng thái, bản sao số NGSI-LD, kiểm chứng chuỗi băm, phả hệ, phân tích lạnh |
 
-Đặc tả đầy đủ: [`docs/api-spec.md`](docs/api-spec.md). Bộ Postman: [`tests/postman/OpenDXOS_FloodOps.postman_collection.json`](tests/postman/OpenDXOS_FloodOps.postman_collection.json).
+Đặc tả đầy đủ: [`docs/api-spec.md`](docs/api-spec.md). Bộ Postman: [`tests/postman/FloodOS.postman_collection.json`](tests/postman/FloodOS.postman_collection.json).
 
 **Máy trạng thái của tin báo:** `RECEIVED → VERIFIED | REJECTED → DISPATCHED → IN_PROGRESS → AWAITING_CONFIRMATION → RESOLVED`. Khi xe hỏng: `IN_PROGRESS → IMPACTED → RESCHEDULED → IN_PROGRESS`. Khi bị phản đối: `AWAITING_CONFIRMATION → VERIFIED`. BPMN: [`flood_report_lifecycle`](infra/bpmn/flood_report_lifecycle.bpmn20.xml) (SOP-01) và [`dispatch_replan`](infra/bpmn/dispatch_replan.bpmn20.xml) (SOP-02).
 
@@ -160,7 +160,7 @@ Production: sao chép `.env.production.example`, đặt bí mật riêng, chạy
 
 ```bash
 bash tests/run_unit_tests.sh                                         # Java + Node + Python (Python chạy trong container)
-java -cp target/classes org.openagrios.tests.AcceptanceTestRunner    # chấp nhận trong tiến trình: HTTP thật, luồng đầy đủ
+java -cp target/classes org.floodos.tests.AcceptanceTestRunner    # chấp nhận trong tiến trình: HTTP thật, luồng đầy đủ
 bash tests/e2e_full_stack_test.sh                                    # toàn stack bằng Docker thật, không giả lập
 ```
 
@@ -194,7 +194,7 @@ Mã của dự án: **Apache-2.0** ([`LICENSE`](LICENSE)). Danh mục thư việ
 
 ## 10. Hạn chế đã biết và lộ trình
 
-1. **Giao diện FloodOps chưa làm** (cổng điều hành theo vai trò, bản đồ, màn hình điện thoại). `apps/web` và `apps/twin3d` là giao diện cũ và không khớp API mới. Thiết kế UX mục tiêu: [`docs/floodops-demo-ux.md`](docs/floodops-demo-ux.md) (đích thiết kế, chưa phải chức năng đã có).
+1. **Giao diện FloodOS chưa làm** (cổng điều hành theo vai trò, bản đồ, màn hình điện thoại). `apps/web` và `apps/twin3d` là giao diện cũ và không khớp API mới. Thiết kế UX mục tiêu: [`docs/floodos-demo-ux.md`](docs/floodos-demo-ux.md) (đích thiết kế, chưa phải chức năng đã có).
 2. Hoàn tất user task của Flowable qua REST (hiện chỉ khởi tạo tiến trình và theo dõi bước ở nền tảng).
 3. Giám sát (Prometheus/Grafana), GitOps (ArgoCD), bằng chứng tự phục hồi, triển khai Internet, mật khẩu/MFA cho môi trường công khai.
 4. Dữ liệu quan trắc thật (nếu có nguồn được phép dùng) thay cho mô phỏng; định tuyến thật thay cho đường chim bay.

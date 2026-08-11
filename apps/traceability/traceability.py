@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """
-OpenDXOS Tier-3 domain module: flood-response CASE TRACEABILITY.
+FloodOS Tier-3 domain module: flood-response CASE TRACEABILITY.
 
 A pluggable application on top of the Tier-1 platform. It never touches the core or its database: it only reads
 the cold lake (Parquet on S3, fed by the Tier-1 event bus) and answers a public question, "what happened to this
@@ -28,11 +28,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import duckdb
 import segno
 
-BUCKET = os.environ.get("LAKE_BUCKET", "openagrios-lake")
+BUCKET = os.environ.get("LAKE_BUCKET", "floodos-lake")
 LAKE_ROOT = os.environ.get("LAKE_ROOT", f"s3://{BUCKET}").rstrip("/")
 S3_ENDPOINT = os.environ.get("LAKE_S3_ENDPOINT", "object-storage:9000")
-S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "openagrios")
-S3_SECRET = os.environ.get("LAKE_S3_SECRET_KEY", "openagrios-dev-only")
+S3_KEY = os.environ.get("LAKE_S3_ACCESS_KEY", "floodos")
+S3_SECRET = os.environ.get("LAKE_S3_SECRET_KEY", "floodos-dev-only")
 PORT = int(os.environ.get("PORT", "8095"))
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:9080").rstrip("/")
 DISCLAIMER = os.environ.get("TRACE_DISCLAIMER", "")
@@ -261,7 +261,7 @@ def render_html(trace):
     disclaimer = f'<p class="disc">{e(trace["disclaimer"])}</p>' if trace["disclaimer"] else ""
     return f"""<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Truy xuất nguồn gốc {e(trace["trace_id"])} · OpenAgriOS</title>
+<title>Truy xuất nguồn gốc {e(trace["trace_id"])} · FloodOS</title>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f4f1e8;color:#1f2937}}
 header{{background:linear-gradient(135deg,#052e16,#166534);color:#fff;padding:28px 20px 70px}}
@@ -280,7 +280,7 @@ li{{position:relative;padding-left:56px;margin-bottom:14px;opacity:0;transform:t
 .disc,footer{{font-size:.78rem;color:#64748b}}footer{{margin:28px 0 40px;text-align:center}}
 @keyframes in{{to{{opacity:1;transform:none}}}}@media (prefers-reduced-motion:reduce){{li{{animation:none;opacity:1;transform:none}}}}
 </style></head><body>
-<header><div class="wrap"><h1>🌊 Truy xuất vụ việc ứng phó ngập lụt</h1><p>OpenDXOS · Tầng 3 · Mã vụ việc <b>{e(trace["trace_id"])}</b></p></div></header>
+<header><div class="wrap"><h1>🌊 Truy xuất vụ việc ứng phó ngập lụt</h1><p>FloodOS · Tầng 3 · Mã vụ việc <b>{e(trace["trace_id"])}</b></p></div></header>
 <main class="wrap"><div class="top">
 <section class="panel"><span class="badge">{e(badge)}</span><p>{e(explain)}</p>
 <div class="kv"><b>{v["records_match"]}/{v["records_checked"]}</b> bản ghi khớp mã băm · chuỗi sổ cái <b>{v["epoch_blocks"]}</b> khối {"liền mạch" if v["epoch_continuous"] else "BỊ ĐỨT"}<br>
@@ -313,9 +313,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             return self._json(200, {"status": "UP", **stats})
         if path == "/metrics":
-            lines = ["# TYPE openagrios_trace_requests_total counter"]
+            lines = ["# TYPE floodos_trace_requests_total counter"]
             for k, val in stats.items():
-                lines.append(f'openagrios_trace_{k}_total {val}')
+                lines.append(f'floodos_trace_{k}_total {val}')
             return self._send(200, "\n".join(lines) + "\n", "text/plain; version=0.0.4")
         m = re.fullmatch(r"/trace/([^/]+?)(\.json|/qr\.svg)?", path)
         if not m:

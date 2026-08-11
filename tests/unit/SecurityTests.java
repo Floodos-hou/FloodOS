@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
-import static org.openagrios.tests.unit.TestKit.*;
+import static org.floodos.tests.unit.TestKit.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -16,14 +16,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import org.openagrios.core.dataservices.ImmutableAuditLedger;
-import org.openagrios.core.dataservices.ImmutableAuditLedger.AuditRecord;
-import org.openagrios.apps.floodops.FloodRoles;
-import org.openagrios.core.gateway.ZeroTrustGateway;
-import org.openagrios.core.identity.KeycloakOidcEngine;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthMode;
-import org.openagrios.core.identity.KeycloakOidcEngine.UserAccount;
+import org.floodos.core.dataservices.ImmutableAuditLedger;
+import org.floodos.core.dataservices.ImmutableAuditLedger.AuditRecord;
+import org.floodos.apps.floodos.FloodRoles;
+import org.floodos.core.gateway.ZeroTrustGateway;
+import org.floodos.core.identity.KeycloakOidcEngine;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthMode;
+import org.floodos.core.identity.KeycloakOidcEngine.UserAccount;
 
 /** Audit hash chain, RBAC gateway guard, JWT validation attacks, PKCE (RFC 7636) and role resolution. */
 final class SecurityTests {
@@ -286,8 +286,10 @@ final class SecurityTests {
         });
         test("a tampered signature is rejected", () -> {
             String[] p = good.split("\\.");
-            char last = p[2].charAt(p[2].length() - 1);
-            String forgedSig = p[2].substring(0, p[2].length() - 1) + (last == 'A' ? 'B' : 'A');
+            // flip the FIRST character: the last base64url character can carry only padding bits, and flipping those
+            // sometimes leaves the decoded signature unchanged (that made this test fail one run in a few)
+            char first = p[2].charAt(0);
+            String forgedSig = (first == 'A' ? 'B' : 'A') + p[2].substring(1);
             isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + p[0] + "." + p[1] + "." + forgedSig), "signature flip");
         });
         test("privilege escalation by editing the payload is rejected (role swap keeps the old signature)", () -> {
@@ -361,33 +363,33 @@ final class SecurityTests {
         suite("Keycloak realm role resolution (roles are registered by the application, no default role)");
         FloodRoles.register();
         test("empty or missing roles resolve to NO role instead of a default", () -> {
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(null), "null");
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of()), "empty");
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(null), "null");
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(List.of()), "empty");
         });
         test("Keycloak system roles are ignored", () -> {
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access", "uma_authorization")), "system only");
-            equal("DISPATCHER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("offline_access", "DISPATCHER")), "business role wins");
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(List.of("default-roles-floodos", "offline_access", "uma_authorization")), "system only");
+            equal("DISPATCHER", KeycloakOidcEngine.resolveFloodOSRole(List.of("offline_access", "DISPATCHER")), "business role wins");
         });
         test("highest-priority role wins and matching is case-insensitive", () -> {
-            equal("PLATFORM_ADMIN", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("REPORTER", "PLATFORM_ADMIN", "DISPATCHER")), "hierarchy");
-            equal("DISPATCHER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("reporter", " dispatcher ")), "normalised");
-            equal("FIELD_TEAM", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("REPORTER", "FIELD_TEAM")), "field team outranks reporter");
+            equal("PLATFORM_ADMIN", KeycloakOidcEngine.resolveFloodOSRole(List.of("REPORTER", "PLATFORM_ADMIN", "DISPATCHER")), "hierarchy");
+            equal("DISPATCHER", KeycloakOidcEngine.resolveFloodOSRole(List.of("reporter", " dispatcher ")), "normalised");
+            equal("FIELD_TEAM", KeycloakOidcEngine.resolveFloodOSRole(List.of("REPORTER", "FIELD_TEAM")), "field team outranks reporter");
         });
-        test("a role that the application did not register is NOT resolved (old AgriOps roles are refused)", () -> {
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "FARMER")), "FARMER");
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("COORDINATOR", "MACHINE_OWNER", "OPERATOR", "REPAIR_TEAM")), "former roles");
+        test("a role that the application did not register is NOT resolved (old FloodOS roles are refused)", () -> {
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(List.of("default-roles-floodos", "FARMER")), "FARMER");
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(List.of("COORDINATOR", "MACHINE_OWNER", "OPERATOR", "REPAIR_TEAM")), "former roles");
         });
         test("null entries inside the role list do not crash", () -> {
             List<Object> roles = new ArrayList<>();
             roles.add(null);
             roles.add("FIELD_TEAM");
-            equal("FIELD_TEAM", KeycloakOidcEngine.resolveOpenAgriOsRole(roles), "null tolerated");
+            equal("FIELD_TEAM", KeycloakOidcEngine.resolveFloodOSRole(roles), "null tolerated");
         });
         test("the registry always keeps PLATFORM_ADMIN first and the core alone knows no business role", () -> {
             KeycloakOidcEngine.configureRoleHierarchy(List.of("alpha", "BETA"));
             equal(List.of("PLATFORM_ADMIN", "ALPHA", "BETA"), KeycloakOidcEngine.roleHierarchy(), "registered");
-            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("DISPATCHER")), "not registered now");
-            equal("ALPHA", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("alpha")), "registered role");
+            isNull(KeycloakOidcEngine.resolveFloodOSRole(List.of("DISPATCHER")), "not registered now");
+            equal("ALPHA", KeycloakOidcEngine.resolveFloodOSRole(List.of("alpha")), "registered role");
             FloodRoles.register();
         });
         test("a token without a tenant claim or without a registered role never authenticates", () -> {

@@ -1,4 +1,4 @@
-# OpenAgriOS Agent Operating Rules & Engineering Standards
+# FloodOS Agent Operating Rules & Engineering Standards
 
 Mọi tác vụ kỹ thuật, phát triển phần mềm, tích hợp hạ tầng và cấu hình hệ thống trên môi trường BẮT BUỘC phải tuân thủ nghiêm ngặt các nguyên tắc sau đây. Tuyệt đối KHÔNG LÀM TẮT, KHÔNG LÀM NỬA VỜI, đảm bảo ĐỦ CÁC BƯỚC - ĐỦ Ý - ĐẠT CHẤT LƯỢNG CAO NHẤT.
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.util.LinkedHashMap;
 import java.util.List;

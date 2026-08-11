@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2026 OpenAgriOS Contributors
+-- Copyright 2026 FloodOS Contributors
 
 -- ============================================================================
--- OPENDXOS PLATFORM — MULTI-TENANT DATABASE SCHEMA (single source of truth for DDL)
+-- FLOODOS PLATFORM — MULTI-TENANT DATABASE SCHEMA (single source of truth for DDL)
 -- PostgreSQL 16 + btree_gist + GeoJSON JSONB + Row-Level Security (RLS)
 -- License: Apache-2.0
 -- This file is applied idempotently on EVERY start of the postgres container
@@ -10,7 +10,7 @@
 -- The Java services never create tables: they only verify that the tables they need exist (fail-fast).
 -- Layers:
 --   - Platform (domain-neutral): organizations, users, audit_records (hash-chained, append-only)
---   - Application "Hanoi FloodOps": flood_zones, flood_reports, rescue_teams, rescue_vehicles,
+--   - Application "FloodOS": flood_zones, flood_reports, rescue_teams, rescue_vehicles,
 --     dispatch_orders, field_incidents, report_resolutions, safe_shelters, gauge_stations
 --   - Multi-tenancy: PostgreSQL Row-Level Security keyed by app.current_org_id / _user_role / _user_id
 -- Legacy note: tables of the former rice-harvest prototype (fields, machines, operators, service_requests,
@@ -513,15 +513,15 @@ CREATE POLICY tenant_isolation_audit ON audit_records
 -- ============================================================================
 DO $$
 BEGIN
-    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'openagrios_app') THEN
-        EXECUTE 'GRANT USAGE ON SCHEMA public TO openagrios_app';
-        EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO openagrios_app';
-        EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO openagrios_app';
-        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO openagrios_app';
-        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO openagrios_app';
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'floodos_app') THEN
+        EXECUTE 'GRANT USAGE ON SCHEMA public TO floodos_app';
+        EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO floodos_app';
+        EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO floodos_app';
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO floodos_app';
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO floodos_app';
     END IF;
 END $$;
 
 -- Demo data (organizations, users, zones, vehicles, ...) is NOT seeded here. The core API seeds it from
--- apps/floodops/FloodDataStore when the database is empty; identities come from infra/keycloak/openagrios-realm.json.
+-- apps/floodos/FloodDataStore when the database is empty; identities come from infra/keycloak/floodos-realm.json.
 -- A unit test keeps those two lists identical.

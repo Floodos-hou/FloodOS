@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2026 OpenAgriOS Contributors -->
+<!-- Copyright 2026 FloodOS Contributors -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://openagrios.org/bpmn">
+             targetNamespace="http://floodos.org/bpmn">
 
-  <!-- Hanoi FloodOps SOP-02: a vehicle fails in the field; affected orders are re-planned and the vehicle is repaired. -->
+  <!-- FloodOS SOP-02: a vehicle fails in the field; affected orders are re-planned and the vehicle is repaired. -->
   <process id="dispatch_replan_workflow" name="Quy trình Sự cố phương tiện và điều phối lại (SOP-02)" isExecutable="true">
     <startEvent id="startIncident" name="Đội hiện trường báo sự cố phương tiện kèm ảnh" flowable:initiator="reporterUserId"/>
     <sequenceFlow id="incFlow1" sourceRef="startIncident" targetRef="serviceImpactAnalysis"/>

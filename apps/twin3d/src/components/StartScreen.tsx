@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useState } from 'react';
 import { useAuth } from '../../../web/src/context/useAuth';
@@ -18,7 +18,7 @@ export const StartScreen: React.FC = () => {
     <div className="start">
       <div className="start-grid" aria-hidden />
       <main className="start-card">
-        <p className="eyebrow">OpenAgriOS · Tầng 2</p>
+        <p className="eyebrow">FloodOS · Tầng 2</p>
         <h1>Bản sao số 3D</h1>
         <p className="tagline">Ruộng và máy gặt dựng theo tọa độ thật từ nền tảng, đúng tỉ lệ mét. Mỗi hình trên màn hình là một bản ghi dữ liệu.</p>
 
