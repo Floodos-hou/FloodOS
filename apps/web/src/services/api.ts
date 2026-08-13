@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-import { TacticalState, UserAccount } from '../types';
+import type { TacticalState, UserAccount, CandidateRescueOption } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_GATEWAY_URL 
+const API_BASE = import.meta.env.VITE_API_GATEWAY_URL
   ? `${import.meta.env.VITE_API_GATEWAY_URL}/api/v1`
   : '/api/v1';
 
@@ -12,12 +12,7 @@ export class ApiError extends Error {
   code: string;
   details?: any;
 
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    details?: any
-  ) {
+  constructor(status: number, code: string, message: string, details?: any) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -33,17 +28,17 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${path}`;
   const headers = new Headers(options.headers || {});
-  
+
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
-  
+
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(url, { ...options, headers });
-  
+
   if (!response.ok) {
     let errorData: any = {};
     try {
@@ -63,12 +58,16 @@ async function request<T>(
 }
 
 export const api = {
+  // --------------------------------------------------------------------------
   // Public Discovery & Demo Accounts
+  // --------------------------------------------------------------------------
   async getDemoAccounts(): Promise<{ accounts: UserAccount[] }> {
     return request<{ accounts: UserAccount[] }>('/auth/accounts');
   },
 
+  // --------------------------------------------------------------------------
   // PKCE OAuth 2.0 / OIDC Flow (RFC 7636)
+  // --------------------------------------------------------------------------
   async initPkceSession(redirectUri: string, codeChallenge: string, state: string): Promise<{
     authorization_url: string;
     code_challenge: string;
@@ -112,17 +111,333 @@ export const api = {
     });
   },
 
-  // Tactical State with PostgreSQL RLS
-  async getTacticalState(token: string): Promise<TacticalState> {
-    return request<TacticalState>('/state', {}, token);
+  async loginWithCredentials(username: string, password: string): Promise<{
+    access_token: string;
+    id_token?: string;
+    token_type: string;
+    expires_in: number;
+    user: UserAccount;
+  }> {
+    return request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
   },
 
-  // NGSI-LD digital twin: live machine positions fed by MQTT telemetry (roles with fleet access only)
+  async getUserInfo(token: string): Promise<{ authenticated: boolean; user: UserAccount }> {
+    return request('/auth/userinfo', {}, token);
+  },
+
+  // --------------------------------------------------------------------------
+  // Tactical State (GET /api/v1/state)
+  // --------------------------------------------------------------------------
+  async getTacticalState(token: string): Promise<TacticalState> {
+    const raw = await request<any>('/state', {}, token);
+    // Enrich with backwards-compatibility aliases so apps/twin3d functions cleanly
+    const zones = raw.zones || [];
+    const vehicles = raw.vehicles || [];
+    const reports = raw.reports || [];
+    const orders = raw.orders || [];
+    const teams = raw.teams || [];
+
+    const fields = zones.map((z: any) => ({
+      field_id: z.zone_id,
+      organization_id: z.organization_id,
+      owner_user_id: '',
+      owner_name: z.name,
+      name: z.name,
+      hamlet: 'Địa bàn Hà Nội',
+      crop: 'Vùng ngập lụt',
+      area_ha: z.polygon && z.polygon[0] ? 1.0 : 0.5,
+      readiness_status: z.risk_level === 'CRITICAL' ? 'HARVESTING' : 'GROWING',
+      harvest_progress_pct: z.risk_level === 'CRITICAL' ? 80 : 20,
+      window_start: '',
+      window_end: '',
+      center_lat: z.center_lat,
+      center_lng: z.center_lng,
+      polygon: z.polygon || [],
+      visibility: z.visibility || 'FULL',
+    }));
+
+    const machines = vehicles.map((v: any) => ({
+      machine_id: v.vehicle_id,
+      organization_id: v.organization_id,
+      owner_user_id: v.manager_user_id,
+      name: v.name,
+      machine_type: v.vehicle_type,
+      model: v.vehicle_type,
+      capacity_ha_per_hr: v.capacity_value,
+      status: v.status || 'IDLE',
+      fuel_pct: v.fuel_pct || 80,
+      health_pct: v.health_pct || 95,
+      current_lat: v.current_lat,
+      current_lng: v.current_lng,
+      assigned_operator_id: v.assigned_team_id || '',
+      telemetry_updated_at: v.telemetry_updated_at || '',
+      visibility: v.visibility || 'FULL',
+    }));
+
+    const service_requests = reports.map((r: any) => ({
+      request_id: r.report_id,
+      organization_id: r.organization_id,
+      field_id: r.zone_id,
+      requester_user_id: r.reporter_user_id,
+      area_ha: 1.0,
+      requested_start: r.created_at,
+      requested_end: '',
+      priority: r.priority,
+      status: r.status,
+      bpmn_process_id: r.bpmn_process_id,
+      correlation_id: r.correlation_id,
+      notes: r.description,
+      created_at: r.created_at,
+    }));
+
+    const assignments = orders.map((o: any) => ({
+      assignment_id: o.order_id,
+      organization_id: o.organization_id,
+      request_id: o.report_id,
+      field_id: o.zone_id,
+      machine_id: o.vehicle_id,
+      operator_id: o.team_id,
+      start_time: o.start_time,
+      end_time: o.end_time,
+      status: o.status,
+      replaces_assignment_id: o.replaces_order_id,
+      superseded_by_assignment_id: o.superseded_by_order_id,
+      correlation_id: o.correlation_id,
+      created_by_user_id: o.created_by,
+      created_at: o.created_at,
+      field_name: o.zone_name,
+      machine_name: o.vehicle_name,
+      operator_name: o.team_name,
+    }));
+
+    const operators = teams.map((t: any) => ({
+      operator_id: t.team_id,
+      user_id: t.lead_user_id,
+      organization_id: t.organization_id,
+      full_name: t.name,
+      skills: t.skills || [],
+      rating: t.rating || 5,
+      status: t.status || 'AVAILABLE',
+    }));
+
+    return {
+      ...raw,
+      zones,
+      vehicles,
+      reports,
+      orders,
+      teams,
+      incidents: raw.incidents || [],
+      resolutions: raw.resolutions || [],
+      shelters: raw.shelters || [],
+      gauges: raw.gauges || [],
+      bpmn_instances: raw.bpmn_instances || [],
+      audit_logs: raw.audit_logs || [],
+      fields,
+      machines,
+      service_requests,
+      assignments,
+      operators,
+      acceptances: [],
+    };
+  },
+
+  // --------------------------------------------------------------------------
+  // NGSI-LD Digital Twin
+  // --------------------------------------------------------------------------
   async getDigitalTwin(token: string): Promise<{ entities: any[] }> {
     return request<{ entities: any[] }>('/digital-twin/entities', {}, token);
   },
 
-  // Service Request (FARMER / COORDINATOR)
+  // --------------------------------------------------------------------------
+  // FloodOS Core Endpoints
+  // --------------------------------------------------------------------------
+  async createFloodReport(
+    token: string,
+    payload: {
+      lat: number;
+      lng: number;
+      depth_cm: number;
+      need_type: string;
+      people_affected: number;
+      description: string;
+      zone_id?: string;
+      evidence_filename?: string;
+      evidence_data_url?: string;
+    }
+  ) {
+    return request<{
+      ok: boolean;
+      report_id: string;
+      zone_id: string;
+      zone_match: string;
+      bpmn_process_id: string;
+      correlation_id: string;
+      audit?: any;
+    }>('/flood-reports', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async verifyFloodReport(
+    token: string,
+    reportId: string,
+    payload: {
+      action?: 'VERIFIED' | 'REJECTED';
+      priority?: string;
+      verification_note?: string;
+    }
+  ) {
+    return request(`/flood-reports/${reportId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async createDispatchOrder(
+    token: string,
+    payload: {
+      report_id: string;
+      vehicle_id: string;
+      team_id: string;
+      start_time: string;
+      end_time: string;
+    }
+  ) {
+    return request<{
+      ok: boolean;
+      order_id: string;
+      bpmn_process_id?: string;
+      correlation_id: string;
+      order: any;
+      audit?: any;
+    }>('/dispatch-orders', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async updateOrderStatus(
+    token: string,
+    orderId: string,
+    payload: {
+      status: 'IN_PROGRESS' | 'COMPLETED';
+      progress_pct?: number;
+      outcome?: string;
+      final_depth_cm?: number;
+    }
+  ) {
+    return request(`/dispatch-orders/${orderId}/status`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async reportFieldIncident(
+    token: string,
+    payload: {
+      vehicle_id: string;
+      severity: string;
+      incident_type: string;
+      description: string;
+      estimated_downtime_hours: number;
+      evidence_filename?: string;
+      evidence_data_url?: string;
+    }
+  ) {
+    return request<{
+      ok: boolean;
+      incident_id: string;
+      bpmn_process_id: string;
+      impacted_order_ids: string[];
+      candidate_options: CandidateRescueOption[];
+      no_feasible_option?: boolean;
+      audit?: any;
+    }>('/field-incidents', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async approveReplan(
+    token: string,
+    incidentId: string,
+    payload: {
+      option_id: string;
+    }
+  ) {
+    return request(`/field-incidents/${incidentId}/approve-replan`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async updateRepairTicket(
+    token: string,
+    incidentId: string,
+    payload: {
+      action?: 'IN_PROGRESS' | 'RESOLVED';
+      notes?: string;
+    }
+  ) {
+    return request(`/field-incidents/${incidentId}/repair-ticket`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async confirmResolution(
+    token: string,
+    payload: {
+      resolution_id?: string;
+      decision: 'CONFIRMED' | 'DISPUTED';
+      notes?: string;
+      assignment_id?: string; // legacy fallback
+    }
+  ) {
+    return request('/resolutions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async updateShelterOccupancy(
+    token: string,
+    shelterId: string,
+    payload: {
+      occupancy: number;
+    }
+  ) {
+    return request(`/shelters/${shelterId}/occupancy`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async verifyAuditChain(token: string) {
+    return request('/audit/verify', {}, token);
+  },
+
+  async getLineage(token: string, correlationId: string) {
+    return request<any>(`/audit/lineage/${correlationId}`, {}, token);
+  },
+
+  async simReset(token: string) {
+    return request('/sim/reset', { method: 'POST', body: '{}' }, token);
+  },
+
+  async simTick(token: string) {
+    // Stub for UI simulation clock tick
+    return { ok: true };
+  },
+
+  // --------------------------------------------------------------------------
+  // Backward-compatibility wrappers for legacy code & twin3d
+  // --------------------------------------------------------------------------
   async createRequest(
     token: string,
     payload: {
@@ -133,47 +448,50 @@ export const api = {
       notes: string;
     }
   ) {
-    return request('/requests', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
+    return this.createFloodReport(token, {
+      lat: 20.9662,
+      lng: 105.8714,
+      depth_cm: 50,
+      need_type: 'EVACUATION',
+      people_affected: 4,
+      description: payload.notes || 'Cần hỗ trợ ngập lụt',
+      zone_id: payload.field_id,
+    });
   },
 
-  // Dispatch Assignment (COORDINATOR)
   async dispatchAssignment(
     token: string,
     payload: {
       request_id: string;
-      field_id: string;
+      field_id?: string;
       machine_id: string;
       operator_id: string;
       start_time: string;
       end_time: string;
     }
   ) {
-    return request('/assignments', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
+    return this.createDispatchOrder(token, {
+      report_id: payload.request_id,
+      vehicle_id: payload.machine_id,
+      team_id: payload.operator_id,
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+    });
   },
 
-  // Update Assignment Status (OPERATOR / COORDINATOR)
   async updateAssignmentStatus(
     token: string,
     asgId: string,
-    payload: {
-      status: 'IN_PROGRESS' | 'COMPLETED';
-      progress_pct?: number;
-      note?: string;
-    }
+    payload: { status: 'IN_PROGRESS' | 'COMPLETED'; progress_pct?: number; note?: string }
   ) {
-    return request(`/assignments/${asgId}/status`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
+    return this.updateOrderStatus(token, asgId, {
+      status: payload.status,
+      progress_pct: payload.progress_pct,
+      outcome: 'COMPLETED',
+      final_depth_cm: 10,
+    });
   },
 
-  // Report Machine Incident (OPERATOR / COORDINATOR)
   async reportIncident(
     token: string,
     payload: {
@@ -182,77 +500,45 @@ export const api = {
       incident_type: string;
       description: string;
       estimated_downtime_hours: number;
-      evidence_filename: string;
+      evidence_filename?: string;
       evidence_data_url?: string;
     }
   ) {
-    return request('/incidents', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
+    return this.reportFieldIncident(token, {
+      vehicle_id: payload.machine_id,
+      severity: payload.severity,
+      incident_type: payload.incident_type || 'PROPELLER_FOULED',
+      description: payload.description,
+      estimated_downtime_hours: payload.estimated_downtime_hours,
+      evidence_filename: payload.evidence_filename,
+      evidence_data_url: payload.evidence_data_url,
+    });
   },
 
-  // Approve BPMN Rescue Replan (COORDINATOR)
-  async approveReplan(
-    token: string,
-    incidentId: string,
-    payload: { option_id: string }
-  ) {
-    return request(`/incidents/${incidentId}/approve-replan`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
-  },
-
-  // Update Repair Ticket (REPAIR_TEAM)
   async updateRepair(
     token: string,
     incidentId: string,
-    payload: {
-      status?: string;
-      diagnosis: string;
-      estimated_downtime_hours?: number;
-      is_resolved?: boolean;
-    }
+    payload: { diagnosis?: string; is_resolved?: boolean }
   ) {
-    return request(`/incidents/${incidentId}/repair`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
+    return this.updateRepairTicket(token, incidentId, {
+      action: payload.is_resolved ? 'RESOLVED' : 'IN_PROGRESS',
+      notes: payload.diagnosis || 'Đã sửa chữa',
+    });
   },
 
-  // Confirm Work Acceptance (FARMER / COORDINATOR)
   async confirmAcceptance(
     token: string,
     payload: {
       assignment_id: string;
-      action: 'FARMER_CONFIRM';
+      action?: string;
       rating?: number;
       notes?: string;
     }
   ) {
-    return request('/acceptances', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }, token);
-  },
-
-  // Audit Lineage Trace
-  async getLineage(token: string, correlationId: string) {
-    return request(`/audit/lineage/${correlationId}`, {}, token);
-  },
-
-  // Verify Audit Chain Integrity
-  async verifyAuditChain(token: string) {
-    return request('/audit/verify', {}, token);
-  },
-
-  // Simulation Clock Tick & Reset
-  async simTick(token: string) {
-    return request('/sim/tick', { method: 'POST', body: '{}' }, token);
-  },
-
-  async simReset(token: string) {
-    return request('/sim/reset', { method: 'POST', body: '{}' }, token);
+    return this.confirmResolution(token, {
+      decision: 'CONFIRMED',
+      notes: payload.notes || 'Xác nhận an toàn',
+      assignment_id: payload.assignment_id,
+    });
   },
 };

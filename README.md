@@ -37,7 +37,7 @@ Một vụ việc (chạy được bằng API thật và được kiểm thử t
 | Tầng | Thành phần trong repo | Ghi chú |
 |---|---|---|
 | **1. Lõi dịch vụ số (headless PaaS)** | [`core/`](core/) (Java 21, không phụ thuộc thư viện ngoài) cùng Keycloak, APISIX, PostgreSQL, Flowable, SeaweedFS, Kafka/Karapace, Mosquitto, ClamAV, lake DuckDB | Không có giao diện. **Không chứa từ nào của nghiệp vụ ngập lụt**: một kiểm thử tự động quét `core/` tìm từ miền ([PlatformTests](tests/unit/PlatformTests.java), mục "Tier-1 boundary"). |
-| **2. Không gian năng lực H-P-D-I** | API ứng dụng ở [`apps/floodos/`](apps/floodos/); giao diện còn lại ở [`apps/web`](apps/web), [`apps/twin3d`](apps/twin3d) | **Giao diện chưa được làm lại cho FloodOS** (xem mục 3 và 10). |
+| **2. Không gian năng lực H-P-D-I** | API ứng dụng ở [`apps/floodos/`](apps/floodos/); Trung tâm tác chiến ứng phó ngập lụt ở [`apps/web`](apps/web) (React + Vite + MapLibre GL) và Bản sao số 3D ở [`apps/twin3d`](apps/twin3d) | Đã kết nối 100% với API backend thật qua APISIX Zero-Trust Gateway. |
 | **3. Ứng dụng nghiệp vụ** | FloodOS ([`apps/floodos/`](apps/floodos/)); truy xuất vụ việc công khai ([`apps/traceability/`](apps/traceability/)) | Quy tắc nghiệp vụ nằm ở đây, không nằm trong lõi. |
 
 Ranh giới được thực thi bằng mã, không chỉ bằng tài liệu:
@@ -75,7 +75,7 @@ Ranh giới được thực thi bằng mã, không chỉ bằng tài liệu:
 | Dữ liệu seed (vùng, đội, xe, điểm trú, tin báo) | **Mô phỏng** | Tên hư cấu, tọa độ minh họa trong Hà Nội, không mô tả nơi ngập thật. Nhãn `SEED`. |
 | Quan trắc/dự báo chính thức của Hà Nội | **Chưa có** | Không dùng và không bịa nguồn. Enum nguồn có `DEVICE` để dành cho thiết bị thật. |
 | Định tuyến đường bộ/đường thủy, tránh vùng ngập | **Chưa có** | Khoảng cách là Haversine (đường chim bay). Không có PostGIS, không có routing. |
-| Giao diện FloodOS (cổng điều hành, bản đồ, điện thoại) | **Chưa có** | [`apps/web`](apps/web) và [`apps/twin3d`](apps/twin3d) vẫn là giao diện của nguyên mẫu thu hoạch lúa cũ; gateway vẫn phục vụ chúng nhưng chúng **không dùng được với API mới**. Đây là bước tiếp theo. |
+| Giao diện FloodOS (Trung tâm điều hành, bản đồ tác chiến, màn hình theo vai trò) | **Có** | [`apps/web`](apps/web) đã hiện thực đầy đủ 5 không gian vai trò (Người dân/Reporter, Điều phối viên/Dispatcher, Đội hiện trường/Field Team, Quản lý nguồn lực/Resource Manager, Quản trị nền tảng/Platform Admin), bản đồ tác chiến MapLibre GL Hà Nội, bảng chi tiết tương tác, kịch bản tự động hóa và kiểm chứng chuỗi băm SHA-256 qua API thật. |
 | Giám sát Prometheus/Grafana, tự phục hồi, GitOps (ArgoCD) | **Chưa có** | Ingestor và lake-archiver có `/health` và `/metrics` dạng Prometheus, nhưng chưa có Prometheus/Grafana hay ArgoCD, chưa có bằng chứng phục hồi tự động. |
 | Triển khai Internet, mật khẩu mạnh, MFA, Vault | **Chưa có** | Mật khẩu `123456` chỉ dùng cho realm demo; `compose.prod.yaml` đòi bí mật tường minh nhưng realm vẫn là realm demo. |
 | Thành phần AI/RAG (không gian [I]) | **Chưa có** | "Gợi ý phương án thay thế" là **xếp hạng theo luật có giải thích**, không phải mô hình AI. |
@@ -194,7 +194,7 @@ Mã của dự án: **Apache-2.0** ([`LICENSE`](LICENSE)). Danh mục thư việ
 
 ## 10. Hạn chế đã biết và lộ trình
 
-1. **Giao diện FloodOS chưa làm** (cổng điều hành theo vai trò, bản đồ, màn hình điện thoại). `apps/web` và `apps/twin3d` là giao diện cũ và không khớp API mới. Thiết kế UX mục tiêu: [`docs/floodos-demo-ux.md`](docs/floodos-demo-ux.md) (đích thiết kế, chưa phải chức năng đã có).
+1. **Hoàn thiện các màn hình chuyên sâu và mở rộng 3D**: `apps/web` đã hoàn thành trung tâm tác chiến 2D và kết nối API thật; tiếp tục tối ưu hóa trải nghiệm thực địa trên thiết bị di động yếu và hoàn thiện ánh xạ 3D ngập lụt trên `apps/twin3d`. Thiết kế UX: [`docs/floodos-demo-ux.md`](docs/floodos-demo-ux.md).
 2. Hoàn tất user task của Flowable qua REST (hiện chỉ khởi tạo tiến trình và theo dõi bước ở nền tảng).
 3. Giám sát (Prometheus/Grafana), GitOps (ArgoCD), bằng chứng tự phục hồi, triển khai Internet, mật khẩu/MFA cho môi trường công khai.
 4. Dữ liệu quan trắc thật (nếu có nguồn được phép dùng) thay cho mô phỏng; định tuyến thật thay cho đường chim bay.

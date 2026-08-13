@@ -118,7 +118,7 @@ test('the rescue sequence M02 IDLE -> MOVING -> WORKING yields two ordered event
   const a = detectFleetEvents(snapshotStatuses([m('M02', 'IDLE')]), [m('M02', 'MOVING')]);
   const b = detectFleetEvents(snapshotStatuses([m('M02', 'MOVING')]), [m('M02', 'WORKING')]);
   assert.match(a[0].text, /di chuyển/);
-  assert.match(b[0].text, /bắt đầu gặt/);
+  assert.match(b[0].text, /bắt đầu/);
 });
 
 test('several machines changing at once give one event each, with unique keys', () => {

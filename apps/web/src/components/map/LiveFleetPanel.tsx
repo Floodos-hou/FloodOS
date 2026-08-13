@@ -2,39 +2,43 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useEffect, useState } from 'react';
-import type { HarvesterMachine } from '../../types';
+import type { RescueVehicle, HarvesterMachine } from '../../types';
 import { LIVE_WINDOW_MS, type LiveFleetInfo } from '../../hooks/useLiveFleet';
 import { DEMO_MODE } from '../../demo/demoScript';
 
 interface Props {
-  machines: HarvesterMachine[];
+  machines: (RescueVehicle | HarvesterMachine | any)[];
   live?: LiveFleetInfo;
-  onFocus: (machine: HarvesterMachine) => void;
+  onFocus: (machine: any) => void;
 }
 
 const STATUS_STYLE: Record<string, { dot: string; label: string }> = {
-  WORKING: { dot: 'bg-amber-400 animate-pulse', label: 'Đang gặt' },
-  IDLE: { dot: 'bg-emerald-400', label: 'Sẵn sàng' },
-  BREAKDOWN: { dot: 'bg-red-500 animate-ping', label: 'Sự cố' },
-  MAINTENANCE: { dot: 'bg-slate-400', label: 'Bảo trì' },
+  AVAILABLE: { dot: 'bg-emerald-400', label: 'Sẵn sàng' },
+  DISPATCHED: { dot: 'bg-blue-400 animate-pulse', label: 'Đang làm nhiệm vụ' },
+  WORKING: { dot: 'bg-blue-400 animate-pulse', label: 'Đang làm nhiệm vụ' },
+  IDLE: { dot: 'bg-emerald-400', label: 'Trực sẵn sàng' },
+  BREAKDOWN: { dot: 'bg-rose-500 animate-ping', label: 'Sự cố hiện trường' },
+  MAINTENANCE: { dot: 'bg-slate-400', label: 'Bảo trì kỹ thuật' },
+  OFFLINE: { dot: 'bg-slate-500', label: 'Mất tín hiệu' },
 };
 
 function fuelColor(pct: number) {
-  if (pct < 25) return 'bg-red-500';
+  if (pct < 25) return 'bg-rose-500';
   if (pct < 50) return 'bg-amber-400';
   return 'bg-emerald-400';
 }
 
-/** Live HUD: is telemetry flowing, and a click-to-focus roster of the fleet. */
+/** Live HUD: is telemetry flowing, and a click-to-focus roster of the flood rescue fleet. */
 export const LiveFleetPanel: React.FC<Props> = ({ machines, live, onFocus }) => {
   const [now, setNow] = useState(() => Date.now());
   const [open, setOpen] = useState(true);
+
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(t);
   }, []);
 
-  if (!live?.enabled) return null; // farmers / repair crews do not get the fleet view (Fog of War)
+  if (!live?.enabled) return null;
 
   const flowing = live.connected && live.lastMoveAt !== null && now - live.lastMoveAt < LIVE_WINDOW_MS;
   const movingCount = Object.values(live.movedAt).filter((at) => now - at < LIVE_WINDOW_MS).length;
@@ -53,11 +57,11 @@ export const LiveFleetPanel: React.FC<Props> = ({ machines, live, onFocus }) => 
             {flowing && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
             <span
               className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                flowing ? 'bg-emerald-400' : live.connected ? 'bg-amber-400' : 'bg-red-500'
+                flowing ? 'bg-emerald-400' : live.connected ? 'bg-amber-400' : 'bg-rose-500'
               }`}
             />
           </span>
-          {flowing ? 'TRỰC TIẾP · MQTT' : live.connected ? 'CHỜ TÍN HIỆU CẢM BIẾN' : 'MẤT KẾT NỐI BẢN SAO SỐ'}
+          {flowing ? 'TRỰC TIẾP · IOT MQTT' : live.connected ? 'CHỜ TÍN HIỆU ĐỊNH VỊ' : 'MẤT KẾT NỐI BẢN SAO SỐ'}
         </span>
         <span className="text-[10px] font-mono text-slate-400">{open ? '▾' : '▸'}</span>
       </button>
@@ -66,50 +70,54 @@ export const LiveFleetPanel: React.FC<Props> = ({ machines, live, onFocus }) => 
         <div className="border-t border-slate-700 px-3 pb-3 pt-2">
           <div className="mb-2 flex items-center justify-between text-[11px] text-slate-300">
             <span>
-              <strong className="text-amber-300">{movingCount}</strong> máy đang di chuyển
+              <strong className="text-amber-300">{movingCount}</strong> phương tiện cơ động
             </span>
             <span className="font-mono text-slate-400">{ago === null ? '—' : `cập nhật ${ago}s trước`}</span>
           </div>
 
           {!flowing && live.connected && (
-            <p className="mb-2 rounded-lg bg-slate-800 px-2 py-1.5 text-[11px] leading-snug text-slate-300">
-              Chưa có vị trí mới từ thiết bị.
+            <p className="mb-2 rounded-lg bg-slate-800 px-2 py-1.5 text-[10px] leading-snug text-slate-300">
+              Toạ độ mô phỏng IoT thủy văn Hà Nội.
               {DEMO_MODE && (
                 <>
                   {' '}
-                  Bật thiết bị mô phỏng: <code className="text-amber-300">docker compose --profile demo up -d</code>
+                  Chạy thiết bị mô phỏng: <code className="text-amber-300">docker compose --profile demo up -d</code>
                 </>
               )}
             </p>
           )}
-          {live.error && <p className="mb-2 text-[11px] text-red-300">{live.error}</p>}
+          {live.error && <p className="mb-2 text-[11px] text-rose-300">{live.error}</p>}
 
           <ul className="max-h-36 space-y-1.5 overflow-y-auto pr-0.5">
             {machines.map((m) => {
-              const st = STATUS_STYLE[m.status] ?? STATUS_STYLE.IDLE;
+              const id = m.vehicle_id || m.machine_id;
+              const name = m.vehicle_name || m.name || id;
+              const st = STATUS_STYLE[m.status] ?? STATUS_STYLE.AVAILABLE;
+              const fuelVal = m.fuel_percent ?? m.fuel_pct ?? 100;
+
               return (
-                <li key={m.machine_id}>
+                <li key={id}>
                   <button
                     type="button"
                     onClick={() => onFocus(m)}
                     className="w-full rounded-lg bg-slate-800/80 px-2 py-1.5 text-left transition hover:bg-slate-700"
-                    title="Bấm để bay tới máy này"
+                    title="Bấm để định vị phương tiện"
                   >
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="flex items-center gap-1.5 font-mono font-bold text-amber-300">
-                        <span className={`h-2 w-2 rounded-full ${st.dot}`} />
-                        {m.machine_id}
+                      <span className="flex items-center gap-1.5 font-mono font-bold text-amber-300 truncate max-w-[130px]">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${st.dot}`} />
+                        {name}
                       </span>
-                      <span className="text-slate-300">{st.label}</span>
+                      <span className="text-slate-300 text-[10px] shrink-0">{st.label}</span>
                     </div>
                     <div className="mt-1 flex items-center gap-2">
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700">
                         <div
-                          className={`h-full rounded-full transition-all duration-700 ${fuelColor(m.fuel_pct)}`}
-                          style={{ width: `${Math.max(0, Math.min(100, m.fuel_pct))}%` }}
+                          className={`h-full rounded-full transition-all duration-700 ${fuelColor(fuelVal)}`}
+                          style={{ width: `${Math.max(0, Math.min(100, fuelVal))}%` }}
                         />
                       </div>
-                      <span className="w-10 text-right font-mono text-[10px] text-slate-300">{m.fuel_pct.toFixed(1)}%</span>
+                      <span className="w-10 text-right font-mono text-[10px] text-slate-300">{fuelVal.toFixed(0)}%</span>
                     </div>
                   </button>
                 </li>

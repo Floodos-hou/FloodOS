@@ -3,88 +3,138 @@
 
 /**
  * Plain-Vietnamese labels for every backend enum shown on screen.
- * Farmers must never see codes such as IN_PROGRESS or READY_HARVEST.
+ * Users must never see raw technical codes such as IN_PROGRESS or ROAD_BLOCKED.
  */
 
 export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
 
-export interface Label { text: string; tone: Tone; icon: string }
+export const TONE_CLASS: Record<Tone, string> = {
+  good: 'border-emerald-300 bg-emerald-50 text-emerald-950',
+  warn: 'border-amber-300 bg-amber-50 text-amber-950',
+  bad: 'border-rose-300 bg-rose-50 text-rose-950',
+  info: 'border-sky-300 bg-sky-50 text-sky-950',
+  neutral: 'border-slate-300 bg-slate-100 text-slate-800',
+};
+
+export { formatLocalDateTime, formatLocalTime } from './dateTime';
+
+export interface Label {
+  text: string;
+  tone: Tone;
+  icon: string;
+}
 
 const L = (text: string, tone: Tone, icon: string): Label => ({ text, tone, icon });
 
 const ROLE: Record<string, string> = {
-  FARMER: 'Nông hộ',
-  COORDINATOR: 'Điều phối viên HTX',
-  OPERATOR: 'Thợ lái máy',
-  MACHINE_OWNER: 'Chủ máy',
-  REPAIR_TEAM: 'Đội sửa chữa',
+  // FloodOS Roles
+  REPORTER: 'Người báo tin / Người dân',
+  DISPATCHER: 'Điều phối viên PCTT',
+  FIELD_TEAM: 'Đội cứu hộ hiện trường',
+  RESOURCE_MANAGER: 'Quản lý nguồn lực & phương tiện',
   PLATFORM_ADMIN: 'Quản trị hệ thống',
+  // Legacy Aliases
+  FARMER: 'Người báo tin / Người dân',
+  COORDINATOR: 'Điều phối viên PCTT',
+  OPERATOR: 'Đội cứu hộ hiện trường',
+  MACHINE_OWNER: 'Quản lý nguồn lực',
+  REPAIR_TEAM: 'Đội sửa chữa kỹ thuật',
 };
 
-const REQUEST_STATUS: Record<string, Label> = {
-  SUBMITTED: L('Đã gửi, chờ HTX xếp lịch', 'info', '📨'),
-  PENDING_SCHEDULE: L('Chờ HTX xếp lịch', 'info', '⏳'),
-  SCHEDULED: L('Đã có lịch gặt', 'good', '📅'),
-  IN_PROGRESS: L('Đang gặt', 'good', '🚜'),
-  IMPACTED_BY_INCIDENT: L('Máy gặp sự cố, HTX đang xử lý', 'bad', '⚠️'),
-  RESCHEDULED: L('Đã đổi lịch', 'warn', '🔁'),
-  WAITING_ACCEPTANCE: L('Chờ bác nghiệm thu', 'warn', '✍️'),
-  COMPLETED: L('Đã xong', 'good', '✅'),
-  CANCELLED: L('Đã hủy', 'neutral', '✖️'),
+const NEED_TYPE: Record<string, Label> = {
+  EVACUATION: L('Sơ tán khẩn cấp', 'bad', '🚤'),
+  MEDICAL: L('Cứu thương & Y tế', 'bad', '🚑'),
+  FOOD_WATER: L('Tiếp tế lương thực / Nước', 'warn', '🍞'),
+  PUMPING: L('Bơm tiêu úng', 'info', '💧'),
+  ROAD_BLOCKED: L('Đường bị ngập cô lập', 'warn', '⛔'),
 };
 
-const ASSIGNMENT_STATUS: Record<string, Label> = {
-  CONFIRMED: L('Đã chốt lịch', 'good', '📅'),
-  IN_PROGRESS: L('Đang làm', 'good', '🚜'),
-  IMPACTED: L('Bị ảnh hưởng bởi sự cố', 'bad', '⚠️'),
-  SUPERSEDED: L('Đã đổi sang máy khác', 'warn', '🔁'),
-  COMPLETED: L('Đã xong', 'good', '✅'),
-  CANCELLED: L('Đã hủy', 'neutral', '✖️'),
+const REPORT_STATUS: Record<string, Label> = {
+  RECEIVED: L('Mới tiếp nhận, chờ xác minh', 'info', '📨'),
+  VERIFIED: L('Đã xác minh, chờ điều phối', 'warn', '🔍'),
+  DISPATCHED: L('Đã điều động lực lượng', 'good', '🚤'),
+  IN_PROGRESS: L('Đang triển khai xử lý', 'good', '⏳'),
+  RESOLVED: L('Đã xử lý xong, chờ nghiệm thu', 'good', '✅'),
+  CANCELLED: L('Đã hủy / Báo tin sai', 'neutral', '✖️'),
+  // Legacy aliases
+  SUBMITTED: L('Mới tiếp nhận, chờ xác minh', 'info', '📨'),
+  PENDING_SCHEDULE: L('Chờ điều phối', 'info', '⏳'),
+  SCHEDULED: L('Đã có lịch điều động', 'good', '📅'),
+  WAITING_ACCEPTANCE: L('Chờ người dân xác nhận', 'warn', '✍️'),
+  COMPLETED: L('Đã hoàn tất', 'good', '✅'),
 };
 
-const FIELD_STATUS: Record<string, Label> = {
-  GROWING: L('Lúa đang lớn', 'info', '🌱'),
-  READY_HARVEST: L('Lúa chín, sẵn sàng gặt', 'good', '🌾'),
-  SCHEDULED: L('Đã có lịch gặt', 'good', '📅'),
-  HARVESTING: L('Đang gặt', 'good', '🚜'),
-  IMPACTED: L('Bị gián đoạn do sự cố', 'bad', '⚠️'),
-  COMPLETED: L('Đã gặt xong', 'neutral', '✅'),
+const ORDER_STATUS: Record<string, Label> = {
+  CONFIRMED: L('Đã chốt lệnh điều động', 'good', '📋'),
+  IN_PROGRESS: L('Đang thực hiện', 'good', '🚤'),
+  IMPACTED: L('Gặp sự cố hiện trường', 'bad', '⚠️'),
+  SUPERSEDED: L('Đã chuyển cho xe/đội khác', 'warn', '🔁'),
+  COMPLETED: L('Đã hoàn tất ca', 'good', '✅'),
+  CANCELLED: L('Đã hủy lệnh', 'neutral', '✖️'),
 };
 
-const MACHINE_STATUS: Record<string, Label> = {
-  IDLE: L('Đang rảnh', 'good', '🟢'),
+const VEHICLE_TYPE: Record<string, string> = {
+  RESCUE_BOAT: 'Xuồng cứu hộ',
+  HIGH_CLEARANCE_TRUCK: 'Xe gầm cao lội nước',
+  MOBILE_PUMP: 'Máy bơm di động',
+};
+
+const VEHICLE_STATUS: Record<string, Label> = {
+  IDLE: L('Sẵn sàng / Đang rảnh', 'good', '🟢'),
   MOVING: L('Đang di chuyển', 'info', '🔵'),
-  WORKING: L('Đang làm việc', 'info', '🚜'),
-  BREAKDOWN: L('Bị hỏng', 'bad', '🔴'),
+  WORKING: L('Đang làm nhiệm vụ', 'info', '🚤'),
+  BREAKDOWN: L('Gặp sự cố / Hỏng hóc', 'bad', '🔴'),
   MAINTENANCE: L('Đang bảo dưỡng', 'warn', '🛠️'),
+};
+
+const ZONE_RISK: Record<string, Label> = {
+  CRITICAL: L('Nguy hiểm khẩn cấp (Ngập sâu)', 'bad', '🚨'),
+  WARNING: L('Cảnh báo ngập lụt', 'warn', '⚠️'),
+  WATCH: L('Theo dõi mực nước', 'info', '👀'),
+  NORMAL: L('Mức an toàn', 'good', '✅'),
+};
+
+const GAUGE_ALERT: Record<string, Label> = {
+  CRITICAL: L('Báo động 3 (Rất nguy hiểm)', 'bad', '🔴'),
+  WARNING: L('Báo động 2 (Nguy hiểm)', 'warn', '🟠'),
+  NORMAL: L('Báo động 1 (Bình thường)', 'good', '🟢'),
+  UNKNOWN: L('Chưa có số liệu', 'neutral', '⚪'),
+};
+
+const SHELTER_STATUS: Record<string, Label> = {
+  OPEN: L('Đang tiếp nhận', 'good', '🏠'),
+  FULL: L('Đã đầy chỗ', 'bad', '⛔'),
+  CLOSED: L('Tạm đóng', 'neutral', '🔒'),
 };
 
 const PRIORITY: Record<string, Label> = {
   LOW: L('Thấp', 'neutral', ''),
   NORMAL: L('Bình thường', 'info', ''),
   HIGH: L('Cao', 'warn', ''),
-  URGENT: L('Khẩn cấp', 'bad', ''),
+  URGENT: L('Khẩn cấp', 'bad', '🚨'),
 };
 
 const SEVERITY: Record<string, Label> = {
   LOW: L('Nhẹ', 'info', ''),
   MEDIUM: L('Vừa', 'warn', ''),
   HIGH: L('Nặng', 'bad', ''),
-  CRITICAL: L('Rất nặng', 'bad', ''),
+  CRITICAL: L('Rất nặng / Khẩn cấp', 'bad', ''),
 };
 
 const INCIDENT_STATUS: Record<string, Label> = {
-  OPEN_REPLANNING: L('Đang tìm máy thay thế', 'bad', '🔎'),
-  REPLAN_APPROVED: L('Đã chọn máy thay thế', 'good', '✅'),
-  UNDER_REPAIR: L('Đang sửa chữa', 'warn', '🛠️'),
-  RESOLVED: L('Đã khắc phục', 'good', '✅'),
+  OPEN_REPLANNING: L('Đang tìm phương án chi viện', 'bad', '🔎'),
+  REPLAN_APPROVED: L('Đã chọn phương án chi viện', 'good', '✅'),
+  UNDER_REPAIR: L('Đang sửa chữa phương tiện', 'warn', '🛠️'),
+  RESOLVED: L('Đã khắc phục xong', 'good', '✅'),
 };
 
 const INCIDENT_TYPE: Record<string, string> = {
+  PROPELLER_FOULED: 'Chân vịt vướng rác/cỏ',
   ENGINE_OVERHEAT: 'Động cơ quá nhiệt',
-  HYDRAULIC_FAILURE: 'Hỏng hệ thống thủy lực',
-  BLADE_DAMAGE: 'Hỏng lưỡi cắt',
-  TRACK_JAM: 'Kẹt xích / bánh xích',
+  ENGINE_FAILURE: 'Chết máy giữa dòng',
+  PUMP_CLOGGED: 'Kẹt rác đường ống bơm',
+  HULL_DAMAGE: 'Hỏng vỏ xuồng / va chạm',
+  ROAD_IMPASSABLE: 'Đường ngập sâu không thể qua',
 };
 
 const PROCESS_STATUS: Record<string, Label> = {
@@ -93,82 +143,99 @@ const PROCESS_STATUS: Record<string, Label> = {
 };
 
 const PROCESS_NAME: Record<string, string> = {
-  harvest_service_request: 'Yêu cầu thuê máy gặt',
-  incident_replan: 'Xử lý máy hỏng giữa vụ',
+  flood_report_lifecycle: 'Quy trình Tiếp nhận & Xử lý tin ngập (SOP-01)',
+  dispatch_replan_workflow: 'Quy trình Sự cố phương tiện & Chi viện (SOP-02)',
+  harvest_service_request: 'Quy trình Tiếp nhận tin báo (SOP-01)',
+  incident_replan: 'Quy trình Chi viện khẩn cấp (SOP-02)',
 };
 
 const fallback = (code: string | undefined | null): Label => ({
-  text: code ? code.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : '—',
+  text: code || 'Không xác định',
   tone: 'neutral',
   icon: '',
 });
 
-const pick = (table: Record<string, Label>) => (code?: string | null): Label =>
-  (code && table[code]) || fallback(code);
+type CallableDict<T> = ((k: string | undefined | null) => T) & Record<string, any>;
 
-export const roleLabel = (code?: string | null): string => (code && ROLE[code]) || fallback(code).text;
-export const requestStatus = pick(REQUEST_STATUS);
-export const assignmentStatus = pick(ASSIGNMENT_STATUS);
-export const fieldStatus = pick(FIELD_STATUS);
-export const machineStatus = pick(MACHINE_STATUS);
-export const priority = pick(PRIORITY);
-export const severity = pick(SEVERITY);
-export const incidentStatus = pick(INCIDENT_STATUS);
-export const processStatus = pick(PROCESS_STATUS);
-export const incidentType = (code?: string | null): string => (code && INCIDENT_TYPE[code]) || fallback(code).text;
-export const processName = (key?: string | null): string => (key && PROCESS_NAME[key]) || fallback(key).text;
+function makeDict<T>(dict: Record<string, any>, fn: (k: string | undefined | null) => T): CallableDict<T> {
+  return Object.assign(fn, dict);
+}
 
-export const TONE_CLASS: Record<Tone, string> = {
-  good: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  warn: 'bg-amber-100 text-amber-900 border-amber-300',
-  bad: 'bg-red-100 text-red-900 border-red-300',
-  info: 'bg-sky-100 text-sky-900 border-sky-300',
-  neutral: 'bg-slate-100 text-slate-700 border-slate-300',
+export const roleLabel = (role: string | undefined | null): string =>
+  (role && ROLE[role]) || role || 'Khách';
+
+export const needType = makeDict(NEED_TYPE, (need) => (need && NEED_TYPE[need]) || fallback(need));
+
+export const reportStatus = makeDict(REPORT_STATUS, (st) => (st && REPORT_STATUS[st]) || fallback(st));
+
+export const orderStatus = makeDict(ORDER_STATUS, (st) => (st && ORDER_STATUS[st]) || fallback(st));
+
+export const vehicleType = makeDict(VEHICLE_TYPE, (type) => (type && VEHICLE_TYPE[type]) || type || 'Phương tiện');
+
+export const vehicleStatus = makeDict(VEHICLE_STATUS, (st) => (st && VEHICLE_STATUS[st]) || fallback(st));
+
+export const zoneRisk = makeDict(ZONE_RISK, (risk) => (risk && ZONE_RISK[risk]) || fallback(risk));
+
+export const gaugeAlert = makeDict(GAUGE_ALERT, (alert) => (alert && GAUGE_ALERT[alert]) || fallback(alert));
+export const gaugeAlertState = gaugeAlert;
+
+export const shelterStatus = makeDict(SHELTER_STATUS, (st) => (st && SHELTER_STATUS[st]) || fallback(st));
+
+export const priority = makeDict(PRIORITY, (p) => (p && PRIORITY[p]) || fallback(p));
+
+export const severity = makeDict(SEVERITY, (s) => (s && SEVERITY[s]) || fallback(s));
+
+export const incidentStatus = makeDict(INCIDENT_STATUS, (st) => (st && INCIDENT_STATUS[st]) || fallback(st));
+
+export const incidentType = makeDict(INCIDENT_TYPE, (t) => (t && INCIDENT_TYPE[t]) || t || 'Sự cố thiết bị');
+
+export const processStatus = (st: string | undefined | null): Label =>
+  (st && PROCESS_STATUS[st]) || fallback(st);
+
+export const processName = (id: string | undefined | null): string =>
+  (id && PROCESS_NAME[id]) || id || 'Tiến trình';
+
+export const orgLabel = (orgName: string | undefined | null, orgId: string | undefined | null): string => {
+  if (orgName && orgName.trim()) return orgName;
+  if (!orgId) return 'Địa bàn thí điểm Hà Nội';
+  if (orgId.includes('HN_PILOT') || orgId.includes('ORG_HN')) return 'Địa bàn thí điểm Hà Nội';
+  if (orgId.includes('CONTROL')) return 'Khu vực đối chứng (Hà Nội)';
+  return orgId;
 };
 
-/** "Bác Ba Nguyễn Văn (Nông hộ …)" → "Bác Ba Nguyễn Văn" */
-export const shortName = (fullName?: string | null): string =>
-  (fullName || '').replace(/\s*\(.*$/, '').trim() || 'bạn';
-
-/** Names like "Bác Ba Nguyễn Văn" → "Bác Ba" (first two words) for friendly greetings. */
-export const callName = (fullName?: string | null): string => {
-  const n = shortName(fullName);
-  const parts = n.split(/\s+/);
-  const honorifics = ['Bác', 'Chú', 'Anh', 'Chị', 'Cô', 'Ông', 'Bà', 'Đội'];
-  if (parts[0] === 'Đội') return parts.slice(0, 3).join(' ');
-  return honorifics.includes(parts[0]) && parts.length > 1 ? `${parts[0]} ${parts[1]}` : n;
+export const shortName = (fullName: string | undefined | null, username: string | undefined | null): string => {
+  if (fullName && fullName.trim()) return fullName;
+  if (username && username.trim()) return username;
+  return 'Người dùng';
 };
 
-export const greeting = (date = new Date()): string => {
-  const h = date.getHours();
-  if (h < 11) return 'Chào buổi sáng';
-  if (h < 14) return 'Chào buổi trưa';
-  if (h < 18) return 'Chào buổi chiều';
-  return 'Chào buổi tối';
+export const greeting = (fullName: string | undefined | null, username: string | undefined | null): string => {
+  const name = shortName(fullName, username);
+  return `Xin chào, ${name}`;
 };
 
-/** Friendly org name: "HTX_CANTHO_01" → fall back to a readable form when no display name is known. */
-export const orgLabel = (name?: string | null, id?: string | null): string => {
-  if (name && name !== id) return name;
-  return (id || '').replace(/_/g, ' ').replace(/\b(\w)(\w*)/g, (_m, a: string, b: string) => a + b.toLowerCase()).replace(/^Htx/, 'HTX');
+export const callName = (fullName: string | undefined | null, username: string | undefined | null): string =>
+  shortName(fullName, username);
+
+export const actionLabel = (action: string | undefined | null): string => {
+  if (!action) return 'Giao dịch';
+  const MAP: Record<string, string> = {
+    CREATE_FLOOD_REPORT: 'Gửi tin báo ngập',
+    VERIFY_FLOOD_REPORT: 'Xác minh tin ngập',
+    CREATE_DISPATCH_ORDER: 'Ban hành lệnh điều động',
+    UPDATE_ORDER_STATUS: 'Cập nhật tiến độ ca',
+    REPORT_FIELD_INCIDENT: 'Báo sự cố phương tiện',
+    APPROVE_REPLAN: 'Duyệt phương án chi viện',
+    UPDATE_REPAIR_TICKET: 'Cập nhật phiếu sửa chữa',
+    CONFIRM_RESOLUTION: 'Xác nhận an toàn / đóng vụ',
+    UPDATE_SHELTER_OCCUPANCY: 'Cập nhật điểm trú',
+    SIM_RESET: 'Khôi phục dữ liệu mô phỏng',
+  };
+  return MAP[action] || action;
 };
 
-const ACTION: Record<string, string> = {
-  OIDC_PKCE_LOGIN_SUCCESS: 'Đăng nhập',
-  OIDC_SSO_LOGIN_SUCCESS: 'Đăng nhập',
-  OIDC_AUTHORIZATION_CODE_WITH_PKCE: 'Đăng nhập',
-  CREATE_SERVICE_REQUEST: 'Gửi yêu cầu gặt',
-  CONFIRM_INITIAL_SCHEDULE: 'Chốt lịch gặt',
-  CONFIRM_SCHEDULE_ASSIGNMENT: 'Chốt lịch gặt',
-  DISPATCH_MACHINE_ASSIGNMENT: 'Điều máy đi gặt',
-  REPORT_MACHINE_INCIDENT: 'Báo máy hỏng',
-  REPORT_BREAKDOWN_AND_IMPACT_SCAN: 'Báo máy hỏng',
-  APPROVE_BPMN_RESCUE_REPLAN: 'Chọn máy thay thế',
-  APPROVE_BPMN_RESCUE_REPLACEMENT: 'Chọn máy thay thế',
-  CONFIRM_ACCEPTANCE_AND_SEAL_LEDGER: 'Xác nhận gặt xong',
-  ASSIGNMENT_STATUS_UPDATED: 'Cập nhật tiến độ gặt',
-  COMPLETE_REPAIR_TICKET: 'Hoàn tất sửa chữa',
-  REPAIR_TEAM_DIAGNOSIS_UPDATED: 'Cập nhật kết quả sửa chữa',
-  RBAC_BLOCKED_UNASSIGNED_OPERATOR: 'Chặn thợ lái chưa được giao ca',
-};
-export const actionLabel = (code?: string | null): string => (code && ACTION[code]) || fallback(code).text;
+// Legacy compatibility aliases
+export const requestStatus = reportStatus;
+export const assignmentStatus = orderStatus;
+export const fieldStatus = zoneRisk;
+export const machineStatus = vehicleStatus;

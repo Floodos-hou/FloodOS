@@ -71,13 +71,13 @@ export const BottomCombatLog: React.FC<BottomCombatLogProps> = ({ auditLogs, onO
                     {formatLocalTime(log.created_at)}
                   </span>
                   <span className={`px-1.5 py-0.2 rounded font-semibold text-sm shrink-0 ${
-                    log.http_status < 400 
+                    (log.http_status ?? 200) < 400 
                       ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' 
                       : log.http_status === 403 
                       ? 'bg-rose-950 text-rose-400 border border-rose-800' 
                       : 'bg-amber-950 text-amber-400 border border-amber-800'
                   }`}>
-                    {log.http_status >= 400 ? '✕' : '✓'}
+                    {(log.http_status ?? 200) >= 400 ? '✕' : '✓'}
                   </span>
                   <span className="text-slate-200 font-semibold">{actionLabel(log.action)}</span>
                   <span className="text-slate-400 truncate hidden md:inline">

@@ -9,7 +9,8 @@ import type { BasemapInfo } from '../scene/twin';
 
 export interface FeedItem { id: number; tone: 'danger' | 'info' | 'success' | 'warn'; icon: string; text: string; at: string }
 
-const age = (iso: string): string => {
+const age = (iso?: string): string => {
+  if (!iso) return 'không rõ';
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return 'không rõ';
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));

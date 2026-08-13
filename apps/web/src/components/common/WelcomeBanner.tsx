@@ -5,97 +5,141 @@ import React from 'react';
 import type { TacticalState, UserAccount } from '../../types';
 import { callName, greeting, orgLabel, roleLabel } from '../../utils/labels';
 import { FloodOsLogo } from './FloodOsLogo';
+import { AlertCircle, Waves, Radio, ShieldCheck, MapPin } from 'lucide-react';
 
-interface Stat { icon: string; value: number | string; label: string; tone?: 'alert' }
+interface Stat {
+  icon: string;
+  value: number | string;
+  label: string;
+  tone?: 'alert' | 'good' | 'warn';
+}
 
 const INTRO: Record<string, string> = {
-  FARMER: 'Theo dõi ruộng của bác và gọi máy gặt ngay tại đây.',
-  COORDINATOR: 'Xếp lịch máy gặt cho xã viên và xử lý khi có máy hỏng.',
-  OPERATOR: 'Xem ca làm việc hôm nay và báo cáo khi máy gặp sự cố.',
-  MACHINE_OWNER: 'Theo dõi tình trạng và lịch làm việc của máy nhà mình.',
-  REPAIR_TEAM: 'Xem các máy đang chờ sửa và cập nhật tiến độ.',
-  PLATFORM_ADMIN: 'Giám sát toàn bộ hệ thống.',
+  REPORTER: 'Theo dõi tình hình ngập tại khu vực của bạn, gửi tin báo khẩn cấp và nhận hỗ trợ kịp thời.',
+  DISPATCHER: 'Tiếp nhận tin báo, xác minh mức độ khẩn cấp, điều động xuồng cứu hộ & trạm bơm, phê duyệt chi viện khi có sự cố.',
+  FIELD_TEAM: 'Nhận lệnh tác chiến, cập nhật tiến độ xử lý hiện trường và báo cáo ngay khi phương tiện gặp trục trặc.',
+  RESOURCE_MANAGER: 'Theo dõi tình trạng phương tiện (xuồng, máy bơm), tiếp nhận phiếu sửa chữa và quản lý các điểm sơ tán an toàn.',
+  PLATFORM_ADMIN: 'Giám sát toàn diện hệ thống, kiểm chứng chuỗi băm mật mã SHA-256 và chính sách bảo mật cấp hàng (RLS).',
 };
 
 function buildStats(role: string, s: TacticalState, userId: string): Stat[] {
-  const openIncidents = s.incidents.filter((i) => i.status !== 'RESOLVED').length;
-  const waiting = s.service_requests.filter((r) => r.status === 'SUBMITTED' || (r.status as string) === 'PENDING_SCHEDULE').length;
-  const working = s.machines.filter((m) => m.status === 'WORKING').length;
+  const reports = s.reports || [];
+  const orders = s.orders || [];
+  const vehicles = s.vehicles || [];
+  const incidents = s.incidents || [];
+  const shelters = s.shelters || [];
+  const gauges = s.gauges || [];
+
+  const openIncidents = incidents.filter((i) => i.status !== 'RESOLVED').length;
+  const pendingReports = reports.filter((r) => r.status === 'RECEIVED' || r.status === 'VERIFIED').length;
+  const activeOrders = orders.filter((o) => o.status === 'IN_PROGRESS').length;
+  const warnGauges = gauges.filter((g) => g.alert_state === 'WARNING' || g.alert_state === 'CRITICAL').length;
+
   switch (role) {
+    case 'REPORTER':
     case 'FARMER':
       return [
-        { icon: '🌾', value: s.fields.length, label: 'thửa ruộng của tôi' },
-        { icon: '📋', value: s.service_requests.filter((r) => r.status !== 'COMPLETED' && (r.status as string) !== 'CANCELLED').length, label: 'yêu cầu đang theo dõi' },
-        { icon: '🚜', value: s.assignments.filter((a) => a.status === 'IN_PROGRESS').length, label: 'máy đang gặt giúp tôi' },
+        { icon: '📢', value: reports.length, label: 'tin báo của tôi' },
+        { icon: '🚤', value: orders.filter((o) => o.status === 'IN_PROGRESS').length, label: 'đội đang hỗ trợ tôi', tone: 'good' },
+        { icon: '🏠', value: shelters.filter((sh) => sh.status === 'OPEN').length, label: 'điểm trú an toàn gần đây' },
       ];
+    case 'DISPATCHER':
     case 'COORDINATOR':
       return [
-        { icon: '⏳', value: waiting, label: 'yêu cầu chờ xếp lịch' },
-        { icon: '🚜', value: working, label: 'máy đang làm việc' },
-        { icon: '⚠️', value: openIncidents, label: 'sự cố đang xử lý', tone: openIncidents ? 'alert' : undefined },
+        { icon: '⏳', value: pendingReports, label: 'tin chờ xử lý', tone: pendingReports ? 'warn' : undefined },
+        { icon: '🚤', value: activeOrders, label: 'ca cứu hộ đang chạy', tone: 'good' },
+        { icon: '⚠️', value: openIncidents, label: 'sự cố phương tiện', tone: openIncidents ? 'alert' : undefined },
+        { icon: '🌊', value: warnGauges, label: 'trạm đo báo động', tone: warnGauges ? 'alert' : undefined },
       ];
-    case 'OPERATOR': {
-      const me = s.operators.find((o) => o.user_id === userId);
-      const mine = me ? s.assignments.filter((a) => a.operator_id === me.operator_id && a.status !== 'SUPERSEDED') : [];
+    case 'FIELD_TEAM':
+    case 'OPERATOR':
       return [
-        { icon: '📅', value: mine.length, label: 'ca được giao' },
-        { icon: '🚜', value: mine.filter((a) => a.status === 'IN_PROGRESS').length, label: 'ca đang làm' },
-        { icon: '✅', value: mine.filter((a) => a.status === 'COMPLETED').length, label: 'ca đã xong' },
+        { icon: '📋', value: orders.length, label: 'lệnh được giao' },
+        { icon: '🚤', value: activeOrders, label: 'ca đang triển khai', tone: 'good' },
+        { icon: '⚠️', value: openIncidents, label: 'sự cố đội gặp phải', tone: openIncidents ? 'alert' : undefined },
       ];
-    }
-    case 'MACHINE_OWNER': {
-      const own = s.machines.filter((m) => m.owner_user_id === userId);
-      const broken = own.filter((m) => m.status === 'BREAKDOWN').length;
-      return [
-        { icon: '🚜', value: own.length, label: 'máy của tôi' },
-        { icon: '🟢', value: own.filter((m) => m.status === 'WORKING' || m.status === 'IDLE').length, label: 'máy hoạt động tốt' },
-        { icon: '🔴', value: broken, label: 'máy đang hỏng', tone: broken ? 'alert' : undefined },
-      ];
-    }
+    case 'RESOURCE_MANAGER':
+    case 'MACHINE_OWNER':
     case 'REPAIR_TEAM':
       return [
-        { icon: '🛠️', value: s.incidents.filter((i) => i.status === 'UNDER_REPAIR' || i.status === 'REPLAN_APPROVED').length, label: 'máy đang sửa' },
-        { icon: '⚠️', value: s.incidents.filter((i) => i.status === 'OPEN_REPLANNING').length, label: 'sự cố mới', tone: 'alert' },
-        { icon: '✅', value: s.incidents.filter((i) => i.status === 'RESOLVED').length, label: 'đã khắc phục' },
+        { icon: '🚤', value: vehicles.length, label: 'tổng số phương tiện' },
+        { icon: '🛠️', value: openIncidents, label: 'phương tiện cần sửa', tone: openIncidents ? 'alert' : undefined },
+        { icon: '🏠', value: shelters.length, label: 'điểm sơ tán an toàn' },
       ];
     default:
       return [
-        { icon: '🌾', value: s.fields.length, label: 'thửa ruộng' },
-        { icon: '🚜', value: s.machines.length, label: 'máy' },
-        { icon: '⚠️', value: openIncidents, label: 'sự cố' },
+        { icon: '📢', value: reports.length, label: 'tổng số tin báo' },
+        { icon: '🚤', value: vehicles.length, label: 'phương tiện tác chiến' },
+        { icon: '🔐', value: s.chain_proof?.total_blocks || s.audit_chain_proof?.total_blocks || 0, label: 'khối kiểm toán SHA-256', tone: 'good' },
       ];
   }
 }
 
-export const WelcomeBanner: React.FC<{ user: UserAccount; state: TacticalState | null }> = ({ user, state }) => {
-  const stats = state ? buildStats(user.role, state, user.user_id) : [];
+export const WelcomeBanner: React.FC<{ user: UserAccount; state: TacticalState }> = ({ user, state }) => {
+  const stats = buildStats(user.role, state, user.user_id);
+  const intro = INTRO[user.role] || 'Chào mừng bạn đến với Trung tâm Tác chiến FloodOS.';
+
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-600 text-white shadow-xl ring-1 ring-emerald-900/20">
-      {/* Decorative Brand Logo Watermark */}
-      <div className="pointer-events-none absolute -bottom-10 -right-10 opacity-10 select-none" aria-hidden="true">
-        <FloodOsLogo size={220} />
-      </div>
-      <div className="relative z-10 flex flex-col gap-6 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-lg font-semibold text-amber-200">{greeting()} 👋</p>
-          <h1 className="mt-1 break-words text-3xl font-bold sm:text-4xl">{callName(user.full_name)}</h1>
-          <p className="mt-2 text-lg text-emerald-50">{INTRO[user.role] ?? ''}</p>
-          <p className="mt-3 inline-flex flex-wrap items-center gap-2 text-base text-emerald-100">
-            <span className="rounded-full bg-white/15 px-3 py-1 font-semibold">{roleLabel(user.role)}</span>
-            <span className="rounded-full bg-white/15 px-3 py-1">{orgLabel(state?.auth_context?.organization_name || user.organization_name, user.organization_id)}</span>
+    <section
+      aria-label="Thông tin tổng quan người dùng"
+      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-sky-950 to-blue-950 p-6 text-white shadow-xl border border-sky-800/50"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300 ring-1 ring-cyan-500/30">
+            <span>{roleLabel(user.role)}</span>
+            <span>·</span>
+            <span>{orgLabel(state.auth_context?.organization_name, user.organization_id)}</span>
+          </div>
+
+          <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+            {greeting(user.full_name, user.username)}
+          </h1>
+          <p className="mt-1 text-sm sm:text-base leading-relaxed text-slate-300 font-medium">
+            {intro}
           </p>
+
+          {/* Transparent Simulation Notice */}
+          <div className="mt-3.5 flex items-start gap-2 rounded-xl bg-slate-800/80 p-3 border border-sky-800/40 text-xs text-sky-200">
+            <AlertCircle className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+            <div>
+              <strong>Minh bạch dữ liệu:</strong> {state.data_notice || 'Dữ liệu demo là mô phỏng: vị trí xe phát từ simulator, trạm đo mực nước mô phỏng, cự ly cứu viện là đường chim bay (Haversine) — không phải tuyến đường thực tế.'}
+            </div>
+          </div>
         </div>
-        {stats.length > 0 && (
-          <ul className="grid grid-cols-3 gap-3 sm:gap-4">
-            {stats.map((st) => (
-              <li key={st.label} className={`min-w-[6.5rem] rounded-2xl p-4 text-center shadow-md ${st.tone === 'alert' ? 'bg-red-50 text-red-900 ring-2 ring-red-400' : 'bg-white text-emerald-950'}`}>
-                <div className="text-2xl" aria-hidden="true">{st.icon}</div>
-                <div className="font-display text-4xl font-bold leading-tight">{st.value}</div>
-                <div className="mt-1 text-sm font-semibold leading-snug">{st.label}</div>
-              </li>
-            ))}
-          </ul>
-        )}
+
+        {/* Quick Stats Grid */}
+        <div className="flex flex-wrap gap-3 sm:gap-4">
+          {stats.map((s, idx) => {
+            const isAlert = s.tone === 'alert';
+            const isGood = s.tone === 'good';
+            const isWarn = s.tone === 'warn';
+            return (
+              <div
+                key={idx}
+                className={`min-w-[130px] rounded-2xl p-4 shadow-md backdrop-blur border transition ${
+                  isAlert
+                    ? 'bg-red-950/70 border-red-500/50 text-red-100 ring-2 ring-red-500/30 animate-pulse'
+                    : isWarn
+                    ? 'bg-amber-950/70 border-amber-500/50 text-amber-100'
+                    : isGood
+                    ? 'bg-cyan-950/70 border-cyan-500/50 text-cyan-100'
+                    : 'bg-slate-800/70 border-slate-700/60 text-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xl">
+                  <span>{s.icon}</span>
+                </div>
+                <div className="mt-2 text-2xl font-black tabular-nums tracking-tight">
+                  {s.value}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-300 font-medium">
+                  {s.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

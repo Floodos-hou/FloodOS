@@ -80,22 +80,22 @@ export interface FleetKpis {
   activeShifts: number;
 }
 
-/** Headline numbers for the KPI strip. Fields hidden by Fog of War never count towards progress. */
+/** Headline numbers for the KPI strip. */
 export function computeKpis(machines: MachineLike[], fields: FieldLike[], assignments: AssignmentLike[]): FleetKpis {
   const count = (s: string) => machines.filter((m) => m.status === s).length;
   const visible = fields.filter((f) => f.visibility === undefined || f.visibility === 'FULL');
   const avg = (xs: number[]) => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
   return {
     machines: machines.length,
-    working: count('WORKING'),
-    idle: count('IDLE'),
+    working: count('WORKING') + count('DISPATCHED'),
+    idle: count('IDLE') + count('AVAILABLE'),
     broken: count('BREAKDOWN'),
     maintenance: count('MAINTENANCE'),
-    moving: count('MOVING'),
+    moving: count('MOVING') + count('EN_ROUTE'),
     avgFuelPct: Math.round(avg(machines.map((m) => m.fuel_pct)) * 10) / 10,
     lowFuel: machines.filter((m) => m.fuel_pct < 25).length,
     avgHarvestPct: Math.round(avg(visible.map((f) => f.harvest_progress_pct)) * 10) / 10,
-    activeShifts: assignments.filter((a) => a.status === 'IN_PROGRESS').length,
+    activeShifts: assignments.filter((a) => a.status === 'IN_PROGRESS' || a.status === 'DISPATCHED' || a.status === 'ON_SCENE').length,
   };
 }
 
@@ -108,20 +108,29 @@ export interface FleetEvent {
   text: string;
 }
 
-/** Turns machine status changes between two snapshots into short, human readable events. */
+/** Turns vehicle status changes between two snapshots into short, human readable events. */
 export function detectFleetEvents(prev: Map<string, string>, machines: MachineLike[]): FleetEvent[] {
   const events: FleetEvent[] = [];
   for (const m of machines) {
     const before = prev.get(m.machine_id);
     if (before === undefined || before === m.status) continue; // first sight is not an event
     const key = `${m.machine_id}:${before}->${m.status}`;
-    if (m.status === 'BREAKDOWN') events.push({ key, tone: 'danger', icon: '⚠️', text: `${m.machine_id} gặp sự cố, ngừng gặt` });
-    else if (m.status === 'WORKING') events.push({ key, tone: 'info', icon: '🚜', text: `${m.machine_id} bắt đầu gặt` });
-    else if (m.status === 'MOVING') events.push({ key, tone: 'info', icon: '🛣️', text: `${m.machine_id} đang di chuyển tới ruộng` });
-    else if (m.status === 'MAINTENANCE') events.push({ key, tone: 'warn', icon: '🛠️', text: `${m.machine_id} vào bảo trì` });
-    else if (m.status === 'IDLE') {
+    if (m.status === 'BREAKDOWN') {
+      events.push({ key, tone: 'danger', icon: '⚠️', text: `${m.machine_id} gặp sự cố, tạm dừng tác chiến` });
+    } else if (m.status === 'WORKING' || m.status === 'DISPATCHED') {
+      events.push({ key, tone: 'info', icon: '🚤', text: `${m.machine_id} bắt đầu ca cứu hộ` });
+    } else if (m.status === 'MOVING' || m.status === 'EN_ROUTE') {
+      events.push({ key, tone: 'info', icon: '🛣️', text: `${m.machine_id} đang di chuyển tới điểm ngập` });
+    } else if (m.status === 'MAINTENANCE') {
+      events.push({ key, tone: 'warn', icon: '🛠️', text: `${m.machine_id} vào bảo dưỡng kỹ thuật` });
+    } else if (m.status === 'IDLE' || m.status === 'AVAILABLE') {
       const recovered = before === 'BREAKDOWN' || before === 'MAINTENANCE';
-      events.push({ key, tone: 'success', icon: '✅', text: recovered ? `${m.machine_id} đã sửa xong, sẵn sàng` : `${m.machine_id} xong ca, sẵn sàng` });
+      events.push({
+        key,
+        tone: 'success',
+        icon: '✅',
+        text: recovered ? `${m.machine_id} đã sửa xong, sẵn sàng` : `${m.machine_id} xong ca, sẵn sàng`,
+      });
     }
   }
   return events;
