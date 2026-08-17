@@ -25,16 +25,17 @@ Thumbs.db
 logs/
 temp/
 tmp/
+scratch/
 
 # Competition proposals & internal design documents (prevent leak)
 *.docx
 *.pptx
-OpenAgriOS_De_xuat*
-OpenAgriOS_Ke_hoach*
+FloodOS_De_xuat*
+FloodOS_Ke_hoach*
 
 # Postman local app workspace caches
-.postman/
-postman/
+/.postman/
+/postman/
 tests/postman/postman/
 tests/postman/.postman/
 
@@ -43,3 +44,10 @@ node_modules/
 dist/
 dist-ssr/
 .tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/

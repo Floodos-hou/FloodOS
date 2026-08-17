@@ -1,15 +1,15 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 #
-# OpenAgriOS PostgreSQL Initialization Entrypoint
+# FloodOS PostgreSQL Initialization Entrypoint
 # Dynamically synchronizes application role credentials from environment variables safely.
 set -e
 
-APP_USER="${POSTGRES_APP_USER:-openagrios_app}"
-APP_PASS="${POSTGRES_APP_PASSWORD:-openagrios_app_dev_only}"
+APP_USER="${POSTGRES_APP_USER:-floodos_app}"
+APP_PASS="${POSTGRES_APP_PASSWORD:-floodos_app_dev_only}"
 
-echo ">>> [OpenAgriOS DB Init] Configuring application role '$APP_USER'..."
+echo ">>> [FloodOS DB Init] Configuring application role '$APP_USER'..."
 
 psql -v ON_ERROR_STOP=1 \
      -v app_user="$APP_USER" \
@@ -31,4 +31,4 @@ psql -v ON_ERROR_STOP=1 \
     SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'app_user') \gexec
 EOSQL
 
-echo ">>> [OpenAgriOS DB Init] Application role '$APP_USER' successfully synchronized with environment password."
+echo ">>> [FloodOS DB Init] Application role '$APP_USER' successfully synchronized with environment password."

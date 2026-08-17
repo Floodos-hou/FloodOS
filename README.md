@@ -1,580 +1,291 @@
-# OpenAgriOS — Nền tảng Hệ Điều hành Chuyển đổi số & Điều phối Cơ giới hóa Nông nghiệp (DX-OS Open-Core)
+<div align="center">
 
+# 🌊 FloodOS
 
+### Hệ điều hành Chuyển đổi số mã nguồn mở (DX-OS Open-Core) điều phối ứng phó ngập lụt đô thị
+*An Open-Core Digital Transformation Operating System for Urban Flood Response Coordination*
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
+[![Java: 21 LTS](https://img.shields.io/badge/Java-21_LTS-orange.svg?style=for-the-badge&logo=openjdk&logoColor=white)](pom.xml)
+[![Architecture: DX-OS Open-Core](https://img.shields.io/badge/Architecture-DX--OS_Open--Core-6366f1.svg?style=for-the-badge)](docs/architecture.md)
+[![Standard: ETSI NGSI-LD](https://img.shields.io/badge/Standard-ETSI_NGSI--LD-0ea5e9.svg?style=for-the-badge)](core/data-services/NgsiLdTwinMapper.java)
+[![Security: Zero-Trust APISIX](https://img.shields.io/badge/Security-Zero--Trust_Gateway-10b981.svg?style=for-the-badge)](infra/gateway/apisix.yaml)
+[![Status: v0.2.0 Preview](https://img.shields.io/badge/Release-v0.2.0-emerald.svg?style=for-the-badge)](https://github.com/Floodos-hou/FloodOS/releases)
 
-[![Java: 21 LTS](https://img.shields.io/badge/Java-21_LTS-orange.svg)](pom.xml)
+---
 
-[![Architecture: DX--OS Open--Core](https://img.shields.io/badge/Architecture-DX--OS_Open--Core-purple.svg)](docs/architecture.md)
+**Bài dự thi OLP 2026 — Khối Phần mềm nguồn mở**  
+*Chủ đề: Xây dựng Hệ điều hành Chuyển đổi số bằng Công nghệ Lõi nguồn mở (DX-OS Open-Core)*  
+**Địa bàn thí điểm:** Hà Nội | **Mã nguồn:** 100% Nguồn mở theo chuẩn Apache-2.0
 
-[![Status: Prototype / MVP Preview](https://img.shields.io/badge/Status-Prototype%20%2F%20MVP%20Preview-yellow.svg)](CHANGELOG.md)
+[Tổng quan](#-tổng-quan-và-câu-chuyện-ứng-cứu) •
+[Kiến trúc 3 tầng](#-kiến-trúc-hệ-thống-dx-os-open-core) •
+[Giao diện tác chiến](#-trung-tâm-chỉ-huy-tác-chiến-giao-diện-demo) •
+[Phân quyền 5 vai trò](#-bảng-phân-quyền-tác-chiến-5-vai-trò) •
+[Minh bạch dữ liệu](#-bản-đồ-trạng-thái-minh-bạch-honesty-matrix) •
+[Cài đặt nhanh](#-khởi-chạy-nhanh-trong-3-phút) •
+[Kiểm thử](#-kiểm-thử-toàn-diện)
 
-[![CI](https://github.com/openagrios-hou/openagrios/actions/workflows/ci.yml/badge.svg)](https://github.com/openagrios-hou/openagrios/actions/workflows/ci.yml)
+</div>
 
-[![Standard: ETSI NGSI--LD](https://img.shields.io/badge/Standard-ETSI_NGSI--LD-informational.svg)](core/data-services/NgsiLdTwinMapper.java)
+<br>
 
 <p align="center">
-  <img src="docs/assets/architecture_diagram.svg" alt="Kiến trúc Tổng thể OpenAgriOS DX-OS 3 Tầng" width="100%">
+  <img src="docs/assets/screenshots/portal-01-ban-do-truc-tiep.png" alt="Trung tâm điều hành ứng phó ngập lụt FloodOS" width="100%">
 </p>
 
+---
 
+## 🎯 Tổng quan và câu chuyện ứng cứu
+
+Khi xảy ra ngập úng đô thị hoặc lũ lụt cục bộ, bài toán cốt lõi của chính quyền và lực lượng cứu nạn cứu hộ là **điều phối tài nguyên kịp thời, chính xác, không chồng chéo và minh bạch dấu vết**. 
+
+**FloodOS** hiện thực hóa một chu trình ứng cứu khép kín 6 bước trên nền tảng **DX-OS Open-Core**:
+
+```mermaid
+flowchart LR
+    A["📢 Báo tin<br/><i>(Người dân)</i>"] --> B["🔍 Xác minh & Ưu tiên<br/><i>(Điều phối viên)</i>"]
+    B --> C["🚤 Phân công Xuồng/Đội<br/><i>(Chống trùng lịch)</i>"]
+    C --> D["📍 Cập nhật hiện trường<br/><i>(Đội cứu hộ)</i>"]
+    D --> E["⚡ Xử lý sự cố phương tiện<br/><i>(Điều phối lại)</i>"]
+    E --> F["🔒 Xác nhận & Niêm phong<br/><i>(Sổ cái SHA-256)</i>"]
+```
+
+### 📖 Một ca cứu nạn thực tế trên hệ thống (End-to-End Golden Flow)
+
+1. **Người dân gửi tin báo:** Người dân tại Hà Nội gửi tin báo ngập qua giao diện web di động (nước sâu 55 cm, 5 người cần sơ tán kèm ảnh chụp hiện trường). Hệ thống tự động quét mã độc bằng ClamAV (fail-closed) và gắn vào vùng ngập lân cận theo thuật toán khoảng cách Haversine.
+2. **Điều phối viên thẩm định:** Điều phối viên duyệt tin, đặt mức độ khẩn cấp `URGENT`, chọn **Xuồng cứu hộ V02** và **Đội phản ứng nhanh T02**. Thuật toán chống xếp trùng lịch GiST của PostgreSQL và lõi Java lập tức kiểm tra khung giờ; nếu tài nguyên đang bận sẽ trả về lỗi `409 Conflict`.
+3. **Đội hiện trường tác nghiệp:** Đội hiện trường nhận lệnh trên thiết bị di động, bấm nhận lệnh (`IN_PROGRESS`). Khi xuồng gặp sự cố hỏng chân vịt, đội trưởng gửi báo cáo sự cố ngay tại hiện trường.
+4. **Hệ thống đề xuất phương án thay thế có giải thích:** Động cơ xếp hạng cứu nạn tự động tính điểm các phương tiện khả dụng dựa trên 4 tiêu chí minh bạch: *Khoảng cách Haversine (40đ) + Độ phù hợp phương tiện (25đ) + Sức chứa cứu hộ (20đ) + Đánh giá đội (15đ)*.
+5. **Điều phối viên phê duyệt:** Điều phối viên chủ động bấm chọn phương án tối ưu. Lệnh cũ chuyển sang `SUPERSEDED`, lệnh mới `-R1` kế thừa mã vụ việc (`correlation_id`).
+6. **Xác nhận & Niêm phong sổ cái:** Sau khi hoàn thành nhiệm vụ, người dân bấm xác nhận kết quả. Toàn bộ tiến trình được mã hóa vào sổ cái bất biến SHA-256 nối chuỗi; cổng thông tin công khai Tầng 3 tự tính toán lại chuỗi băm để chứng minh tính trung thực mà không phụ thuộc vào máy chủ cơ sở dữ liệu.
 
 ---
 
+## 🏛️ Kiến trúc hệ thống: DX-OS Open-Core
 
-
-## 1. Tên, Mô tả & Trạng thái Dự án
-
-
-
-### 1.1. Tên Dự án & Định vị Sản phẩm
-
-- **Tên dự án**: **OpenAgriOS** (Open Agricultural Operating System).
-
-- **Định vị sản phẩm**: Nền tảng dịch vụ lõi nguồn mở phân tầng (**DX-OS Open-Core PaaS**) dành cho điều phối cơ giới hóa, quản trị chuỗi cung ứng dịch vụ nông nghiệp và phục hồi đứt gãy mùa vụ theo thời gian thực.
-
-- **Tổ chức bảo trợ**: OpenAgriOS Community.
-
-
-
-### 1.2. Trạng thái Dự án (Release Status & Scope)
-
-- **Giai đoạn hiện tại**: **Prototype / MVP đang phát triển — Phiên bản phát hành chính thức đầu tiên (`v0.1.0-alpha` / `Tier-1 Core Preview`)**.
-
-- **Phạm vi đã kiểm chứng thực tế & Kiến trúc Dual-Mode**:
-
-  - ✅ **Bộ kiểm thử tích hợp tự động (Automated Acceptance Suite)**: Bộ chạy [`AcceptanceTestRunner.java`](tests/AcceptanceTestRunner.java) kiểm thử tự động toàn bộ 10 ca nghiệp vụ cốt lõi (OIDC Token, từ chối token RS256 giả mạo 401, không fallback sang mock khi Keycloak lỗi 401, Phân quyền RBAC 403, Cách ly RLS, Xung đột lịch GiST 409, Khảo sát cứu hộ không gian, Điều phối lại BPMN, Sổ cái băm SHA-256).
-
-  - ✅ **Cơ chế Định danh Hai Chế độ Phân tách Rõ Ràng (Strict Dual-Mode Identity)**:
-
-    - *Chế độ Mặc định (DEV_MOCK_STANDALONE)*: Tự cấp phát và xác thực OIDC JWT với khóa ngẫu nhiên tạm thời (Ephemeral 256-bit Key) sinh động lúc khởi động. Từ chối tuyệt đối token RS256 giả mạo (HTTP 401).
-
-    - *Chế độ Sản xuất (KEYCLOAK_PRODUCTION)*: Dùng OIDC Authorization Code + PKCE qua trang đăng nhập Keycloak; không nhận mật khẩu trong ứng dụng và không fallback sang mock. `KEYCLOAK_PUBLIC_URL` và `KEYCLOAK_PUBLIC_ISSUER` phải trỏ tới Keycloak HTTPS mà trình duyệt truy cập được; cập nhật redirect URI `https://<web-origin>/auth/callback` và Web Origin đúng miền triển khai trong client `agriops-web`.
-
-  - ✅ **Bộ chuyển đổi Hạ tầng Kép (Dual-Mode Infrastructure Adapters)**:
-
-    - *PostgreSQL RLS*: Hỗ trợ kết nối JDBC thực tế với PostgreSQL 16 khi có `DATABASE_URL` và tự động kích hoạt bộ biên dịch RLS SQL (`SET LOCAL app.current_org_id = ?`) khi chạy standalone.
-
-    - *SeaweedFS S3 Storage*: Thực hiện HTTP REST PUT/GET trực tiếp đến cổng S3 (`:9000`) khi container hoạt động, và chuyển tiếp sang bộ lưu trữ metadata ETag MD5 khi chạy độc lập.
-
-    - *Flowable BPMN 2.0 Engine*: Gọi REST API Flowable Engine v7.0.0 (`:8081`) khi có hạ tầng, và tích hợp bộ phân tích W3C DOM BPMN 2.0 XML chuẩn khi chạy in-process.
-
-    - *Apache APISIX Zero-Trust Gateway*: Cấu hình plugin `openid-connect` với Confidential Client `agriops-gateway` để thực thi xác thực token qua Keycloak Introspection ngay tại biên mạng.
-
-  - 🔄 **Môi trường Phân tán Trọn gói (Containerized Stack)**: File duy nhất [`compose.yaml`](compose.yaml) khai báo ngăn xếp hoàn chỉnh gồm PostgreSQL 16.2, Keycloak 24.0.5, SeaweedFS 3.64, Flowable 7.0.0 và APISIX 3.9.0 với các phiên bản image được ghim cố định (pinned tags) và thiết lập healthcheck sẵn sàng.
-
-
-
----
-
-
-
-## 2. Bối cảnh & Vấn đề Thực tế
-
-
-
-### 2.1. Thực trạng Cơ giới hóa Nông nghiệp tại Việt Nam
-
-Tại các vựa lúa trọng điểm như Đồng bằng sông Cửu Long, tỷ lệ cơ giới hóa khâu thu hoạch đã đạt trên 85%. Tuy nhiên, khâu tổ chức và điều hành dịch vụ máy nông nghiệp vẫn vận hành chủ yếu theo phương thức truyền thống:
-
-- **Ủy thác điều phối thủ công qua sổ sách, điện thoại và tin nhắn**: Điều phối viên Hợp tác xã (HTX) hoặc các "cò máy" kết nối máy gặt với nông dân dựa trên trí nhớ hoặc ghi chép rời rạc.
-
-- **Xung đột khung giờ thu hoạch (Overlapping Scheduling)**: Trong những đợt lúa chín rộ tập trung (khoảng "thời gian vàng" 3–5 ngày), hiện tượng trùng lịch, tranh chấp máy hoặc máy bỏ cọc diễn ra thường xuyên.
-
-- **Thiếu cơ chế ứng phó sự cố máy hỏng (Breakdown Vulnerability)**: Khi máy gặt gặp sự cố kỹ thuật giữa đồng (đứt curoa, hỏng xích, lún lầy), toàn bộ các ca thu hoạch tiếp theo bị đứt gãy dây chuyền. Việc tìm máy thay thế mất nhiều giờ hoặc nhiều ngày, khiến lúa ngã đổ, hạt nảy mầm trên bông, gây tổn thất kinh tế nghiêm trọng cho nông dân.
-
-
-
-### 2.2. Hạn chế của các Hệ thống Hiện có
-
-- Các phần mềm hiện tại trên thị trường là các giải pháp đóng kín (monolithic proprietary), phụ thuộc nhà cung cấp (vendor lock-in), chi phí bản quyền cao so với khả năng chi trả của HTX nông nghiệp.
-
-- Thiếu chuẩn hóa dữ liệu bản sao số, không có khả năng liên thông đa hệ thống và không cung cấp được bằng chứng kiểm toán minh bạch, bất biến phục vụ bảo hiểm nông nghiệp và tín chỉ carbon.
-
-
-
----
-
-
-
-## 3. Mục tiêu & Phạm vi Giải pháp
-
-
-
-### 3.1. Mục tiêu Chiến lược
-
-1. **Xây dựng Nền tảng Lõi Nguồn Mở Hoàn Toàn (100% Open-Core Permissive)**: Cung cấp bộ khung dịch vụ nền tảng (Headless PaaS) chuẩn mực quốc tế, hoàn toàn miễn phí giấy phép, cho phép các địa phương, doanh nghiệp AgTech và HTX tự do triển khai và mở rộng.
-
-2. **Số hóa Quy trình Điều phối & Khắc phục Đứt gãy**: Tự động hóa vòng đời dịch vụ nông nghiệp từ khâu nông hộ đặt lịch, HTX điều động máy, người vận hành ghi nhận hiện trường, cho đến khi nghiệm thu và đối soát.
-
-3. **Đảm bảo Tính Toàn vẹn & An ninh Đa tổ chức**: Ứng dụng mô hình bảo mật Zero-Trust, phân quyền nghiêm ngặt theo vai trò (RBAC) và cách ly dữ liệu nhiều người thuê (Multi-Tenancy RLS), cùng sổ cái băm SHA-256 chống chối bỏ.
-
-
-
-### 3.2. Phạm vi Triển khai ở Phiên bản Hiện tại
-
-- **Đối tượng quản lý**: Thửa ruộng canh tác (Field Plots), Máy gặt đập liên hợp (Harvester Machines), Người vận hành máy (Operators), Nông hộ (Farmers), Đội thợ sửa chữa (Repair Teams).
-
-- **Địa bàn thử nghiệm mô phỏng**: Hợp tác xã Nông nghiệp Thới Hưng (Ô Môn, Cần Thơ) và Hợp tác xã Long Phú (Sóc Trăng).
-
-
-
----
-
-
-
-## 4. Kiến trúc DX-OS 3 Tầng & HPDI
+FloodOS tuân thủ tuyệt đối quy tắc **tách biệt ranh giới** theo đề thi OLP 2026: Lõi nền tảng PaaS không chứa bất kỳ thuật ngữ hay bảng dữ liệu nào của nghiệp vụ ngập lụt.
 
 <p align="center">
-  <img src="docs/assets/security_zero_trust.svg" alt="Kiến trúc Bảo mật Zero-Trust & Phân vùng Đa thuê bao PostgreSQL RLS" width="100%">
+  <img src="docs/assets/architecture_diagram.svg" alt="Sơ đồ kiến trúc 3 tầng DX-OS Open-Core" width="100%">
 </p>
 
+```mermaid
+flowchart TD
+    subgraph T3 ["TẦNG 3 — ỨNG DỤNG NGHIỆP VỤ (Domain Applications)"]
+        FO["🌊 apps/floodos — Ứng dụng Điều phối ứng phó ngập lụt"]
+        TR["🔍 apps/traceability — Cổng truy xuất vụ việc công khai & Kiểm chứng SHA-256"]
+    end
 
+    subgraph T2 ["TẦNG 2 — KHÔNG GIAN NĂNG LỰC H-P-D-I"]
+        WEB["💻 apps/web — Trung tâm tác chiến số (React 19, MapLibre GL, TailwindCSS)"]
+        TWIN["🌐 apps/twin3d — Bản sao số 3D (Three.js, WebGL)"]
+    end
 
-Hệ thống được thiết kế theo triết lý **Hệ điều hành Chuyển đổi số (DX-OS)** phân tách thành 3 tầng độc lập hoàn toàn, không phụ thuộc chéo:
+    subgraph T1 ["TẦNG 1 — NỀN TẢNG DỊCH VỤ LÕI HEADLESS (Domain-Neutral Core PaaS)"]
+        GW["🛡️ APISIX Gateway (Zero-Trust, Token Introspection, Chặn /internal/*)"]
+        IAM["🔑 Keycloak (OIDC, PKCE RFC 7636/9700, Đăng ký quyền động)"]
+        WF["📋 Flowable BPMN 2.0 (Khởi tạo tiến trình, State Mirror Idempotent)"]
+        DS["⚙️ Core Services (PostgreSQL RLS, GiST Exclude, Sổ cái SHA-256, ClamAV, Kafka)"]
+        DB[(🐘 PostgreSQL 16 — RLS Cưỡng bức, Schema Idempotent)]
+        LAKE["🧊 Hồ dữ liệu lạnh: Kafka → Parquet trên SeaweedFS S3 → DuckDB"]
+        OT["📡 Mosquitto MQTT → Ingestor (SIMULATOR/DEVICE) → NGSI-LD"]
+    end
 
-
-
+    WEB -->|REST / PKCE| GW
+    TWIN -->|REST| GW
+    TR -->|Read-only| LAKE
+    GW --> IAM
+    GW --> FO
+    FO --> WF
+    FO --> DS
+    DS --> DB
+    DS --> LAKE
+    OT --> FO
 ```
 
-openagrios/
+### 🔬 Hiện thực hóa 4 nguyên lý kỹ thuật cốt lõi
 
-├── core/                         # NỀN TẢNG LÕI DÙNG CHUNG (HEADLESS CORE PaaS)
-
-│   ├── identity/                 # Keycloak OIDC (Live Keycloak & Embedded Dev Mock), JWT, RBAC
-
-│   ├── api-gateway/              # Chốt chặn Apache APISIX Zero-Trust & Rate Limit (HTTP 403)
-
-│   ├── workflow/                 # Động cơ quy trình chuẩn BPMN 2.0 XML (Flowable Engine)
-
-│   └── data-services/            # Dịch vụ dữ liệu: RLS, S3, SHA-256 Audit, NGSI-LD Twin, Spatial & Conflict
-
-├── apps/
-│   ├── agriops/                  # AgriOps Core Engine: Nghiệp vụ Cơ giới hóa & Điều độ Cứu viện (Headless API)
-│   └── web/                      # Operations Portal: Giao diện Trải nghiệm & Điều hành Tác chiến H-P-D-I
-│       ├── src/components/auth/  # Đăng nhập OIDC Authorization Code + PKCE qua Keycloak
-│       ├── src/components/workspaces/ # [H] 5 Cockpit: FARMER, COORDINATOR, OPERATOR, MACHINE_OWNER, REPAIR_TEAM
-│       ├── src/components/process/    # [P] Trung tâm Chỉ huy Quy trình Chuẩn (Flowable BPMN 2.0)
-│       ├── src/components/map/        # [D] Bản đồ Tác chiến MapLibre GL JS (Sương mù RLS, Vectơ Điều động)
-│       ├── src/components/radar/      # [I] Radar Cứu viện Thông minh (Spatial Multi-Criteria, Bắt lỗi 409 GiST)
-│       └── src/components/common/     # Nhật ký kiểm toán đồng bộ định kỳ & Cây phả hệ dữ liệu SHA-256
-
-├── infra/                        # HẠ TẦNG KHAI BÁO (IaC & Container Definitions)
-
-│   ├── apisix/                   # Cấu hình định tuyến APISIX Standalone (apisix.yaml)
-
-│   ├── bpmn/                     # Sơ đồ quy trình nghiệp vụ BPMN 2.0 XML
-
-│   ├── db/                       # Khởi tạo lược đồ PostgreSQL 16, btree_gist & RLS (schema.sql)
-
-│   └── keycloak/                 # Khai báo Realm, Clients & Roles Keycloak (openagrios-realm.json)
-
-├── docs/                         # TÀI LIỆU KỸ THUẬT & KIẾN TRÚC HỆ THỐNG
-
-├── tests/                        # BỘ KIỂM THỬ TỰ ĐỘNG & POSTMAN COLLECTIONS
-
-│   ├── AcceptanceTestRunner.java # Bộ kiểm thử chấp nhận E2E 10 ca
-
-│   └── postman/                  # Postman collection & environment
-
-├── .github/                      # CI/CD WORKFLOWS & MẪU PHẢN ÁNH LỖI (ISSUE TEMPLATES)
-
-├── compose.yaml                  # Khởi chạy duy nhất toàn bộ hệ thống bằng Docker Compose (Pinned images)
-
-├── Dockerfile                    # Container build chính thức cho Java 21 LTS
-
-├── pom.xml                       # File cấu hình build đa nền tảng Apache Maven
-
-└── .env.example                  # Mẫu cấu hình biến môi trường an toàn
-
-```
-
-
-
-### Không gian Năng lực Số HPDI:
-
-- **`[H] Human-centric`**: Định danh tập trung, bảo vệ dữ liệu nông hộ bằng chính sách mờ hóa thông tin (Fog of War) và phân quyền RLS.
-
-- **`[P] Process-driven`**: Tự động hóa và giám sát tiến trình công việc bằng các sơ đồ quy trình tiêu chuẩn OMG BPMN 2.0.
-
-- **`[D] Data-governed`**: Bản sao số thực thể theo chuẩn ETSI NGSI-LD v1.6 và sổ cái kiểm toán bất biến chuỗi băm SHA-256 có thể truy vết toàn trình (Data Lineage).
-
-- **`[I] Intelligence-assisted`**: `SpatialMatchingEngine` tính khoảng cách bằng công thức Haversine trong Java và xếp hạng máy cứu hộ theo khoảng cách, công suất và đánh giá người vận hành. GiST trong PostgreSQL hiện dùng cho ràng buộc chống trùng lịch; dự án chưa dùng PostGIS cho tìm kiếm không gian và chưa cam kết thời gian xử lý dưới 100ms.
-
-
+| Nguyên lý kỹ thuật | Hiện thực cụ thể trong mã nguồn FloodOS |
+|---|---|
+| **(i) Tách luồng nóng/lạnh** | Dữ liệu giao dịch nóng đi vào PostgreSQL 16; sự kiện kiểm toán và telemetry phát bất đồng bộ lên **Apache Kafka** → **lake-archiver** gom lô nén định dạng **Parquet** trên **SeaweedFS S3** → **DuckDB** truy vấn phân tích tức thì. |
+| **(ii) Hội tụ IT và OT (Bản sao số)** | Cảm biến/thiết bị phát MQTT qua **Eclipse Mosquitto** (ACL tối thiểu) → **ingestor** kiểm tra chữ ký & nhãn nguồn (`SIMULATOR` hoặc `DEVICE`) → chuyển đổi sang chuẩn **ETSI NGSI-LD** (`RescueVehicle`, `WaterGaugeStation`). |
+| **(iii) Phả hệ & Chất lượng dữ liệu** | Sổ cái băm SHA-256 bất biến (`audit_records`), API `/audit/lineage/{id}`; ứng dụng Tầng 3 độc lập tự tính lại chuỗi băm từ kho Parquet. Mọi bản ghi đều gắn thẻ nguồn gốc dữ liệu (`SEED`, `SIMULATOR`, `REPORTED`, `DEVICE`). |
+| **(iv) Zero-Trust & Hạ tầng bằng mã** | Cổng **Apache APISIX** xác thực token tại biên qua Keycloak; cơ sở dữ liệu bật `FORCE ROW LEVEL SECURITY`; quét mã độc **ClamAV** chế độ fail-closed (từ chối tệp nếu dịch vụ quét tắt); toàn bộ hệ thống triển khai bằng Docker Compose v2. |
 
 ---
 
+## 🖥️ Trung tâm chỉ huy tác chiến (Giao diện Demo)
 
+Ứng dụng web tại `apps/web` được xây dựng bằng **React 19**, **TypeScript**, **TailwindCSS** và **MapLibre GL**, kết nối trực tiếp 100% với API backend thật qua cổng APISIX Gateway:
 
-## 5. Tính năng Nổi bật & Kịch bản Demo Vận hành
+### 1. Bản đồ tác chiến số & Thanh chỉ số KPI thời gian thực
+Bản đồ trung tâm hiển thị toàn diện các thực thể tác chiến tại Hà Nội: khu vực ngập lụt, tin báo khẩn cấp, xuồng/xe cứu hộ di chuyển thời gian thực, trạm đo mực nước thủy văn và điểm trú ẩn an toàn.
 
 <p align="center">
-  <img src="docs/assets/incident_recovery_flow.svg" alt="Kịch bản Điều phối & Phục hồi Sự cố Tự động (Golden Demo Flow)" width="100%">
+  <img src="docs/assets/screenshots/portal-01-ban-do-truc-tiep.png" alt="Bản đồ tác chiến trực tiếp FloodOS" width="100%">
 </p>
 
+### 2. Quản lý sự cố, Thanh chỉ số tác chiến và Bảng phân tích phương án
+Thanh KPI cập nhật tự động số lượng tin khẩn cấp, tài nguyên sẵn sàng và các vụ việc đang giải quyết. Bảng chi tiết bên phải cho phép điều phối viên xem căn cứ xếp hạng cứu hộ và duyệt phương án thay thế.
 
+<p align="center">
+  <img src="docs/assets/screenshots/portal-02-kpi-su-co.png" alt="Thanh KPI tác chiến và điều phối sự cố" width="100%">
+</p>
 
-### 5.1. 6 Khối Tính năng Cốt lõi
+### 3. Cổng truy xuất vụ việc công khai & Kiểm chứng chuỗi băm độc lập (Tầng 3)
+Cho phép người dân và cơ quan thanh tra tra cứu toàn bộ hành trình ứng phó của một vụ việc qua mã QR, đối chiếu dấu vết phả hệ dữ liệu và tự động xác minh tính toàn vẹn của chuỗi băm mật mã SHA-256 độc lập với cơ sở dữ liệu.
 
-1. **Định danh Đăng nhập Một lần (OIDC SSO) & Phân quyền Đa người thuê (RBAC & RLS)**:
-
-   - Tích hợp chuẩn Keycloak OIDC cấp phát và xác thực JWT Token với hỗ trợ Authorization Code + PKCE.
-
-   - Nông hộ chỉ nhìn thấy và thao tác trên thửa ruộng của mình; các HTX khác nhau được cách ly hoàn toàn ở tầng cơ sở dữ liệu.
-
-2. **Khám phá Dịch vụ Headless PaaS Tự động**:
-
-   - Điểm cuối `/` và `/api/v1/health` cung cấp bản kê khai (Manifest) toàn bộ trạng thái tài nguyên, phiên bản OpenAPI 3.0 và quy trình BPMN đang nạp.
-
-3. **Phát hiện Xung đột Lịch trình Độc quyền (GiST Overlap Conflict Engine)**:
-
-   - Tự động chặn các yêu cầu xếp máy hoặc thợ lái bị trùng khung giờ (`HTTP 409 Conflict`), ngăn chặn triệt để tình trạng vỡ lịch.
-
-4. **Báo cáo Sự cố Hiện trường Kèm Minh chứng Ảnh S3**:
-
-   - Khi máy gặp sự cố kỹ thuật, lái máy gửi báo cáo hỏng hóc kèm hình ảnh hiện trường được lưu trữ trên hệ thống SeaweedFS tương thích S3, tự động sinh mã kiểm tra ETag.
-
-5. **Cơ chế Phục hồi Đứt gãy & Điều động Cứu hộ Tức thì (Incident Re-planning)**:
-
-   - Động cơ không gian quét tức thời các máy gặt lân cận đang rảnh rỗi, chấm điểm đa tiêu chí (khoảng cách, công suất máy, kinh nghiệm lái máy) và đề xuất phương án thay thế tối ưu cho Điều phối viên phê duyệt trên BPMN.
-
-6. **Nghiệm thu Thực địa & Đóng băng Sổ cái Kiểm toán SHA-256**:
-
-   - Nông hộ xác nhận biên bản hoàn thành công việc. Toàn bộ chuỗi sự kiện được đóng băng vào sổ cái băm liên hoàn SHA-256, cho phép trích xuất chứng chỉ phả hệ dữ liệu (Lineage Proof).
-
-
+<p align="center">
+  <img src="docs/assets/screenshots/tang3-truy-xuat-nguon-goc.png" alt="Cổng truy xuất vụ việc công khai Tầng 3" width="100%">
+</p>
 
 ---
 
+## 👥 Bảng phân quyền tác chiến (5 vai trò)
 
+FloodOS triển khai cơ chế kiểm soát truy cập dựa trên vai trò (RBAC) kết hợp bảo vệ dữ liệu theo hàng (PostgreSQL RLS) ở cả lớp ứng dụng và cơ sở dữ liệu:
 
-## 6. Công nghệ & Cấu trúc Mã nguồn
+| Vai trò | Người dùng đại diện | Thẩm quyền tác chiến | Phạm vi dữ liệu nhìn thấy |
+|---|---|---|---|
+| `REPORTER`<br/>*(Người báo tin)* | `reporter_lan`<br/>`reporter_hung` | • Gửi tin báo ngập lụt kèm tọa độ & ảnh chụp hiện trường<br/>• Xác nhận (`CONFIRMED`) hoặc phản đối (`DISPUTED`) kết quả cứu hộ | Chỉ thấy duy nhất tin báo của chính mình, điểm trú ẩn, trạm đo và lệnh/phương tiện đang phục vụ mình. **Tuyệt đối không thấy tin báo người khác.** |
+| `DISPATCHER`<br/>*(Điều phối viên)* | `dispatcher_hoa` | • Thẩm định, xác minh hoặc từ chối tin báo<br/>• Gán mức ưu tiên (`CRITICAL`, `URGENT`, `NORMAL`)<br/>• Điều động đội cứu hộ & xuồng/xe (kiểm tra xung đột)<br/>• Phê duyệt phương án thay thế khi xảy ra sự cố | Toàn bộ dữ liệu tác chiến thuộc đơn vị quản lý (`organization_id`). |
+| `FIELD_TEAM`<br/>*(Đội hiện trường)* | `team_binh`<br/>`team_cuong`<br/>`team_dung` | • Tiếp nhận lệnh điều động trên di động<br/>• Cập nhật tiến độ (`IN_PROGRESS`, `COMPLETED`)<br/>• Báo cáo sự cố phương tiện hỏng hóc giữa đường | Chỉ thấy thông tin đội của mình, lệnh được giao, phương tiện đang điều khiển và tin báo tương ứng. |
+| `RESOURCE_MANAGER`<br/>*(Quản lý nguồn lực)* | `resource_giang` | • Cập nhật trạng thái bảo dưỡng đội và phương tiện<br/>• Mở và đóng phiếu sửa chữa kỹ thuật (`repair-ticket`) | Đội cứu hộ, phương tiện, phiếu sửa chữa. **Không được duyệt điều động tác chiến.** |
+| `PLATFORM_ADMIN`<br/>*(Quản trị nền tảng)* | `platform_admin` | • Giám sát trạng thái hoạt động hạ tầng<br/>• Đặt lại dữ liệu mô phỏng demo (chỉ mở ở môi trường test) | Phạm vi kỹ thuật nền tảng; **không có quyền can thiệp dữ liệu nghiệp vụ**. |
 
-
-
-### 6.1. Ngăn xếp Công nghệ Nguồn mở Chuẩn mực
-
-
-
-| Thành phần | Công nghệ lựa chọn | Phiên bản ghim (Pinned) | Giấy phép Nguồn mở | Lý do lựa chọn |
-
-| :--- | :--- | :--- | :--- | :--- |
-
-| **Ngôn ngữ & Runtime** | Java 21 LTS | OpenJDK 21 / Eclipse Temurin | **EPL-2.0 / GPL-2.0+CE** | Hiệu năng cao, Virtual Threads tối ưu hàng vạn kết nối I/O, gõ tĩnh an toàn. |
-
-| **Quản trị Định danh (IAM)** | Red Hat Keycloak | `24.0.5` | **Apache-2.0** | Chuẩn công nghiệp về OIDC/OAuth2, RBAC và Multi-Tenancy. |
-
-| **Cổng API Biên mạng** | Apache APISIX | `3.9.0-debian` | **Apache-2.0** | Cổng API đám mây tốc độ cao, hỗ trợ Zero-Trust và phân tán linh hoạt. |
-
-| **Động cơ Quy trình** | Flowable BPMN Engine | `7.0.0` | **Apache-2.0** | Chuẩn đặc tả OMG BPMN 2.0 XML quốc tế, quản lý trạng thái tin cậy. |
-
-| **Lưu trữ Đối tượng Phi cấu trúc** | SeaweedFS S3 Storage | `3.64` | **Apache-2.0** | Tương thích S3 API, phân tán cao, thay thế hoàn toàn MinIO (vốn dùng giấy phép AGPL). |
-
-| **Cơ sở dữ liệu Quan hệ & Ràng buộc Lịch** | PostgreSQL + GiST + RLS | `16.2-alpine` | **PostgreSQL License** | Hỗ trợ ràng buộc loại trừ thời gian cho lịch máy/người vận hành và cách ly dữ liệu cấp hàng. Tọa độ hiện được xử lý bằng Haversine trong Java; chưa dùng PostGIS. |
-
-| **Chuẩn hóa Bản sao số** | ETSI GS CIM 009 / NGSI-LD | `v1.6` | **Apache-2.0** | Chuẩn châu Âu cho dữ liệu bản sao số nông nghiệp thông minh. |
-
-
+> **Quy tắc bảo mật Zero-Trust:** Khi người dùng truy cập bản ghi nằm ngoài phạm vi được phân quyền, hệ thống trả về mã lỗi **404 Not Found** (không làm lộ sự tồn tại của bản ghi) và tự động ghi sự kiện `RBAC_BLOCKED_*` vào sổ cái kiểm toán bất biến.
 
 ---
 
-
-
-## 7. Cài đặt & Khởi chạy từ Mã nguồn (Đa Nền Tảng)
-
-
-
-OpenAgriOS hỗ trợ xây dựng nhất quán trên cả Linux, macOS và Windows thông qua các công cụ chuẩn.
-
-
-
-### 7.1. Cách 1: Sử dụng Apache Maven (Khuyến nghị cho mọi hệ điều hành)
-
-```bash
-
-# Biên dịch dự án
-
-mvn clean compile
-
-
-
-# Chạy bộ kiểm thử tự động
-
-mvn test
-
-
-
-# Khởi chạy máy chủ API
-
-mvn exec:java -Dexec.mainClass="org.openagrios.apps.agriops.OpenAgriOsServer"
-
-```
-
-
-
-### 7.2. Cách 2: Sử dụng Trình biên dịch Java 21 Thuần túy
-
-
-
-**Trên Linux / macOS (POSIX Shell):**
-
-```bash
-
-# 1. Tạo thư mục output và biên dịch
-
-mkdir -p target/classes
-
-find core apps tests -name "*.java" > sources.txt
-
-javac -encoding UTF-8 -d target/classes @sources.txt
-
-
-
-# 2. Khởi chạy máy chủ OpenAgriOS
-
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
-
-```
-
-
-
-**Trên Windows (PowerShell):**
-
-```powershell
-
-# 1. Tạo thư mục output và biên dịch
-
-New-Item -ItemType Directory -Force target/classes
-
-javac -encoding UTF-8 -d target/classes (Get-ChildItem -Recurse core/*.java, apps/*.java, tests/*.java).FullName
-
-
-
-# 2. Khởi chạy máy chủ OpenAgriOS
-
-java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer
-
-```
-
-
-
-Máy chủ sẽ khởi chạy tại cổng `8000`:
-
-- **API Root**: `http://localhost:8000/api/v1`
-
-- **Health Check**: `http://localhost:8000/api/v1/health`
-
-- **OpenAPI 3.0 Spec**: `http://localhost:8000/openapi.json`
-
-
-
-### 7.3. Cách 3: Khởi chạy Cụm Hạ tầng qua Docker Compose (Chính Thức)
-
-#### A. Khởi chạy Môi trường Phát triển (Local Development)
-Sử dụng tệp [`compose.yaml`](compose.yaml) với các giá trị mặc định cho môi trường thử nghiệm cục bộ:
-
-```bash
-docker compose -f compose.yaml up -d
-```
-
-#### B. Khởi chạy Môi trường Vận hành Sản xuất (Production Hardening)
-Bắt buộc áp dụng cấu hình tăng cường [`compose.prod.yaml`](compose.prod.yaml) và nạp tệp biến môi trường từ mẫu [`env.production.example`](.env.production.example). Cấu hình này kích hoạt cú pháp `${VAR:?error}` ngăn chặn tuyệt đối các mật khẩu mặc định, đóng các cổng nội bộ (PostgreSQL 5432, S3 9000, Flowable 8081) và chỉ mở cổng Gateway APISIX (9080/9443):
-
-```bash
-# 1. Khởi tạo tệp môi trường từ mẫu
-cp .env.production.example .env
-
-# 2. Sinh các chuỗi bí mật ngẫu nhiên 256-bit: openssl rand -hex 32
-# Điền các giá trị vào tệp .env
-
-# 3. Kiểm tra tính hợp lệ của cấu hình
-docker compose -f compose.yaml -f compose.prod.yaml config --quiet
-
-# 4. Khởi chạy cụm dịch vụ sản xuất
-docker compose -f compose.yaml -f compose.prod.yaml up -d
-```
-Xem chi tiết kiến trúc Zero-Trust, phân quyền `openagrios_app` và quy trình bảo vệ bí mật tại [Tài liệu Hướng dẫn Bảo mật & Triển khai Production (`docs/security.md`)](docs/security.md).
-
-
+## 📋 Bản đồ trạng thái minh bạch (Honesty Matrix)
+
+Để đảm bảo tính trung thực tuyệt đối theo tiêu chuẩn phần mềm nguồn mở OLP 2026, các hạng mục tính năng được phân định rõ ràng:
+
+| Hạng mục chức năng | Trạng thái | Minh chứng kỹ thuật trong mã nguồn |
+|---|:---:|---|
+| **Đăng nhập một lần OIDC + PKCE** | ✅ **CÓ THẬT** | Keycloak 24 thật; kiểm thử E2E tự động qua APISIX; chặn `code_verifier` giả mạo. |
+| **Cổng API Gateway Zero-Trust** | ✅ **CÓ THẬT** | Apache APISIX 3.9; introspection token tại biên; chặn tuyệt đối `/api/v1/internal/*`. |
+| **Phân quyền 5 vai trò & PostgreSQL RLS** | ✅ **CÓ THẬT** | Bật `FORCE ROW LEVEL SECURITY`, tài khoản app không có quyền superuser; kiểm thử cô lập từng vai trò. |
+| **Chống xếp trùng lịch tài nguyên** | ✅ **CÓ THẬT** | Ràng buộc loại trừ GiST ở PostgreSQL + kiểm tra logic tại lõi Java (trả mã `409 Conflict`). |
+| **Quét mã độc tải lên (Malware Gate)** | ✅ **CÓ THẬT** | ClamAV quét INSTREAM; từ chối chuỗi thử nghiệm EICAR (mã 422); chế độ fail-closed khi ClamAV tắt (mã 503). |
+| **Quy trình nghiệp vụ chuẩn BPMN 2.0** | ⚠️ **MỘT PHẦN** | Triển khai BPMN lên Flowable 7 thật; quản lý bản sao trạng thái Idempotent. Chưa gọi REST để complete task ngoài Flowable. |
+| **Sổ cái kiểm toán SHA-256 & Phả hệ dữ liệu** | ✅ **CÓ THẬT** | Bảng `audit_records` xâu chuỗi băm; Tầng 3 (`apps/traceability`) tự tính lại độc lập từ Parquet. |
+| **Xếp hạng phương án cứu hộ cứu nạn** | ✅ **CÓ THẬT** | Thuật toán chấm điểm theo 4 tiêu chí có giải thích rõ ràng tại [`RescueScoring.java`](apps/floodos/RescueScoring.java). **Không dùng AI giả mạo.** |
+| **Giao diện tác chiến trực quan & Demo flow** | ✅ **CÓ THẬT** | `apps/web` (React 19, MapLibre GL) kết nối 100% backend thật qua APISIX Gateway. |
+| **Dữ liệu tọa độ phương tiện & Trạm đo** | 🟡 **MÔ PHỎNG** | Bộ sinh giả lập phát qua MQTT (`source=SIMULATOR`). Tọa độ phương tiện chạy đường thẳng; mực nước sinh ngẫu nhiên có chặn. |
+| **Bản đồ địa hình & Mạng lưới giao thông** | ⚠️ **CHƯA CÓ** | Khoảng cách tính theo công thức Haversine (đường chim bay); chưa tích hợp mạng lưới định tuyến giao thông tránh ngập. |
+| **Dữ liệu khí tượng thủy văn chính thức** | ⚠️ **CHƯA CÓ** | Sử dụng dữ liệu hạt giống (`SEED`) minh họa trên địa bàn Hà Nội; không sử dụng dữ liệu quan trắc thật khi chưa được cấp phép. |
 
 ---
 
+## ⚡ Khởi chạy nhanh trong 3 phút
 
+### Yêu cầu môi trường
+- **Hệ điều hành:** Linux, macOS, hoặc Windows (WSL2)
+- **Docker Engine:** Phiên bản 24.0+ & Docker Compose v2
+- **Cấu hình tối thiểu:** 4 Cores CPU, 6GB RAM khả dụng
 
-## 8. Kiểm thử Tự động, Cấu hình & Dữ liệu Mẫu
-
-
-
-### 8.1. Chạy Bộ Kiểm Thử Chấp Nhận Tự Động (Acceptance Test Suite)
-
-OpenAgriOS tích hợp sẵn bộ kiểm thử E2E tự động xác thực toàn bộ các ràng buộc nghiệp vụ và bảo mật trong môi trường độc lập:
-
-
-
-**Trên Linux / macOS (POSIX):**
+### 1. Dựng toàn bộ hệ thống bằng Docker Compose
 
 ```bash
+# Clone mã nguồn
+git clone https://github.com/Floodos-hou/FloodOS.git
+cd FloodOS
 
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+# Khởi động toàn bộ stack dịch vụ kèm bộ mô phỏng dữ liệu OT
+docker compose --profile demo up -d --build
 
+# Kiểm tra trạng thái sức khỏe qua API Gateway
+curl -i http://localhost:9080/api/v1/health
 ```
 
+### 2. Truy cập các cổng giao diện
 
+| Giao diện / Dịch vụ | Địa chỉ URL | Ghi chú |
+|---|---|---|
+| **Trung tâm tác chiến FloodOS** | `http://localhost:5173` | Giao diện tác chiến 5 vai trò, bản đồ số MapLibre |
+| **Cổng truy xuất công khai Tầng 3** | `http://localhost:9080/trace/CORR-REP-001` | Cổng tra cứu phả hệ & kiểm chứng SHA-256 |
+| **Keycloak Identity Console** | `http://localhost:8080` | Quản trị định danh & realm `floodos` |
+| **APISIX Gateway Dashboard** | `http://localhost:9080` | Cổng Zero-Trust Gateway quản trị định tuyến |
 
-**Trên Windows PowerShell:**
+### 3. Danh sách tài khoản demo (Mật khẩu mặc định: `123456`)
 
-```powershell
+- 🏠 **Người báo tin:** `reporter_lan` hoặc `reporter_hung`
+- 📋 **Điều phối viên:** `dispatcher_hoa`
+- 🚨 **Đội hiện trường:** `team_binh` (Xuồng V01), `team_cuong` (Xuồng V02), `team_dung` (Xe bơm V03)
+- 🔧 **Quản lý nguồn lực:** `resource_giang`
+- ⚙️ **Quản trị nền tảng:** `platform_admin`
 
-java "-Dfile.encoding=UTF-8" -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+---
 
-```
+## 🧪 Kiểm thử toàn diện
 
-
-
-**10/10 Ca Kiểm thử Đạt Tiêu chuẩn Tự động (100% Pass Rate)**:
-
-1. `[PASS]` Core Platform Health & BPMN 2.0 XML Definitions verified.
-
-2. `[PASS]` OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.
-
-3. `[PASS]` Zero-Trust Token Guard: Rejected tampered signature, forged RS256, expired token, wrong audience, and verified Keycloak production failure without mock fallback (HTTP 401).
-
-4. `[PASS]` Multi-Tenant RLS & Field-Level Visibility verified (3 thửa sở hữu nhìn rõ, 7 thửa của hộ khác bị làm mờ).
-
-5. `[PASS]` Zero-Trust RBAC Guard verified (`HTTP 403 Forbidden` khi Nông hộ tự ý điều phối máy).
-
-6. `[PASS]` Time-Window Conflict Engine verified (`HTTP 409 Conflict: MACHINE_TIME_OVERLAP`).
-
-7. `[PASS]` Unfeasible replacement fallback state verified (Xử lý khi không có máy khả dụng).
-
-8. `[PASS]` Incident reported + S3 ETag verification & S3 read-back persistence -> Spatial Engine đề xuất máy giải cứu M02 (93.8 pts, 1.37 km).
-
-9. `[PASS]` BPMN Replan approved -> Ca gặt ASG-102 được thay thế thành công bằng ASG-102-R1.
-
-10. `[PASS]` Immutable SHA-256 Audit Chain & Data Lineage verified (Kiểm chứng toán học 5 khối băm liên hoàn).
-
-
-
-### 8.2. Kiểm thử Tự động Cụm Container Đầy đủ (Full-Stack Container E2E Test)
-Để kiểm thử tích hợp thực tế khi toàn bộ 6 container dịch vụ đang chạy (PostgreSQL 16, Keycloak 24, SeaweedFS S3, Flowable BPMN, APISIX Gateway và Core API), sử dụng kịch bản kiểm thử tự động:
+Hệ thống được trang bị bộ kiểm thử đa tầng nghiêm ngặt nhằm đảm bảo tính ổn định và bảo mật:
 
 ```bash
+# 1. Chạy toàn bộ Unit Tests (Java + Python + TypeScript)
+bash tests/run_unit_tests.sh
+
+# 2. Chạy Acceptance Tests trong tiến trình (HTTP thật, luồng nghiệp vụ đầy đủ)
+java -cp target/classes org.floodos.tests.AcceptanceTestRunner
+
+# 3. Chạy kiểm thử tích hợp E2E toàn stack trên Docker thật
 bash tests/e2e_full_stack_test.sh
 ```
-Kịch bản tự động thực hiện:
-1. Biên dịch và khởi chạy cụm container trong chế độ nền (`docker compose up -d --build`).
-2. Chờ toàn bộ các dịch vụ đạt trạng thái sẵn sàng (healthcheck polling loop).
-3. Kiểm tra tính hợp lệ của endpoint `/api/v1/health` và BPMN process definitions.
-4. Kiểm tra dữ liệu nạp vào PostgreSQL và cưỡng chế Row-Level Security (RLS).
-5. Kiểm chứng vai trò ứng dụng `openagrios_app` (`NOSUPERUSER, NOBYPASSRLS`).
-6. Kiểm tra khả năng định tuyến ngược qua APISIX Zero-Trust Gateway.
-7. Kiểm tra sinh phiên xác thực OIDC PKCE (RFC 7636).
-8. Tự động dọn dẹp tài nguyên và container khi kết thúc (`docker compose down -v`).
 
-### 8.3. Tái nạp Dữ liệu Khởi động Nguội (Cold-Start Rehydration & Database SSOT)
-Hệ thống sử dụng PostgreSQL 16 làm Nguồn Chân lý Duy nhất (Single Source of Truth - SSOT):
-- Khi ứng dụng khởi động lại (cold start), `AgriDataStore` phát hiện dữ liệu hiện có trong PostgreSQL và tự động kích hoạt `loadFromDatabase()`.
-- Toàn bộ các vùng canh tác, máy cơ giới, yêu cầu dịch vụ thu hoạch, lịch phân công và chuỗi kiểm toán SHA-256 đã tạo trước đó qua REST API được nạp lại nguyên vẹn vào bộ nhớ thay vì ghi đè bằng dữ liệu mẫu.
+### 📊 Thống kê phạm vi kiểm thử (Test Coverage)
 
-### 8.4. Danh sách Tài khoản Kiểm Thử (Mật khẩu Demo: `123456`)
-
-
-
-> [!CAUTION]
-> **CẢNH BÁO AN NINH VÀ BẢO MẬT (SECURITY & CREDENTIALS ADVISORY):**
-> 1. Toàn bộ danh sách tài khoản và mật khẩu mặc định (123456) trong tài liệu này được thiết kế **DUY NHẤT cho môi trường thử nghiệm cục bộ (Local Development & CI Acceptance Testing)**.
-> 2. Các giá trị bí mật mặc định như Gateway Client Secret (griops-gateway-secret-2026) và mật khẩu cơ sở dữ liệu (openagrios_dev_only) trong kho mã nguồn công khai là dữ liệu mẫu (fixtures) phục vụ khởi chạy nhanh trên máy nhà phát triển.
-> 3. **TUYỆT ĐỐI KHÔNG SỬ DỤNG** các tài khoản, mật khẩu và secret mẫu này khi triển khai lên môi trường mạng công khai hoặc môi trường thực tế (Staging/Production). Quản trị viên bắt buộc phải nạp các bí mật sản xuất thông qua biến môi trường (.env, KEYCLOAK_INTROSPECTION_CLIENT_SECRET) hoặc hệ thống quản lý bí mật bảo mật (HashiCorp Vault, Kubernetes Secrets).
-
-
-
-| Tài khoản (`username`) | Vai trò (`Role`) | Tổ chức (`Tenant`) | Chức năng nghiệp vụ kiểm thử |
-
-| :--- | :--- | :--- | :--- |
-
-| **`coord_htx01`** | `COORDINATOR` | `HTX_CANTHO_01` | Điều phối viên HTX Cần Thơ 01: Xếp lịch, phê duyệt máy cứu hộ thay thế trên BPMN. |
-
-| **`farmer_ba`** | `FARMER` | `HTX_CANTHO_01` | Nông hộ Bác Ba: Sở hữu thửa ruộng `F01, F03, F07`, tạo yêu cầu gặt & nghiệm thu. |
-
-| **`op_minh`** | `OPERATOR` | `HTX_CANTHO_01` | Thợ lái máy M01: Cập nhật hiện trường & gửi báo cáo hỏng máy kèm ảnh S3. |
-
-| **`op_nam`** | `OPERATOR` | `HTX_CANTHO_01` | Thợ lái máy M02: Nhận lệnh cơ động giải cứu ca gặt bị đứt gãy. |
-
-| **`repair_01`** | `REPAIR_TEAM` | `HTX_CANTHO_01` | Đội thợ sửa chữa: Tiếp nhận phiếu sửa chữa và cập nhật chẩn đoán kỹ thuật. |
-
-| **`coord_htx02`** | `COORDINATOR` | `HTX_SOCTRANG_02` | Điều phối viên HTX Sóc Trăng 02: Kiểm chứng cách ly tuyệt đối dữ liệu giữa 2 HTX. |
-
-
-
-### 8.3. Kiểm thử với Postman Collection
-
-Bộ sưu tập đầy đủ kiểm thử API được đặt tại:
-
-[`tests/postman/OpenAgriOS_Tier1_Core.postman_collection.json`](tests/postman/OpenAgriOS_Tier1_Core.postman_collection.json).
-
-Import vào Postman để kiểm thử tuần tự 18 API có sẵn script tự động lưu Token Bearer.
-
-
+```
+========================================================================
+  FLOODOS MULTI-LAYER AUTOMATED VERIFICATION MATRIX
+========================================================================
+  [Java Core & Apps Unit Tests]     : 191/191 PASS  (100%)
+  [Acceptance Golden Path Tests]    :  50/50  PASS  (100%)
+  [Python Lake & Telemetry Tests]   : 114/114 PASS  (100%)
+  [Web Tactical Frontend Tests]     :  13/13  PASS  (100%)
+  [Digital Twin 3D Logic Tests]     :  33/33  PASS  (100%)
+  [Full-Stack Container Assertions] :  12/12  PASS  (100%)
+========================================================================
+```
 
 ---
 
+## 🛠️ Công nghệ sử dụng và Giấy phép
 
-
-## 9. Giấy phép Nguồn mở, Ràng buộc Phụ thuộc & Đóng góp
-
-
-
-### 9.1. Giấy phép Nguồn mở (Open Source License)
-
-Dự án được phân phối chính thức theo điều khoản của **[Apache License 2.0](LICENSE)**.
-
-
-
-### 9.2. Tuân thủ Tiêu chuẩn Bản quyền Phần mềm Nguồn mở
-
-- **SPDX License Headers**: Toàn bộ các tệp mã nguồn Java, SQL, BPMN XML, YAML cấu hình và Dockerfile đều được gắn định danh bản quyền chuẩn `SPDX-License-Identifier: Apache-2.0`.
-
-- **100% Permissive Open-Core**: Toàn bộ mã nguồn do nhóm phát triển và các thư viện bên thứ ba tích hợp đều thuộc các giấy phép nguồn mở được công nhận bởi OSI (**Apache-2.0**, **PostgreSQL License**, **EPL-2.0**).
-
-- **Loại trừ Copyleft Độc quyền**: Dự án nói không với các giấy phép lây nhiễm (Viral Copyleft) như AGPL-3.0 trong các thành phần phân phối lõi, bảo đảm các tổ chức và doanh nghiệp có thể yên tâm tích hợp, thương mại hóa dịch vụ trên nền tảng mà không lo ngại rủi ro pháp lý. Chi tiết xem tại [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-
-
-### 9.3. Hướng dẫn Đóng góp (Contributing)
-
-Chúng tôi hoan nghênh mọi đóng góp từ cộng đồng. Xin vui lòng tham khảo [CONTRIBUTING.md](CONTRIBUTING.md) để nắm rõ quy trình gửi Pull Request, chuẩn định dạng commit và quy tắc kiến trúc.
-
-
+| Thành phần | Công nghệ / Phiên bản | Vai trò trong kiến trúc | Giấy phép |
+|---|---|---|---|
+| **Lõi nền tảng (Core)** | Java 21 LTS (Temurin) | Xử lý logic phi miền, điều vận giao dịch, sổ cái băm | GPL-2.0 w/ CE |
+| **Cổng API Zero-Trust** | Apache APISIX 3.9.0 | Định tuyến biên, xác thực OIDC token tại chỗ | Apache-2.0 |
+| **Quản trị định danh** | Keycloak 24.0.5 | Chuẩn xác thực OIDC, PKCE RFC 7636/9700 | Apache-2.0 |
+| **Cơ sở dữ liệu** | PostgreSQL 16.2 | Ràng buộc loại trừ GiST, Row-Level Security cưỡng bức | PostgreSQL License |
+| **Quy trình nghiệp vụ** | Flowable BPMN 7.0.0 | Động cơ điều phối tiến trình theo chuẩn BPMN 2.0 | Apache-2.0 |
+| **Lưu trữ đối tượng** | SeaweedFS 3.64 | Kho lưu trữ S3 lưu ảnh hiện trường và kho dữ liệu Parquet | Apache-2.0 |
+| **Hàng đợi thông điệp** | Apache Kafka 3.7.1 & Karapace | Truyền phát sự kiện kiểm toán và telemetry OT | Apache-2.0 |
+| **Thu nhận dữ liệu IoT** | Eclipse Mosquitto 2.0.18 | Broker MQTT xác thực và phân quyền theo topic | EPL-2.0 / EDL-1.0 |
+| **Phân tích kho lạnh** | DuckDB & Apache Parquet | Động cơ OLAP truy vấn hồ dữ liệu lạnh tốc độ cao | MIT |
+| **Cổng quét mã độc** | ClamAV 1.4.3 | Quét virus tệp tải lên fail-closed ở chế độ INSTREAM | GPL-2.0 |
+| **Giao diện tác chiến** | React 19, TypeScript, MapLibre GL | Trung tâm chỉ huy trực quan hóa thời gian thực | MIT / BSD |
 
 ---
 
+## 📚 Tài liệu kỹ thuật chi tiết
 
+- 📐 **Kiến trúc hệ thống:** [`docs/architecture.md`](docs/architecture.md)
+- 🔌 **Đặc tả giao diện API:** [`docs/api-spec.md`](docs/api-spec.md)
+- 🛡️ **Mô hình an ninh & Zero-Trust:** [`docs/security.md`](docs/security.md)
+- 🎮 **Kịch bản Demo chi tiết:** [`docs/demo-guide.md`](docs/demo-guide.md)
+- 📱 **Định hướng trải nghiệm người dùng (UX):** [`docs/floodos-demo-ux.md`](docs/floodos-demo-ux.md)
+- 📜 **Lịch sử phiên bản:** [`CHANGELOG.md`](CHANGELOG.md)
 
-## 10. Lịch sử Phiên bản, Theo dõi Lỗi & Tài liệu Kỹ thuật
+---
 
+## 🤝 Đóng góp và Phát triển
 
+Mọi đóng góp cho dự án đều được chào đón! Vui lòng đọc kĩ [`CONTRIBUTING.md`](CONTRIBUTING.md) và tuân thủ các quy tắc kỹ thuật nghiêm ngặt tại [`AGENTS.md`](AGENTS.md).
 
-### 10.1. Lịch sử Thay đổi (Changelog)
+Mã nguồn dự án được phát hành theo giấy phép **Apache License 2.0** — xem chi tiết tại tệp [`LICENSE`](LICENSE).
 
-Mọi cập nhật tính năng và bản vá lỗi được ghi chép chi tiết tại [CHANGELOG.md](CHANGELOG.md).
-
-
-
-### 10.2. Hệ thống Theo dõi Lỗi (Bug Tracker)
-
-- Báo cáo lỗi kỹ thuật: Sử dụng mẫu [Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) trên GitHub Issues.
-
-- Đề xuất tính năng mới: Sử dụng mẫu [Feature Request](.github/ISSUE_TEMPLATE/feature_request.md).
-
-
-
-### 10.3. Thư mục Tài liệu Kỹ thuật Chuyên sâu (`docs/`)
-
-- 📘 [Kiến trúc Hệ thống DX-OS 3 Tầng](docs/architecture.md): Phân tích sâu các nguyên lý thiết kế phân tầng và luồng tương tác giữa các dịch vụ.
-
-- 📙 [Đặc tả Giao diện REST API](docs/api-spec.md): Bảng tra cứu chi tiết tham số, cấu trúc request/response và mã lỗi của toàn bộ API.
-
-- 📗 [Hướng dẫn Vận hành Demo](docs/demo-guide.md): Cẩm nang chạy thử nghiệm thực địa và kịch bản mô phỏng từng bước.
-
+<div align="center">
+<sub>Được phát triển với tinh thần cống hiến cho cộng đồng và cuộc thi Olympic Tin học Sinh viên Việt Nam (OLP 2026).</sub>
+</div>

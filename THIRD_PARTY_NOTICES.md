@@ -1,8 +1,8 @@
 # Third-Party Software Notices and Licenses
 
-This project, **OpenAgriOS**, is licensed under the [Apache License 2.0](LICENSE).
+This project, **FloodOS**, is licensed under the [Apache License 2.0](LICENSE).
 
-This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within OpenAgriOS, along with their respective licensing terms. All integrated components strictly comply with Open Source Initiative (OSI) approved permissive licenses, ensuring unrestricted enterprise adoption, modification, and redistribution.
+This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within FloodOS, along with their respective licensing terms. All integrated components use OSI-approved permissive or copyleft licences (MIT, Apache-2.0, BSD, ISC, EPL, GPL-family, PostgreSQL, PSF-2.0).
 
 ---
 
@@ -17,6 +17,17 @@ This document lists the third-party open-source components, libraries, and runti
 | **PostgreSQL** | PostgreSQL Global Development Group 16 | Relational Storage, Row-Level Security (RLS), GiST Exclusion Constraints | **PostgreSQL License** *(BSD/MIT-style)* | Yes |
 | **SeaweedFS** | SeaweedFS (Chris Lu) | Scalable S3-Compatible Object Storage for Unstructured Evidence | **Apache-2.0** | Yes |
 | **FIWARE NGSI-LD** | ETSI ISG CIM / FIWARE Foundation | Smart Data Models & Digital Twin Entity Representation | **Apache-2.0** | Yes |
+| **Apache Kafka** | Apache Software Foundation 3.7 (KRaft) | Event bus cho luồng dữ liệu nóng | **Apache-2.0** | Yes |
+| **Karapace** | Aiven 4.1 | Kafka REST Proxy (HTTP produce/consume cho lõi Java) | **Apache-2.0** | Yes |
+| **Eclipse Mosquitto** | Eclipse Foundation 2.0 | MQTT broker cho dữ liệu cảm biến OT | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
+| **Eclipse Paho (Python)** | Eclipse Foundation 2.1 | MQTT client của `telemetry-ingestor` và `device-simulator` | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
+| **segno** | Michael Peterson 1.6 | Sinh mã QR (SVG) cho trang truy xuất nguồn gốc (Tầng 3) | **BSD-3-Clause** | Yes |
+| **ClamAV** | Cisco Talos 1.4 (image `clamav/clamav`) | Quét mã độc cho tệp client tải lên (cổng chặn fail-closed) | **GPL-2.0** | Yes |
+| **DuckDB** | DuckDB Foundation 1.1 | Truy vấn phân tích trên Parquet (kho lạnh) | **MIT** | Yes |
+| **three.js** | three.js authors 0.180 | Dựng cảnh 3D của bản sao số (`apps/twin3d`) | **MIT** | Yes |
+| **MapLibre GL JS** | MapLibre contributors 6.x | Bản đồ phẳng của ứng dụng Tầng 2 thứ hai (cùng thư viện với cổng điều hành) | **BSD-3-Clause** | Yes |
+| **OpenStreetMap tiles via EOX (data)** | © OpenStreetMap contributors (ODbL); tiles © EOX IT Services GmbH, https://tiles.maps.eox.at | Nền bản đồ tải lúc chạy từ trình duyệt (không đóng gói trong repo) | **ODbL (dữ liệu)** | Yes (cần ghi nguồn) |
+| **Python** | PSF 3.12 (image `python:3.12-slim`) | Runtime của dịch vụ `lake-archiver` | **PSF-2.0** | Yes |
 
 ---
 
@@ -42,7 +53,7 @@ Used by: Eclipse Temurin OpenJDK 21
 
 ## 3. Compliance and Copyleft Hygiene
 
-OpenAgriOS enforces strict Open-Core licensing hygiene:
+FloodOS enforces strict Open-Core licensing hygiene:
 - No viral copyleft licenses (e.g. AGPL-3.0) are incorporated into the core application runtime or mandatory distribution bundles.
 - MinIO (AGPL-3.0) was deliberately replaced by SeaweedFS (Apache-2.0) to maintain 100% Apache-2.0 compatibility for downstream integrators and enterprise deployments.
 - All database migrations, declarative schemas, and workflow definitions are licensed under Apache-2.0.

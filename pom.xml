@@ -3,14 +3,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.openagrios</groupId>
-    <artifactId>openagrios-parent</artifactId>
+    <groupId>org.floodos</groupId>
+    <artifactId>floodos-parent</artifactId>
     <version>0.1.0-alpha</version>
     <packaging>jar</packaging>
 
-    <name>OpenAgriOS :: DX-OS Open-Core Platform</name>
+    <name>FloodOS :: DX-OS Open-Core Platform</name>
     <description>Open-Core Platform-as-a-Service for Digital Agricultural Mechanization & Smart Rural Logistics</description>
-    <url>https://github.com/openagrios-hou/openagrios</url>
 
     <licenses>
         <license>
@@ -59,7 +58,7 @@
                             <goal>java</goal>
                         </goals>
                         <configuration>
-                            <mainClass>org.openagrios.tests.AcceptanceTestRunner</mainClass>
+                            <mainClass>org.floodos.tests.AcceptanceTestRunner</mainClass>
                             <systemProperties>
                                 <systemProperty>
                                     <key>file.encoding</key>
@@ -79,7 +78,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>org.openagrios.apps.agriops.OpenAgriOsServer</mainClass>
+                            <mainClass>org.floodos.apps.floodos.FloodOSServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

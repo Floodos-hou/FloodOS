@@ -1,6 +1,6 @@
-# Contributing to OpenAgriOS
+# Contributing to FloodOS
 
-Thank you for your interest in contributing to **OpenAgriOS**! We welcome contributions from developers, researchers, agricultural engineers, and open-source enthusiasts.
+Thank you for your interest in contributing to **FloodOS**! We welcome contributions from developers, researchers, agricultural engineers, and open-source enthusiasts.
 
 ---
 
@@ -12,13 +12,13 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
 
 ## 2. Architecture & Design Principles
 
-OpenAgriOS follows the **DX-OS Open-Core Modular Architecture**:
+FloodOS follows the **DX-OS Open-Core Modular Architecture**:
 - **`core/`**: Foundational platform services. Must remain vendor-neutral, modular, and reusable across different smart agriculture applications.
   - `identity/`: IAM, OIDC, JWT, and multi-tenant security.
   - `api-gateway/`: Edge routing, zero-trust policies, and rate limits.
   - `workflow/`: BPMN 2.0 execution and state machines.
   - `data-services/`: Persistence, audit logging, digital twin mappings, and spatial algorithms.
-- **`apps/`**: Domain-specific vertical applications (e.g. `apps/agriops` for agricultural mechanization).
+- **`apps/`**: Domain-specific vertical applications (e.g. `apps/floodos` for flood-response coordination). The core in `core/` must stay free of any business domain: a unit test fails if domain words appear there.
 - **`infra/`**: Declarative Infrastructure-as-Code (PostgreSQL, Keycloak, APISIX, Flowable).
 - **`docs/`**: Technical documentation, architecture diagrams, and API specifications.
 - **`tests/`**: Integration tests, Postman collections, and acceptance test runners.
@@ -42,7 +42,7 @@ mkdir -p target/classes
 javac -encoding UTF-8 -d target/classes $(find core apps tests -name "*.java")
 
 # Run the automated acceptance test runner
-java -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+java -cp target/classes org.floodos.tests.AcceptanceTestRunner
 ```
 
 ### Git Branching Model

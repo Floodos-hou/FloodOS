@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 
 
-package org.openagrios.core.workflow;
+package org.floodos.core.workflow;
 
 
 
-import org.openagrios.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.JsonCodec;
 
 import org.w3c.dom.Document;
 
@@ -286,13 +286,16 @@ public final class BpmnWorkflowEngine {
         Map<String, Object> defs = new LinkedHashMap<>();
         if (bpmnDir == null) return defs;
 
+        // Every "<key>.bpmn20.xml" in the directory is a process definition (key = file name without the suffix).
+        // The application decides which processes exist by shipping the files; the engine names none of them.
         Map<String, File> files = new LinkedHashMap<>();
-
-        files.put("service_request", new File(bpmnDir, "service_request.bpmn20.xml"));
-
-        files.put("incident_replan", new File(bpmnDir, "incident_replan.bpmn20.xml"));
-
-
+        File[] found = bpmnDir.listFiles((dir, name) -> name.endsWith(".bpmn20.xml"));
+        if (found != null) {
+            java.util.Arrays.sort(found);
+            for (File f : found) {
+                files.put(f.getName().substring(0, f.getName().length() - ".bpmn20.xml".length()), f);
+            }
+        }
 
         try {
 
@@ -403,12 +406,28 @@ public final class BpmnWorkflowEngine {
             String deployUrl = flowableRestUrl + "/service/repository/deployments";
             String creds = flowableUser + ":" + flowablePassword;
             String basicAuth = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
-            String boundary = "----OpenAgriOsBpmnBoundary" + System.currentTimeMillis();
+            String boundary = "----FloodOSBpmnBoundary" + System.currentTimeMillis();
             byte[] fileBytes = Files.readAllBytes(f.toPath());
+            // The deployment is named after the file CONTENT (SHA-256 prefix): an unchanged file is deployed once, ever,
+            // however many times the platform restarts; a changed file becomes a new Flowable deployment (new version).
+            String deployName = f.getName().replace(".bpmn20.xml", "") + "-"
+                    + sha256Prefix(fileBytes) + ".bpmn20.xml";
+            HttpRequest existing = HttpRequest.newBuilder()
+                    .uri(URI.create(deployUrl + "?name=" + deployName.replace(".bpmn20.xml", "")))   // Flowable stores the name without the suffix
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Authorization", basicAuth)
+                    .GET().build();
+            HttpResponse<String> existingResp = httpClient.send(existing, HttpResponse.BodyHandlers.ofString());
+            if (existingResp.statusCode() == 200 && JsonCodec.parseObject(existingResp.body()).get("total") instanceof Number total
+                    && total.intValue() > 0) {
+                deployedDefinitions.add(definitionKey);
+                deployedDefinitions.add(f.getName());
+                return true;
+            }
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             String header = "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"file\"; filename=\"" + f.getName() + "\"\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; filename=\"" + deployName + "\"\r\n"
                     + "Content-Type: text/xml\r\n\r\n";
             String footer = "\r\n--" + boundary + "--\r\n";
             baos.write(header.getBytes(StandardCharsets.UTF_8));
@@ -433,6 +452,55 @@ public final class BpmnWorkflowEngine {
             // Container offline or starting up
         }
         return false;
+    }
+
+    private static String sha256Prefix(byte[] bytes) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 6; i++) sb.append(String.format("%02x", d[i]));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** True when Flowable is mandatory (no silent fallback to the embedded mirror). */
+    public static boolean isFlowableProduction() {
+        String mode = System.getenv().getOrDefault("FLOODOS_WORKFLOW_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("FLOODOS_AUTH_MODE")) ? "FLOWABLE_PRODUCTION" : "EMBEDDED_DEV_MOCK");
+        return "FLOWABLE_PRODUCTION".equalsIgnoreCase(mode);
+    }
+
+    /**
+     * Deploys every process definition found in the BPMN directory to Flowable, so the engine holds them from the first
+     * second the platform is up (not lazily on first use). {@code required} = production: wait for Flowable and give
+     * up loudly instead of silently running without it.
+     */
+    public synchronized void deployAllDefinitions(boolean required) {
+        Map<String, String> keyByFile = new LinkedHashMap<>();
+        for (Map.Entry<String, File> e : bpmnFiles.entrySet()) {
+            // bpmnFiles holds both the file key and the process id of the same file: deploy each file once
+            keyByFile.put(e.getValue().getName(), e.getKey());
+        }
+        for (Map.Entry<String, String> file : keyByFile.entrySet()) {
+            int attempts = required ? 30 : 1;
+            boolean ok = false;
+            for (int i = 1; i <= attempts && !ok; i++) {
+                ok = deployProcessDefinition(file.getValue());
+                if (!ok && i < attempts) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+            if (!ok && required) {
+                throw new IllegalStateException("FLOWABLE_PRODUCTION: could not deploy " + file.getKey() + " to Flowable at " + flowableRestUrl);
+            }
+        }
     }
 
     private HttpResponse<String> sendFlowableRequestWithRetry(HttpRequest req, boolean isProduction) throws Exception {
@@ -506,8 +574,8 @@ public final class BpmnWorkflowEngine {
 
 
 
-                String workflowMode = System.getenv().getOrDefault("OPENAGRIOS_WORKFLOW_MODE",
-                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_AUTH_MODE"))
+                String workflowMode = System.getenv().getOrDefault("FLOODOS_WORKFLOW_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("FLOODOS_AUTH_MODE"))
                         ? "FLOWABLE_PRODUCTION"
                         : "EMBEDDED_DEV_MOCK");
 
@@ -633,6 +701,50 @@ public final class BpmnWorkflowEngine {
     }
 
 
+
+    /**
+     * Completes ONE process instance (and only that one) at the given end step. Unknown ids are ignored.
+     */
+    public synchronized void completeInstance(
+            String processInstanceId,
+            Map<String, Object> completedStep,
+            String endStepId,
+            String endStepName,
+            String ts
+    ) {
+        BpmnProcessInstance inst = instances.get(processInstanceId);
+        if (inst == null) return;
+        if (completedStep != null) inst.history.add(completedStep);
+        inst.currentStepId = endStepId;
+        inst.currentStepName = endStepName;
+        inst.candidateGroup = "COMPLETED";
+        inst.status = "COMPLETED";
+        inst.updatedAt = ts;
+    }
+
+    /**
+     * Registers the local state mirror of an instance WITHOUT calling Flowable. Used after a restart, when the
+     * mirror is rebuilt from the business tables. It is labelled so nobody mistakes it for a live Flowable instance.
+     */
+    public synchronized void restoreInstance(
+            String processInstanceId,
+            String orgId,
+            String definitionKey,
+            String businessKey,
+            String currentStepId,
+            String currentStepName,
+            String candidateGroup,
+            boolean completed,
+            List<Map<String, Object>> history,
+            String ts
+    ) {
+        BpmnProcessInstance inst = new BpmnProcessInstance(
+                processInstanceId, orgId, definitionKey, businessKey,
+                currentStepId, currentStepName, completed ? "COMPLETED" : candidateGroup,
+                completed ? "COMPLETED" : "ACTIVE", history, ts,
+                "STATE_MIRROR (rebuilt from the database after a restart; not a live Flowable instance)", null);
+        instances.put(processInstanceId, inst);
+    }
 
     public synchronized void completeActiveTenantInstances(String orgId, String endStepId, String endStepName, String ts) {
 

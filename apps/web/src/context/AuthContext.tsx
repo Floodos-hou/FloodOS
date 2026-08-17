@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useCallback, useState, useEffect, useRef, ReactNode } from 'react';
 import type { UserAccount } from '../types';
@@ -178,7 +178,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const issuer = safeClaims?.iss;
     const endSessionUrl = !reason && issuer ? new URL(`${issuer.replace(/\/+$/, '')}/protocol/openid-connect/logout`) : null;
     if (endSessionUrl) {
-      endSessionUrl.searchParams.set('client_id', 'agriops-web');
+      endSessionUrl.searchParams.set('client_id', 'floodos-web');
       endSessionUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/`);
       if (idToken) endSessionUrl.searchParams.set('id_token_hint', idToken);
     }

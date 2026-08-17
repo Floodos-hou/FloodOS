@@ -2,7 +2,7 @@
 
 
 
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 
 
@@ -10,7 +10,7 @@
 
 
 
-package org.openagrios.core.identity;
+package org.floodos.core.identity;
 
 
 
@@ -18,7 +18,7 @@ package org.openagrios.core.identity;
 
 
 
-import org.openagrios.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.JsonCodec;
 
 
 
@@ -109,7 +109,7 @@ import java.util.*;
 
 
 
- *    - Explicitly enabled via `OPENAGRIOS_AUTH_MODE=KEYCLOAK` or `PRODUCTION`.
+ *    - Explicitly enabled via `FLOODOS_AUTH_MODE=KEYCLOAK` or `PRODUCTION`.
 
 
 
@@ -242,22 +242,22 @@ public final class KeycloakOidcEngine {
 
 
 
-    public static final String DEFAULT_ISSUER = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
-    public static final String DEFAULT_PUBLIC_ISSUER = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", "http://localhost:8080/realms/openagrios");
+    public static final String DEFAULT_ISSUER = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/floodos");
+    public static final String DEFAULT_PUBLIC_ISSUER = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", "http://localhost:8080/realms/floodos");
 
 
 
-    public static final String DEFAULT_AUDIENCE = "agriops-web";
+    public static final String DEFAULT_AUDIENCE = "floodos-web";
 
     public static final String DEFAULT_INTROSPECTION_CLIENT_ID =
             System.getenv().getOrDefault("KEYCLOAK_INTROSPECTION_CLIENT_ID",
-                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_ID", "agriops-gateway"));
+                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_ID", "floodos-gateway"));
 
     public static final String DEFAULT_INTROSPECTION_CLIENT_SECRET =
             System.getenv().getOrDefault("KEYCLOAK_INTROSPECTION_CLIENT_SECRET",
-                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "agriops-gateway-secret-2026"));
+                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "floodos-gateway-secret-2026"));
     public static final String DEFAULT_CLIENT_SECRET =
-            System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "agriops-client-secret-2026");
+            System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "floodos-client-secret-2026");
 
 
 
@@ -285,7 +285,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        String envSecret = System.getenv("OPENAGRIOS_JWT_SECRET");
+        String envSecret = System.getenv("FLOODOS_JWT_SECRET");
 
 
 
@@ -381,7 +381,7 @@ public final class KeycloakOidcEngine {
 
 
 
-     * Throws IllegalStateException if OPENAGRIOS_AUTH_MODE has an invalid/unrecognized value.
+     * Throws IllegalStateException if FLOODOS_AUTH_MODE has an invalid/unrecognized value.
 
 
 
@@ -405,7 +405,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        String raw = System.getenv("OPENAGRIOS_AUTH_MODE");
+        String raw = System.getenv("FLOODOS_AUTH_MODE");
 
 
 
@@ -441,7 +441,7 @@ public final class KeycloakOidcEngine {
 
 
 
-                    "Lỗi cấu hình OPENAGRIOS_AUTH_MODE không hợp lệ: '" + raw +
+                    "Lỗi cấu hình FLOODOS_AUTH_MODE không hợp lệ: '" + raw +
 
 
 
@@ -679,7 +679,7 @@ public final class KeycloakOidcEngine {
 
     ) {
         public AuthContext(String userId, String username, String organizationId, String role) {
-            this(userId, username, username, username + "@openagrios.vn", organizationId, role, Map.of());
+            this(userId, username, username, username + "@floodos.vn", organizationId, role, Map.of());
         }
 
 
@@ -870,7 +870,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        header.put("kid", "openagrios-dev-key-01");
+        header.put("kid", "floodos-dev-key-01");
 
 
 
@@ -1162,7 +1162,7 @@ public final class KeycloakOidcEngine {
         } else if (audObj == null && azpObj != null && (String.valueOf(azpObj).equals(expectedAudience) || "account".equals(String.valueOf(azpObj)))) {
             // OpenID Connect Standard: if aud is absent in access token, match against azp (authorized party)
             audMatched = true;
-        } else if (audObj == null && "agriops-web".equals(expectedAudience)) {
+        } else if (audObj == null && "floodos-web".equals(expectedAudience)) {
             // Flexible match for Keycloak access token where audience is implicit
             audMatched = true;
         }
@@ -1346,30 +1346,18 @@ public final class KeycloakOidcEngine {
 
 
 
+    /**
+     * Database user ids are "usr_" + the Keycloak username (the realm sets the same value as attribute "id").
+     * A subject that already is such an id is kept. Returns null when neither is usable: callers must reject.
+     */
     public static String resolveDatabaseUserId(String sub, String preferredUsername) {
         if (sub != null && sub.startsWith("usr_")) {
             return sub;
         }
-        if (preferredUsername != null) {
-            switch (preferredUsername) {
-                case "coord_htx01": return "usr_coord_01";
-                case "coord_htx02": return "usr_coord_02";
-                case "farmer_ba": return "usr_farmer_ba";
-                case "farmer_tam": return "usr_farmer_tam";
-                case "farmer_nam": return "usr_farmer_nam";
-                case "op_minh": return "usr_op_minh";
-                case "op_nam": return "usr_op_nam";
-                case "op_hai": return "usr_op_hai";
-                case "op_son": return "usr_op_son";
-                case "owner_tu": return "usr_owner_tu";
-                case "repair_01": return "usr_repair_01";
-                default:
-                    if (!preferredUsername.isBlank()) {
-                        return "usr_" + preferredUsername;
-                    }
-            }
+        if (preferredUsername != null && !preferredUsername.isBlank()) {
+            return "usr_" + preferredUsername.trim();
         }
-        return sub != null ? sub : "usr_unknown";
+        return null;
     }
 
     public static AuthContext authenticateBearer(String authHeader) {
@@ -1400,44 +1388,23 @@ public final class KeycloakOidcEngine {
 
 
 
-            String role = "FARMER";
-
-
-
             Object realmAccess = payload.get("realm_access");
-
-
-
-            if (realmAccess instanceof Map<?, ?> rm) {
-
-
-
-                Object rolesObj = rm.get("roles");
-
-
-
-                if (rolesObj instanceof List<?> roles && !roles.isEmpty()) {
-
-
-
-                    role = String.valueOf(roles.get(0));
-
-
-
-                }
-
-
-
+            List<?> realmRoles = realmAccess instanceof Map<?, ?> rm && rm.get("roles") instanceof List<?> l ? l : List.of();
+            String role = resolveFloodOSRole(realmRoles);
+            if (role == null) {
+                return null; // no recognised business role: a role is never invented
             }
-
-
-
-            String orgId = payload.get("organization_id") != null && !String.valueOf(payload.get("organization_id")).isEmpty() && !"null".equals(String.valueOf(payload.get("organization_id")))
-                    ? String.valueOf(payload.get("organization_id"))
-                    : "HTX_CANTHO_01";
+            Object orgClaim = payload.get("organization_id");
+            String orgId = orgClaim == null ? "" : String.valueOf(orgClaim).trim();
+            if (orgId.isEmpty() || "null".equals(orgId)) {
+                return null; // a token without a tenant is never placed in one
+            }
             String uname = String.valueOf(payload.getOrDefault("preferred_username", payload.get("sub")));
             String rawSub = String.valueOf(payload.getOrDefault("sub", uname));
             String resolvedUid = resolveDatabaseUserId(rawSub, uname);
+            if (resolvedUid == null) {
+                return null;
+            }
             return new AuthContext(
                     resolvedUid,
                     uname,
@@ -1447,9 +1414,6 @@ public final class KeycloakOidcEngine {
                     role,
                     payload
             );
-
-
-
         } catch (Exception e) {
 
 
@@ -1569,8 +1533,8 @@ public final class KeycloakOidcEngine {
         try {
             String tokenEndpoint = issuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
             String targetClientId = (clientId != null && !clientId.isBlank()) ? clientId : DEFAULT_AUDIENCE;
-            // agriops-web is a public PKCE client and must never authenticate with a client secret.
-            String secret = "agriops-web".equals(targetClientId) ? null
+            // floodos-web is a public PKCE client and must never authenticate with a client secret.
+            String secret = "floodos-web".equals(targetClientId) ? null
                     : ((clientSecret != null && !clientSecret.isBlank()) ? clientSecret : DEFAULT_CLIENT_SECRET);
 
             String formBody = "grant_type=authorization_code"
@@ -1636,7 +1600,7 @@ public final class KeycloakOidcEngine {
     ) {
         try {
             String tokenEndpoint = keycloakIssuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
-            String targetClientId = clientId != null && !clientId.isBlank() ? clientId : "agriops-web";
+            String targetClientId = clientId != null && !clientId.isBlank() ? clientId : "floodos-web";
 
             String formBody = "grant_type=password"
                     + "&username=" + URLEncoder.encode(username, StandardCharsets.UTF_8)
@@ -2185,21 +2149,40 @@ public final class KeycloakOidcEngine {
 
 
 
-    public static final List<String> OPENAGRIOS_ROLE_HIERARCHY = List.of(
-            "PLATFORM_ADMIN",
-            "COORDINATOR",
-            "OPERATOR",
-            "FARMER",
-            "REPAIR_TEAM"
-    );
+    /** The only role the platform itself knows. Business roles are registered by the application at start-up. */
+    public static final String PLATFORM_ADMIN_ROLE = "PLATFORM_ADMIN";
+
+    private static volatile List<String> roleHierarchy = List.of(PLATFORM_ADMIN_ROLE);
 
     /**
-     * Resolves dominant OpenAgriOS application role from Keycloak realm roles.
-     * Prioritizes valid business roles over system roles like 'default-roles-openagrios' or 'offline_access'.
+     * Registers the business roles of the hosted application, most privileged first. PLATFORM_ADMIN always stays
+     * first. Tokens carrying none of these roles are rejected (there is no default role).
      */
-    public static String resolveOpenAgriOsRole(List<?> rawRoles) {
+    public static void configureRoleHierarchy(List<String> businessRolesMostPrivilegedFirst) {
+        java.util.LinkedHashSet<String> roles = new java.util.LinkedHashSet<>();
+        roles.add(PLATFORM_ADMIN_ROLE);
+        if (businessRolesMostPrivilegedFirst != null) {
+            for (String r : businessRolesMostPrivilegedFirst) {
+                if (r != null && !r.isBlank()) {
+                    roles.add(r.trim().toUpperCase(java.util.Locale.ROOT));
+                }
+            }
+        }
+        roleHierarchy = List.copyOf(roles);
+    }
+
+    public static List<String> roleHierarchy() {
+        return roleHierarchy;
+    }
+
+    /**
+     * Resolves the dominant registered role from Keycloak realm roles. System roles such as
+     * 'default-roles-floodos' or 'offline_access' never match. Returns null when no registered role is present:
+     * the caller must deny the request.
+     */
+    public static String resolveFloodOSRole(List<?> rawRoles) {
         if (rawRoles == null || rawRoles.isEmpty()) {
-            return "FARMER";
+            return null;
         }
         java.util.Set<String> assigned = new java.util.HashSet<>();
         for (Object r : rawRoles) {
@@ -2207,18 +2190,12 @@ public final class KeycloakOidcEngine {
                 assigned.add(String.valueOf(r).trim().toUpperCase(java.util.Locale.ROOT));
             }
         }
-        for (String candidate : OPENAGRIOS_ROLE_HIERARCHY) {
+        for (String candidate : roleHierarchy) {
             if (assigned.contains(candidate)) {
                 return candidate;
             }
         }
-        for (Object r : rawRoles) {
-            String roleStr = String.valueOf(r).trim();
-            if (!roleStr.startsWith("default-roles") && !roleStr.equals("offline_access") && !roleStr.equals("uma_authorization")) {
-                return roleStr;
-            }
-        }
-        return "FARMER";
+        return null;
     }
 
     public record PkceSession(
