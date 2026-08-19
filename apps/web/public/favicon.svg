@@ -1,7 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FloodOS">
-  <rect width="64" height="64" rx="14" fill="#2f5c22"/>
-  <path d="M32 54V30" stroke="#f2cb52" stroke-width="3.5" stroke-linecap="round"/>
-  <path d="M32 32c-9 0-14-6-14-14 9 0 14 6 14 14z" fill="#95c47b"/>
-  <path d="M32 26c9 0 14-6 14-14-9 0-14 6-14 14z" fill="#6ba84e"/>
-  <path d="M16 54h32" stroke="#bddcab" stroke-width="3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FloodOS Logo">
+  <rect width="64" height="64" rx="14" fill="#ffffff"/>
+  
+  <!-- Water ripples -->
+  <ellipse cx="32" cy="18" rx="16" ry="7" fill="none" stroke="#0284c7" stroke-width="2.2"/>
+  <ellipse cx="32" cy="18" rx="11" ry="4.8" fill="none" stroke="#0369a1" stroke-width="2"/>
+  <ellipse cx="32" cy="18" rx="6" ry="2.6" fill="none" stroke="#0284c7" stroke-width="1.8"/>
+  
+  <!-- Location Pin -->
+  <path d="M32 9 C28.5 9 26 11.5 26 15 C26 19.5 32 25 32 25 C32 25 38 19.5 38 15 C38 11.5 35.5 9 32 9 Z" fill="#ef5a46"/>
+  <circle cx="32" cy="14.5" r="2.2" fill="#ffffff"/>
+  
+  <!-- Square Box -->
+  <rect x="14" y="27" width="36" height="23" rx="3" fill="none" stroke="#1e293b" stroke-width="2.6"/>
+  
+  <!-- Text Flood -->
+  <text x="32" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="900" fill="#1e293b" text-anchor="middle" letter-spacing="-0.3">Flood</text>
+  
+  <!-- Text OS -->
+  <text x="32" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="900" fill="#1e293b" text-anchor="middle" letter-spacing="0.2">OS</text>
 </svg>
