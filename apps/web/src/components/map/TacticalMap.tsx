@@ -86,6 +86,16 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const headingsRef = useRef<Map<string, { lat: number; lng: number; heading: number }>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapBearing, setMapBearing] = useState(0);
+  const [showReports, setShowReports] = useState(true);
+  const [showVehicles, setShowVehicles] = useState(true);
+  const [showShelters, setShowShelters] = useState(true);
+  const [showGauges, setShowGauges] = useState(true);
+
+  const handleCenterHanoi = () => {
+    if (map.current) {
+      map.current.flyTo({ center: HANOI_CENTER, zoom: 13.8 });
+    }
+  };
 
   // Initialize MapLibre
   useEffect(() => {
@@ -261,7 +271,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const touched = new Set<string>();
 
     // 1. Vehicles Markers
-    activeVehicles.forEach((v) => {
+    if (showVehicles) activeVehicles.forEach((v) => {
       const key = `veh:${v.vehicle_id}`;
       touched.add(key);
 
@@ -295,7 +305,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     });
 
     // 2. Flood Reports Markers
-    reports.forEach((r) => {
+    if (showReports) reports.forEach((r) => {
       const key = `rep:${r.report_id}`;
       touched.add(key);
 
@@ -326,7 +336,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     });
 
     // 3. Shelters Markers
-    shelters.forEach((sh) => {
+    if (showShelters) shelters.forEach((sh) => {
       const key = `sh:${sh.shelter_id}`;
       touched.add(key);
 
@@ -349,7 +359,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     });
 
     // 4. Gauge Stations Markers
-    gauges.forEach((g) => {
+    if (showGauges) gauges.forEach((g) => {
       const key = `g:${g.station_id}`;
       touched.add(key);
 
@@ -381,21 +391,71 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         existing.delete(k);
       }
     });
-  }, [activeVehicles, reports, shelters, gauges, mapBearing]);
+  }, [activeVehicles, reports, shelters, gauges, mapBearing, showVehicles, showReports, showShelters, showGauges]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl border border-slate-200 shadow-xl bg-slate-900">
       {/* Map Container */}
       <div ref={mapContainer} className="h-full w-full" />
 
-      {/* Transparent Disclaimer Banner */}
-      <div className="absolute top-3 left-3 z-10 max-w-sm rounded-2xl bg-slate-900/90 backdrop-blur-md p-3 text-xs text-slate-200 border border-slate-700 shadow-xl">
-        <div className="flex items-center gap-1.5 font-bold text-cyan-300 mb-1">
-          <Waves className="h-4 w-4" />
-          <span>Bản đồ Tác chiến Ngập lụt (Hà Nội)</span>
+      {/* Map Header & Filter Controls */}
+      <div className="absolute top-3 left-3 z-10 max-w-md rounded-2xl bg-slate-900/95 backdrop-blur-md p-3 text-xs text-slate-200 border border-slate-700 shadow-xl space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-bold text-cyan-300">
+            <Waves className="h-4 w-4 text-cyan-400" />
+            <span>Bản đồ Tác chiến Ngập lụt (Hà Nội)</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCenterHanoi}
+            className="px-2.5 py-1 rounded-lg bg-sky-700/70 hover:bg-sky-600 text-[11px] font-bold text-sky-100 border border-sky-500/40 transition shadow-sm"
+          >
+            🎯 Về tâm Hà Nội
+          </button>
         </div>
-        <p className="text-[11px] leading-relaxed text-slate-300">
-          Vị trí xe phát từ simulator tua nhanh; tuyến chi viện là đường chim bay (Haversine), không phải tuyến đường thực tế.
+
+        {/* Layer Toggles */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowReports(!showReports)}
+            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition flex items-center gap-1 border ${
+              showReports ? 'bg-red-950/80 text-red-200 border-red-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            <span>🚨 Tin ngập ({reports.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowVehicles(!showVehicles)}
+            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition flex items-center gap-1 border ${
+              showVehicles ? 'bg-sky-950/80 text-sky-200 border-sky-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            <span>🚤 Phương tiện ({activeVehicles.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowShelters(!showShelters)}
+            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition flex items-center gap-1 border ${
+              showShelters ? 'bg-emerald-950/80 text-emerald-200 border-emerald-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            <span>🏠 Điểm trú ({shelters.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowGauges(!showGauges)}
+            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition flex items-center gap-1 border ${
+              showGauges ? 'bg-blue-950/80 text-blue-200 border-blue-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            <span>🌊 Trạm đo ({gauges.length})</span>
+          </button>
+        </div>
+
+        <p className="text-[10px] leading-relaxed text-slate-400 border-t border-slate-800 pt-1.5">
+          * Tuyến chi viện: vector Haversine đường chim bay; vị trí xe và mực nước trạm đo cập nhật qua API.
         </p>
       </div>
 

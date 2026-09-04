@@ -20,10 +20,7 @@ import { FieldTeamWorkspace } from './components/workspaces/FieldTeamWorkspace';
 import { ResourceManagerWorkspace } from './components/workspaces/ResourceManagerWorkspace';
 import { RefreshCw, AlertCircle, WifiOff, CheckCircle2 } from 'lucide-react';
 import { WelcomeBanner } from './components/common/WelcomeBanner';
-import { DemoGuide } from './components/common/DemoGuide';
-import { DEMO_MODE } from './demo/demoScript';
 import { useLiveFleet, mergeLive } from './hooks/useLiveFleet';
-import { IncidentScenario } from './components/demo/IncidentScenario';
 import { FleetKpiStrip } from './components/map/FleetKpiStrip';
 
 type Tab = 'HOME' | 'MAP' | 'PROCESS' | 'RESCUE';
@@ -139,7 +136,9 @@ export const App: React.FC = () => {
       await loadTacticalState();
       setNotice({
         kind: 'ok',
-        text: 'Đã xác nhận hoàn tất cứu trợ và nghiệm thu an toàn! Bản ghi đã được ghi vào sổ cái mật mã.',
+        text: decision === 'CONFIRMED'
+          ? 'Đã xác nhận an toàn và nghiệm thu hoàn tất cứu trợ! Bản ghi đã niêm phong vào sổ cái mật mã.'
+          : 'Đã gửi phản ánh chưa an toàn; hồ sơ vụ việc đã được chuyển lại hàng đợi điều phối.',
       });
     } catch (err: any) {
       setNotice({ kind: 'err', text: `Lỗi xác nhận: ${err.message}` });
@@ -148,16 +147,26 @@ export const App: React.FC = () => {
   };
 
   // Actions: Dispatcher
-  const handleVerifyReport = async (reportId: string, priority: FloodPriority, notes?: string) => {
+  const handleVerifyReport = async (
+    reportId: string,
+    priority: FloodPriority,
+    notes?: string,
+    decision: 'VERIFIED' | 'REJECTED' = 'VERIFIED'
+  ) => {
     if (!token) return;
     try {
       await api.verifyFloodReport(token, reportId, {
-        action: 'VERIFIED',
+        decision,
         priority,
-        verification_note: notes,
+        note: notes,
       });
       await loadTacticalState();
-      setNotice({ kind: 'ok', text: `Đã thẩm định tin báo #${reportId} với mức ưu tiên: ${priority}` });
+      setNotice({
+        kind: 'ok',
+        text: decision === 'VERIFIED'
+          ? `Đã thẩm định tin báo #${reportId} với mức ưu tiên: ${priority}`
+          : `Đã từ chối tin báo #${reportId}: ${notes}`,
+      });
     } catch (err: any) {
       setNotice({ kind: 'err', text: `Lỗi thẩm định tin báo: ${err.message}` });
       throw err;
@@ -204,16 +213,40 @@ export const App: React.FC = () => {
   const handleUpdateOrderStatus = async (
     orderId: string,
     status: DispatchOrderStatus,
-    notes?: string
+    payload?: {
+      progress_pct?: number;
+      note?: string;
+      outcome?: 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED' | string;
+      final_depth_cm?: number;
+      evidence_filename?: string;
+      evidence_data_url?: string;
+    } | string
   ) => {
     if (!token) return;
     try {
+      const opts = typeof payload === 'string'
+        ? { note: payload, progress_pct: (status === 'RESOLVED' || status === 'COMPLETED') ? 100 : 50 }
+        : (payload || {});
+
+      const apiStatus: 'IN_PROGRESS' | 'COMPLETED' =
+        (status === 'RESOLVED' || status === 'COMPLETED') ? 'COMPLETED' : 'IN_PROGRESS';
+
       await api.updateOrderStatus(token, orderId, {
-        status: status === 'RESOLVED' ? 'COMPLETED' : 'IN_PROGRESS',
-        outcome: notes,
+        status: apiStatus,
+        progress_pct: apiStatus === 'COMPLETED' ? 100 : (opts.progress_pct ?? 50),
+        note: opts.note,
+        outcome: (opts.outcome || 'RESOLVED') as any,
+        final_depth_cm: opts.final_depth_cm,
+        evidence_filename: opts.evidence_filename,
+        evidence_data_url: opts.evidence_data_url,
       });
       await loadTacticalState();
-      setNotice({ kind: 'ok', text: `Cập nhật trạng thái lệnh #${orderId}: ${status}` });
+      setNotice({
+        kind: 'ok',
+        text: apiStatus === 'COMPLETED'
+          ? `Đã hoàn tất ca tác chiến #${orderId}. Báo cáo chuyển sang chờ người dân nghiệm thu!`
+          : `Đã cập nhật tiến độ lệnh #${orderId}: ${opts.progress_pct ?? 50}%.`,
+      });
     } catch (err: any) {
       setNotice({ kind: 'err', text: `Lỗi cập nhật lệnh tác chiến: ${err.message}` });
       throw err;
@@ -498,6 +531,7 @@ export const App: React.FC = () => {
                 orders={state.orders || []}
                 zones={state.zones || []}
                 shelters={state.shelters || []}
+                resolutions={state.resolutions || []}
                 onCreateReport={handleCreateReport}
                 onConfirmResolution={handleConfirmResolution}
                 onOpenLineage={(corrId) => setActiveLineageCorrId(corrId)}
@@ -592,9 +626,7 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                {DEMO_MODE && (user.role === 'DISPATCHER' || user.role === 'COORDINATOR' || user.role === 'PLATFORM_ADMIN') && token && (
-                  <IncidentScenario token={token} state={state} onRefresh={loadTacticalState} />
-                )}
+
               </div>
             </div>
           </div>
@@ -631,7 +663,7 @@ export const App: React.FC = () => {
         onClose={() => setActiveLineageCorrId(null)}
       />
 
-      {DEMO_MODE && <DemoGuide />}
+
 
       {isStaff && (
         <BottomCombatLog

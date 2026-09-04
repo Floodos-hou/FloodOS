@@ -20,6 +20,7 @@ import {
 } from '../../utils/labels';
 import { Modal } from '../common/Modal';
 import { StatusBadge } from '../common/StatusBadge';
+import { isActiveDispatchOrder, isActiveIncident, isTeamAvailable, isVehicleAvailable, reportDepthCm, reportPeopleAffected, selectAvailableResources, validateRejectionReason } from '../../utils/workflowRules';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -42,7 +43,7 @@ interface DispatcherWorkspaceProps {
   vehicles: RescueVehicle[];
   incidents: FieldIncident[];
   zones: FloodZone[];
-  onVerifyReport: (reportId: string, priority: FloodPriority, notes?: string) => Promise<void>;
+  onVerifyReport: (reportId: string, priority: FloodPriority, notes?: string, decision?: 'VERIFIED' | 'REJECTED') => Promise<void>;
   onDispatchOrder: (data: {
     report_id: string;
     team_id: string;
@@ -75,6 +76,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
   // Verify modal state
   const [verifyingReport, setVerifyingReport] = useState<FloodReport | null>(null);
+  const [verifyDecision, setVerifyDecision] = useState<'VERIFIED' | 'REJECTED'>('VERIFIED');
   const [verifyPriority, setVerifyPriority] = useState<FloodPriority>('URGENT');
   const [verifyNotes, setVerifyNotes] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -98,23 +100,31 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
   const unverifiedReports = reports.filter((r) => r.status === 'RECEIVED');
   const readyDispatchReports = reports.filter((r) => r.status === 'VERIFIED');
-  const activeOrders = orders.filter((o) => ['DISPATCHED', 'EN_ROUTE', 'ON_SCENE'].includes(o.status));
-  const activeIncidents = incidents.filter((i) => i.status === 'REPORTED' || i.status === 'IN_PROGRESS');
+  const activeOrders = orders.filter((o) => isActiveDispatchOrder(o.status));
+  const activeIncidents = incidents.filter((i) => isActiveIncident(i.status));
+  const busyVehicleIds = new Set(activeOrders.map((o) => o.vehicle_id));
+  const busyTeamIds = new Set(activeOrders.map((o) => o.team_id));
 
   const openVerify = (report: FloodReport) => {
     setVerifyingReport(report);
+    setVerifyDecision('VERIFIED');
     setVerifyPriority(report.priority === 'CRITICAL' ? 'URGENT' : report.priority);
-    setVerifyNotes(`Đã liên lạc xác minh: điểm ngập ${report.address_hint || 'Hà Nội'}.`);
+    setVerifyNotes(`Đã liên lạc xác minh: điểm ngập ${report.address_hint || report.report_id || 'Hà Nội'}.`);
     setVerifyError(null);
   };
 
   const handleVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!verifyingReport) return;
+    const rejectionError = verifyDecision === 'REJECTED' ? validateRejectionReason(verifyNotes) : null;
+    if (rejectionError) {
+      setVerifyError(rejectionError);
+      return;
+    }
     setIsVerifying(true);
     setVerifyError(null);
     try {
-      await onVerifyReport(verifyingReport.report_id, verifyPriority, verifyNotes);
+      await onVerifyReport(verifyingReport.report_id, verifyPriority, verifyNotes.trim(), verifyDecision);
       setVerifyingReport(null);
     } catch (err: unknown) {
       setVerifyError(err instanceof Error ? err.message : 'Xác minh thất bại. Vui lòng thử lại.');
@@ -127,22 +137,27 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
     setDispatchReport(report);
     setDispatchError(null);
     // Find available vehicle and team
-    const busyVehicleIds = new Set(
-      orders
-        .filter((o) => ['DISPATCHED', 'EN_ROUTE', 'ON_SCENE'].includes(o.status))
-        .map((o) => o.vehicle_id)
+    const { vehicleId, teamId } = selectAvailableResources(
+      vehicles,
+      teams,
+      busyVehicleIds,
+      busyTeamIds,
     );
-    const availVehicle = vehicles.find((v) => v.status === 'AVAILABLE' && !busyVehicleIds.has(v.vehicle_id)) || vehicles[0];
-    const availTeam = teams.find((t) => t.status === 'READY') || teams[0];
-    setSelectedVehicleId(availVehicle?.vehicle_id || '');
-    setSelectedTeamId(availTeam?.team_id || '');
+    setSelectedVehicleId(vehicleId || '');
+    setSelectedTeamId(teamId || '');
     setTargetTime(new Date(Date.now() + 45 * 60000).toISOString().slice(0, 16));
     setDispatchNotes(`Lệnh điều phối ứng cứu: ${report.address_hint || report.report_id}`);
   };
 
   const handleDispatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dispatchReport) return;
+    const selectedTeam = teams.find((team) => team.team_id === selectedTeamId);
+    const selectedVehicle = vehicles.find((vehicle) => vehicle.vehicle_id === selectedVehicleId);
+    if (!dispatchReport || !selectedTeam || !selectedVehicle ||
+        !isTeamAvailable(selectedTeam, busyTeamIds) || !isVehicleAvailable(selectedVehicle, busyVehicleIds)) {
+      setDispatchError('Đội hoặc phương tiện không còn sẵn sàng. Hãy chọn lại nguồn lực đang khả dụng.');
+      return;
+    }
     setIsDispatching(true);
     setDispatchError(null);
     try {
@@ -312,7 +327,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={report.status} type="report" />
                           <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-700">
-                            {priorityLabel[report.priority] || report.priority}
+                            {priorityLabel(report.priority).text}
                           </span>
                         </div>
                       </div>
@@ -325,15 +340,15 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
                         <div>
                           <span className="text-slate-400 block">Nhu cầu cứu trợ:</span>
-                          <span className="font-semibold text-slate-800">{needType[report.need_type] || report.need_type}</span>
+                          <span className="font-semibold text-slate-800">{needType(report.need_type).text}</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Độ ngập ước tính:</span>
-                          <span className="font-semibold text-rose-600">{report.flood_depth_cm} cm</span>
+                          <span className="font-semibold text-rose-600">{reportDepthCm(report)} cm</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Người cần sơ tán:</span>
-                          <span className="font-semibold text-slate-800">{report.people_count || 1} người</span>
+                          <span className="font-semibold text-slate-800">{reportPeopleAffected(report)} người</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Thời gian gửi:</span>
@@ -400,7 +415,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={report.status} type="report" />
                           <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
-                            {priorityLabel[report.priority] || report.priority}
+                            {priorityLabel(report.priority).text}
                           </span>
                         </div>
                       </div>
@@ -413,15 +428,15 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
                         <div>
                           <span className="text-slate-400 block">Nhu cầu:</span>
-                          <span className="font-semibold text-slate-800">{needType[report.need_type] || report.need_type}</span>
+                          <span className="font-semibold text-slate-800">{needType(report.need_type).text}</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Độ sâu:</span>
-                          <span className="font-semibold text-amber-700">{report.flood_depth_cm} cm</span>
+                          <span className="font-semibold text-amber-700">{reportDepthCm(report)} cm</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Sơ tán:</span>
-                          <span className="font-semibold text-slate-800">{report.people_count || 1} người</span>
+                          <span className="font-semibold text-slate-800">{reportPeopleAffected(report)} người</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Người báo:</span>
@@ -643,7 +658,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                   <div className="flex items-center gap-1.5">
                     <StatusBadge status={report.status} type="report" />
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                      {priorityLabel[report.priority] || report.priority}
+                      {priorityLabel(report.priority).text}
                     </span>
                   </div>
                 </div>
@@ -651,8 +666,8 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                   {report.address_hint || `Khu vực [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}
                 </h4>
                 <div className="text-xs text-slate-500 flex items-center gap-3 mb-2">
-                  <span>Nhu cầu: <strong>{needType[report.need_type] || report.need_type}</strong></span>
-                  <span>Độ ngập: <strong className="text-rose-600">{report.flood_depth_cm} cm</strong></span>
+                  <span>Nhu cầu: <strong>{needType(report.need_type).text}</strong></span>
+                  <span>Độ ngập: <strong className="text-rose-600">{reportDepthCm(report)} cm</strong></span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
                   <span>{new Date(report.created_at).toLocaleTimeString('vi-VN')}</span>
@@ -688,33 +703,75 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
               <div><strong>Địa bàn:</strong> {verifyingReport.address_hint || 'Hà Nội'}</div>
-              <div><strong>Nhu cầu:</strong> {needType[verifyingReport.need_type] || verifyingReport.need_type} • <strong>Độ ngập:</strong> {verifyingReport.flood_depth_cm} cm</div>
+              <div><strong>Nhu cầu:</strong> {needType(verifyingReport.need_type).text} • <strong>Độ ngập:</strong> {reportDepthCm(verifyingReport)} cm</div>
               <div><strong>Người báo:</strong> {verifyingReport.reporter_name} ({verifyingReport.reporter_phone})</div>
             </div>
 
             <div>
-              <label className={LABEL_STYLE}>Mức độ ưu tiên thẩm định</label>
-              <select
-                value={verifyPriority}
-                onChange={(e) => setVerifyPriority(e.target.value as FloodPriority)}
-                className={INPUT_STYLE}
-              >
-                <option value="CRITICAL">🔴 CỰC KỲ KHẨN CẤP (Nguy hiểm tính mạng ngay lập tức)</option>
-                <option value="URGENT">🟠 KHẨN CẤP (Nước dâng nhanh, có người già/trẻ em)</option>
-                <option value="HIGH">🟡 CAO (Cần sơ tán trong 1-2 giờ tới)</option>
-                <option value="NORMAL">🟢 BÌNH THƯỜNG (Cung cấp lương thực/phao cứu hộ)</option>
-                <option value="LOW">⚪ THẤP (Theo dõi thêm)</option>
-              </select>
+              <label className={LABEL_STYLE}>Quyết định thẩm định</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVerifyDecision('VERIFIED')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                    verifyDecision === 'VERIFIED'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Xác minh hợp lệ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerifyDecision('REJECTED');
+                    setVerifyNotes('');
+                  }}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                    verifyDecision === 'REJECTED'
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  Từ chối / Tin giả
+                </button>
+              </div>
             </div>
 
+            {verifyDecision === 'VERIFIED' ? (
+              <div>
+                <label className={LABEL_STYLE}>Mức độ ưu tiên thẩm định</label>
+                <select
+                  value={verifyPriority}
+                  onChange={(e) => setVerifyPriority(e.target.value as FloodPriority)}
+                  className={INPUT_STYLE}
+                >
+                  <option value="CRITICAL">🔴 CỰC KỲ KHẨN CẤP (Nguy hiểm tính mạng ngay lập tức)</option>
+                  <option value="URGENT">🟠 KHẨN CẤP (Nước dâng nhanh, có người già/trẻ em)</option>
+                  <option value="HIGH">🟡 CAO (Cần sơ tán trong 1-2 giờ tới)</option>
+                  <option value="NORMAL">🟢 BÌNH THƯỜNG (Cung cấp lương thực/phao cứu hộ)</option>
+                  <option value="LOW">⚪ THẤP (Theo dõi thêm)</option>
+                </select>
+              </div>
+            ) : null}
+
             <div>
-              <label className={LABEL_STYLE}>Ghi chú thẩm định &amp; Chỉ đạo</label>
+              <label className={LABEL_STYLE}>
+                {verifyDecision === 'VERIFIED' ? 'Ghi chú thẩm định & Chỉ đạo' : 'Lý do từ chối tin báo (Bắt buộc)'}
+              </label>
               <textarea
                 rows={3}
                 value={verifyNotes}
                 onChange={(e) => setVerifyNotes(e.target.value)}
-                placeholder="Ghi chú xác thực qua điện thoại, phương tiện tiếp cận thích hợp..."
+                placeholder={
+                  verifyDecision === 'VERIFIED'
+                    ? 'Ghi chú xác thực qua điện thoại, phương tiện tiếp cận thích hợp...'
+                    : 'Ghi rõ lý do từ chối (ví dụ: Tin trùng lặp, ngoài khu vực quản lý, đã liên hệ người báo tin báo nhầm)...'
+                }
                 className={INPUT_STYLE}
+                required={verifyDecision === 'REJECTED'}
               />
             </div>
 
@@ -754,19 +811,21 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1">
               <div><strong>Điểm đến:</strong> {dispatchReport.address_hint || 'Hà Nội'}</div>
-              <div><strong>Ưu tiên:</strong> {priorityLabel[dispatchReport.priority]} • <strong>Nhu cầu:</strong> {needType[dispatchReport.need_type]}</div>
+              <div><strong>Ưu tiên:</strong> {priorityLabel(dispatchReport.priority).text} • <strong>Nhu cầu:</strong> {needType(dispatchReport.need_type).text}</div>
             </div>
 
             <div>
-              <label className={LABEL_STYLE}>Đội xung kích cứu hộ</label>
+              <label htmlFor="dispatch-team" className={LABEL_STYLE}>Đội xung kích cứu hộ</label>
               <select
+                id="dispatch-team"
                 value={selectedTeamId}
                 onChange={(e) => setSelectedTeamId(e.target.value)}
                 className={INPUT_STYLE}
                 required
               >
+                <option value="">Chọn đội đang sẵn sàng</option>
                 {teams.map((t) => (
-                  <option key={t.team_id} value={t.team_id}>
+                  <option key={t.team_id} value={t.team_id} disabled={!isTeamAvailable(t, busyTeamIds)}>
                     {t.team_name} - {t.leader_name} ({t.status}) [{t.specialty}]
                   </option>
                 ))}
@@ -774,15 +833,17 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
             </div>
 
             <div>
-              <label className={LABEL_STYLE}>Phương tiện phân bổ</label>
+              <label htmlFor="dispatch-vehicle" className={LABEL_STYLE}>Phương tiện phân bổ</label>
               <select
+                id="dispatch-vehicle"
                 value={selectedVehicleId}
                 onChange={(e) => setSelectedVehicleId(e.target.value)}
                 className={INPUT_STYLE}
                 required
               >
+                <option value="">Chọn phương tiện khả dụng</option>
                 {vehicles.map((v) => (
-                  <option key={v.vehicle_id} value={v.vehicle_id}>
+                  <option key={v.vehicle_id} value={v.vehicle_id} disabled={!isVehicleAvailable(v, busyVehicleIds)}>
                     {v.vehicle_name} ({vehicleType[v.vehicle_type] || v.vehicle_type}) - Trạng thái: {v.status} - Nhiên liệu: {v.fuel_percent}%
                   </option>
                 ))}
@@ -819,7 +880,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isDispatching}
+                disabled={isDispatching || !selectedVehicleId || !selectedTeamId}
                 className="px-5 py-2.5 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow flex items-center gap-2 disabled:opacity-50"
               >
                 {isDispatching ? 'Đang điều phối...' : 'Phát Lệnh Tác Chiến'}

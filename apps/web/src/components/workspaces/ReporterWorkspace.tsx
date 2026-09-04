@@ -2,16 +2,18 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useState } from 'react';
-import type { FloodReport, DispatchOrder, FloodZone, SafeShelter } from '../../types';
-import { needType, reportStatus, priority, formatLocalDateTime } from '../../utils/labels';
+import type { FloodReport, DispatchOrder, FloodZone, SafeShelter, ReportResolution } from '../../types';
+import { needType, reportStatus, priority } from '../../utils/labels';
 import { Modal } from '../common/Modal';
-import { AlertTriangle, CheckCircle2, Waves, Send, Camera, ShieldCheck, Home, GitBranch, MapPin } from 'lucide-react';
+import { resolutionIdForReport, validateDisputeReason, validateReportDescription } from '../../utils/workflowRules';
+import { AlertTriangle, CheckCircle2, Waves, Send, GitBranch } from 'lucide-react';
 
 interface ReporterWorkspaceProps {
   reports: FloodReport[];
   orders: DispatchOrder[];
   zones: FloodZone[];
   shelters: SafeShelter[];
+  resolutions?: ReportResolution[];
   onCreateReport: (data: {
     lat: number;
     lng: number;
@@ -26,18 +28,29 @@ interface ReporterWorkspaceProps {
   onOpenLineage?: (corrId: string) => void;
 }
 
+const HANOI_PRESETS = [
+  { label: 'Hoàng Mai - Định Công (Khu trũng ven sông)', lat: 20.9782, lng: 105.8450 },
+  { label: 'Đống Đa - Nguyễn Khuyến / Văn Miếu', lat: 21.0264, lng: 105.8361 },
+  { label: 'Thanh Trì - Triều Khúc / Tân Triều', lat: 20.9850, lng: 105.7984 },
+  { label: 'Nam Từ Liêm - Phú Đô / Lê Quang Đạo', lat: 21.0150, lng: 105.7720 },
+  { label: 'Tây Hồ - Thụy Khuê / Trích Sài', lat: 21.0451, lng: 105.8182 },
+  { label: 'Tự nhập tọa độ thủ công', lat: 20.9662, lng: 105.8714 },
+];
+
 export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
   reports,
   orders,
   zones,
   shelters,
+  resolutions = [],
   onCreateReport,
   onConfirmResolution,
   onOpenLineage,
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [lat, setLat] = useState(20.9662);
-  const [lng, setLng] = useState(105.8714);
+  const [presetIndex, setPresetIndex] = useState(0);
+  const [lat, setLat] = useState(HANOI_PRESETS[0].lat);
+  const [lng, setLng] = useState(HANOI_PRESETS[0].lng);
   const [depthCm, setDepthCm] = useState(55);
   const [need, setNeed] = useState('EVACUATION');
   const [peopleAffected, setPeopleAffected] = useState(5);
@@ -66,8 +79,9 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description.trim()) {
-      setFormError('Vui lòng nhập mô tả tình hình ngập tại hiện trường.');
+    const descriptionError = validateReportDescription(description);
+    if (descriptionError) {
+      setFormError(descriptionError);
       return;
     }
     setIsSubmitting(true);
@@ -96,9 +110,20 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
 
   const handleConfirm = async (decision: 'CONFIRMED' | 'DISPUTED') => {
     if (!confirmModalReport) return;
+    const disputeError = decision === 'DISPUTED' ? validateDisputeReason(confirmNotes) : null;
+    if (disputeError) {
+      setFormError(disputeError);
+      return;
+    }
+    const resolutionId = resolutionIdForReport(confirmModalReport.report_id, resolutions, orders);
+    if (!resolutionId) {
+      setFormError('Chưa có mã nghiệm thu từ đội hiện trường. Vui lòng liên hệ điều phối viên.');
+      return;
+    }
     setIsSubmitting(true);
+    setFormError(null);
     try {
-      await onConfirmResolution(confirmModalReport.report_id, decision, confirmNotes.trim());
+      await onConfirmResolution(resolutionId, decision, confirmNotes.trim());
       setConfirmModalReport(null);
       setConfirmNotes('');
     } catch (err: any) {
@@ -190,21 +215,41 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                     <div className="rounded-2xl bg-sky-50 p-3 border border-sky-200 text-xs text-sky-900 space-y-1">
                       <div>Lực lượng điều động: <strong>{relatedOrder.team_name || relatedOrder.team_id}</strong></div>
                       <div>Phương tiện: <strong>{relatedOrder.vehicle_name || relatedOrder.vehicle_id}</strong></div>
-                      <div>Tiến độ: <strong>{Math.round(relatedOrder.progress_pct)}%</strong></div>
+                      <div>Tiến độ: <strong>{Math.round(relatedOrder.progress_pct || 0)}%</strong></div>
+                    </div>
+                  )}
+
+                  {/* Pending confirmation notice */}
+                  {r.status === 'AWAITING_CONFIRMATION' && (
+                    <div className="rounded-2xl bg-amber-50 border-2 border-amber-300 p-3.5 text-xs text-amber-950 space-y-2">
+                      <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                        <span>Đội hiện trường đã báo cáo hoàn tất ca tác chiến!</span>
+                      </div>
+                      <p className="text-amber-800">
+                        Vui lòng kiểm tra tình hình thực tế tại chỗ và bấm xác nhận an toàn để đóng hồ sơ vụ việc, hoặc phản ánh nếu nước chưa rút.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmModalReport(r);
+                          setConfirmNotes('Nước đã rút an toàn, đã nhận hỗ trợ đầy đủ.');
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow flex items-center justify-center gap-2 transition"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Nghiệm thu &amp; Xác nhận an toàn ngay</span>
+                      </button>
                     </div>
                   )}
 
                   {/* Actions for Reporter */}
                   <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
                     {r.status === 'RESOLVED' && (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmModalReport(r)}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Xác nhận đã an toàn (Nghiệm thu)</span>
-                      </button>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span>Đã nghiệm thu an toàn &amp; niêm phong sổ cái</span>
+                      </span>
                     )}
 
                     <button
@@ -213,7 +258,7 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                       className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:text-sky-900 ml-auto"
                     >
                       <GitBranch className="h-3.5 w-3.5" />
-                      <span>Xem phả hệ dữ liệu</span>
+                      <span>Xem phả hệ dữ liệu (Lineage)</span>
                     </button>
                   </div>
                 </div>
@@ -232,6 +277,57 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                 {formError}
               </div>
             )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                Địa bàn phát sinh ngập lụt (Hà Nội)
+              </label>
+              <select
+                value={presetIndex}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  setPresetIndex(idx);
+                  if (idx < HANOI_PRESETS.length) {
+                    setLat(HANOI_PRESETS[idx].lat);
+                    setLng(HANOI_PRESETS[idx].lng);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-300 p-2.5 text-sm font-semibold focus:border-sky-500 focus:outline-none mb-2"
+              >
+                {HANOI_PRESETS.map((p, idx) => (
+                  <option key={p.label} value={idx}>
+                    📍 {p.label}
+                  </option>
+                ))}
+              </select>
+
+              {presetIndex === HANOI_PRESETS.length - 1 && (
+                <div className="grid grid-cols-2 gap-2 mt-1 mb-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500">Vĩ độ (Latitude)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={lat}
+                      onChange={(e) => setLat(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500">Kinh độ (Longitude)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={lng}
+                      onChange={(e) => setLng(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
@@ -336,51 +432,71 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
       )}
 
       {/* Confirmation Modal */}
-      {confirmModalReport && (
-        <Modal
-          isOpen={!!confirmModalReport}
-          onClose={() => setConfirmModalReport(null)}
-          title="Xác nhận Kết quả Ứng cứu (Nghiệm thu)"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-700">
-              Bạn đang xác nhận cho tin báo: <strong>{confirmModalReport.report_id}</strong>. Lực lượng cứu trợ đã hoàn tất ca xử lý.
-            </p>
+      {confirmModalReport && (() => {
+        const matchingRes = resolutions.find((res) => res.report_id === confirmModalReport.report_id);
+        const matchingOrder = orders.find((o) => o.report_id === confirmModalReport.report_id);
 
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
-                Ghi chú hoặc phản hồi thực tế (nếu có)
-              </label>
-              <textarea
-                rows={2}
-                value={confirmNotes}
-                onChange={(e) => setConfirmNotes(e.target.value)}
-                placeholder="Ghi nhận nước đã rút an toàn hoặc góp ý cho đội cứu hộ..."
-                className="w-full rounded-xl border border-slate-300 p-2.5 text-sm"
-              />
-            </div>
+        return (
+          <Modal
+            isOpen={!!confirmModalReport}
+            onClose={() => setConfirmModalReport(null)}
+            title="Nghiệm thu &amp; Xác nhận Kết quả Cứu trợ"
+          >
+            <div className="space-y-4">
+              {formError && (
+                <div className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800 border border-rose-200">
+                  {formError}
+                </div>
+              )}
 
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleConfirm('DISPUTED')}
-                disabled={isSubmitting}
-                className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-800 hover:bg-red-100"
-              >
-                Phản đối (Chưa đạt)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleConfirm('CONFIRMED')}
-                disabled={isSubmitting}
-                className="rounded-xl bg-emerald-700 px-5 py-2 text-sm font-bold text-white shadow hover:bg-emerald-600"
-              >
-                Xác nhận an toàn (Đóng vụ việc)
-              </button>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                <div><strong>Mã tin báo:</strong> #{confirmModalReport.report_id}</div>
+                <div><strong>Lực lượng thực hiện:</strong> {matchingOrder?.team_name || matchingOrder?.team_id || 'Đội ứng cứu cơ động'}</div>
+                <div><strong>Phương tiện:</strong> {matchingOrder?.vehicle_name || matchingOrder?.vehicle_id || 'Xuồng cứu hộ'}</div>
+                {matchingRes && (
+                  <>
+                    <div><strong>Kết quả hiện trường:</strong> <span className="font-bold text-emerald-700">{matchingRes.outcome}</span></div>
+                    {matchingRes.notes && <div><strong>Ghi chú từ đội:</strong> {matchingRes.notes}</div>}
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  Ý kiến phản hồi của người dân / người báo tin
+                </label>
+                <textarea
+                  rows={3}
+                  value={confirmNotes}
+                  onChange={(e) => setConfirmNotes(e.target.value)}
+                  placeholder="Xác nhận nước đã rút, người dân an toàn; hoặc phản ánh nếu còn người mắc kẹt..."
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleConfirm('DISPUTED')}
+                  disabled={isSubmitting}
+                  className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-800 hover:bg-rose-100"
+                >
+                  ⚠️ Phản đối / Nước chưa rút
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirm('CONFIRMED')}
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Đang gửi...' : '✅ Xác nhận an toàn (Nghiệm thu)'}
+                </button>
+              </div>
             </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
     </div>
   );
 };
