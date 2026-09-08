@@ -106,6 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         state: authCodeRes.state || state,
         client_id: authCodeRes.client_id,
         redirect_uri: redirectUri,
+        username: username.trim(),
       });
 
       loginWithToken(tokenRes.access_token, tokenRes.user, tokenRes.id_token);
