@@ -1,18 +1,18 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 FloodOS Contributors */
-/* "Đồng lúa & Phù sa" skin for the Keycloak login page, matching apps/web. */
+/* FloodOS Tactical Command & Flood Response theme for Keycloak login page */
 
 :root {
-  --oa-green-900: #1e3a17;
-  --oa-green-800: #264a1d;
-  --oa-green-700: #2f5c22;
-  --oa-green-600: #3a7228;
-  --oa-green-200: #bddcab;
-  --oa-gold-300: #f2cb52;
-  --oa-gold-200: #f9e08a;
-  --oa-cream: #f8f6ee;
-  --oa-ink: #1e1d16;
-  --oa-ink-soft: #57533f;
+  --fo-navy-950: #0a0f1d;
+  --fo-navy-900: #0f172a;
+  --fo-navy-800: #1e293b;
+  --fo-blue-700: #0369a1;
+  --fo-blue-600: #0284c7;
+  --fo-blue-500: #0ea5e9;
+  --fo-cyan-400: #38bdf8;
+  --fo-slate-100: #f1f5f9;
+  --fo-ink: #0f172a;
+  --fo-ink-soft: #475569;
 }
 
 html, body, .login-pf body {
@@ -20,12 +20,11 @@ html, body, .login-pf body {
   margin: 0;
   font-family: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 18px;
-  color: var(--oa-ink);
-  /* sky → paddy: leaf-green gradient with terraced hills drawn as an inline SVG */
-  background-color: var(--oa-green-800);
+  color: var(--fo-ink);
+  background-color: var(--fo-navy-950);
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 300' preserveAspectRatio='none'%3E%3Ccircle cx='980' cy='70' r='46' fill='%23f2cb52'/%3E%3Ccircle cx='980' cy='70' r='74' fill='%23f2cb52' opacity='.18'/%3E%3Cpath d='M0 170 Q240 90 500 160 T1000 140 T1200 160 V300 H0Z' fill='%233a7228' opacity='.6'/%3E%3Cpath d='M0 215 Q280 160 580 205 T1200 195 V300 H0Z' fill='%234b8b34'/%3E%3Cpath d='M0 255 Q300 225 620 250 T1200 242 V300 H0Z' fill='%236ba84e'/%3E%3Cpath d='M0 285 Q320 268 640 282 T1200 278 V300 H0Z' fill='%2395c47b'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, var(--oa-green-900) 0%, var(--oa-green-700) 100%);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 300' preserveAspectRatio='none'%3E%3Cpath d='M0 160 Q300 80 600 150 T1200 130 V300 H0Z' fill='%230284c7' opacity='.3'/%3E%3Cpath d='M0 205 Q280 150 580 195 T1200 185 V300 H0Z' fill='%230369a1' opacity='.5'/%3E%3Cpath d='M0 250 Q320 215 640 240 T1200 232 V300 H0Z' fill='%230f172a'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, var(--fo-navy-950) 0%, var(--fo-navy-900) 60%, var(--fo-navy-800) 100%);
   background-repeat: no-repeat, no-repeat;
   background-position: bottom center, center;
   background-size: 100% 34vh, cover;
@@ -47,15 +46,15 @@ html, body, .login-pf body {
   text-transform: none !important;
 }
 #kc-header-wrapper::before {
-  content: "🌾 ";
+  content: "🌊 ";
 }
 #kc-header-wrapper::after {
-  content: "Cổng điều hành nông nghiệp";
+  content: "Trung tâm Điều hành Phối hợp Ứng phó Ngập lụt";
   display: block;
   margin-top: 4px;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--oa-gold-200);
+  color: var(--fo-cyan-400);
   letter-spacing: 0.04em;
 }
 
@@ -73,8 +72,8 @@ html, body, .login-pf body {
   background: #fff !important;
   border-radius: 24px !important;
   border: 0 !important;
-  border-top: 8px solid var(--oa-gold-300) !important;
-  box-shadow: 0 24px 60px rgba(15, 32, 12, 0.35) !important;
+  border-top: 8px solid var(--fo-cyan-400) !important;
+  box-shadow: 0 24px 60px rgba(10, 15, 29, 0.45) !important;
   overflow: hidden;
 }
 .pf-v5-c-login__main-header {
@@ -82,7 +81,7 @@ html, body, .login-pf body {
 }
 .pf-v5-c-login__main-header h1,
 .pf-v5-c-login__main-header .pf-v5-c-title {
-  color: var(--oa-ink) !important;
+  color: var(--fo-ink) !important;
   font-size: 1.6rem !important;
   font-weight: 800 !important;
   line-height: 1.25;
@@ -91,23 +90,23 @@ html, body, .login-pf body {
 /* Form */
 .pf-v5-c-form__label-text,
 label, .pf-v5-c-check__label {
-  color: var(--oa-ink) !important;
+  color: var(--fo-ink) !important;
   font-size: 1.05rem !important;
   font-weight: 700 !important;
 }
 .pf-v5-c-form-control, .pf-v5-c-form-control input, input[type="text"], input[type="password"] {
   min-height: 3.4rem;
   font-size: 1.15rem !important;
-  color: var(--oa-ink) !important;
+  color: var(--fo-ink) !important;
   background: #fff !important;
   border-radius: 14px !important;
-  border: 2px solid #cbc3a7 !important;
-  --pf-v5-c-form-control--BorderColor: #cbc3a7;
+  border: 2px solid #cbd5e1 !important;
+  --pf-v5-c-form-control--BorderColor: #cbd5e1;
 }
 .pf-v5-c-form-control:focus-within,
 .pf-v5-c-form-control input:focus {
-  border-color: var(--oa-green-600) !important;
-  box-shadow: 0 0 0 4px rgba(75, 139, 52, 0.25) !important;
+  border-color: var(--fo-blue-600) !important;
+  box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.25) !important;
   outline: none;
 }
 .pf-v5-c-form-control::before, .pf-v5-c-form-control::after { display: none !important; }
@@ -117,25 +116,25 @@ label, .pf-v5-c-check__label {
   font-size: 1.2rem !important;
   font-weight: 800 !important;
   color: #fff !important;
-  background: var(--oa-green-700) !important;
+  background: var(--fo-blue-600) !important;
   border-radius: 16px !important;
-  box-shadow: 0 6px 16px rgba(47, 92, 34, 0.35);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.35);
 }
 #kc-login:hover, .pf-v5-c-button.pf-m-primary:hover {
-  background: var(--oa-green-600) !important;
+  background: var(--fo-blue-700) !important;
 }
 .pf-v5-c-button.pf-m-control {
   min-height: 3.4rem;
   border-radius: 0 14px 14px 0 !important;
-  color: var(--oa-ink-soft) !important;
+  color: var(--fo-ink-soft) !important;
 }
 
 a, .pf-v5-c-login__main-footer-band a {
-  color: var(--oa-green-700) !important;
+  color: var(--fo-blue-600) !important;
   font-weight: 700;
 }
 .pf-v5-c-alert.pf-m-danger {
   border-radius: 14px;
   font-size: 1.05rem;
 }
-.pf-v5-c-login__main-footer-band { background: var(--oa-cream) !important; }
+.pf-v5-c-login__main-footer-band { background: var(--fo-slate-100) !important; }

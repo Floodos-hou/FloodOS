@@ -13,7 +13,7 @@ Lõi FloodOS là nền tảng dùng chung. Ứng dụng điều phối ngập l�
 
 1. **Tầng 1 — Headless Core PaaS:** dịch vụ dùng chung chạy không giao diện, gồm định danh/SSO, API Gateway, dữ liệu có cấu trúc và tệp, workflow, truyền sự kiện, kiểm toán và vận hành.
 2. **Tầng 2 — Không gian năng lực số H-P-D-I:** trải nghiệm người dùng và các năng lực dùng chung để tiếp nhận công việc, theo dõi quy trình, xem dữ liệu/bản đồ và hỗ trợ quyết định.
-3. **Tầng 3 — Ứng dụng nghiệp vụ:** các module chuyên ngành cắm-rút. Ứng dụng điều phối ngập lụt là ứng dụng minh họa đầu tiên; các ứng dụng nông nghiệp, thương mại hoặc logistics có thể được bổ sung sau.
+3. **Tầng 3 — Ứng dụng nghiệp vụ:** các module chuyên ngành cắm-rút. Ứng dụng điều phối ngập lụt là ứng dụng cốt lõi; các ứng dụng cảnh báo thiên tai, quan trắc khí tượng thủy văn hoặc điều phối cứu hộ liên vùng có thể được bổ sung sau.
 
 Giao diện của ứng dụng điều phối ngập lụt được cung cấp qua không gian năng lực Tầng 2 và tiêu thụ các API/dịch vụ Tầng 1. Ranh giới này cần được thể hiện trong cấu trúc mã và khi trình bày.
 

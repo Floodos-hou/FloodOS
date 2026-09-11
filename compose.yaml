@@ -160,7 +160,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Demo character picker + storyline panel; compose.prod.yaml turns it off
-        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
     container_name: floodos-web-app
     environment:
       VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:9080}
