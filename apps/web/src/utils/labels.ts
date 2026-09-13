@@ -203,6 +203,17 @@ export const orgLabel = (orgName: string | undefined | null, orgId: string | und
   return orgId;
 };
 
+export const avatarInitials = (fullName: string | undefined | null, username: string | undefined | null): string => {
+  if (fullName && fullName.trim()) {
+    const clean = fullName.replace(/\(.*?\)/g, '').trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  if (username && username.trim()) return username.substring(0, 2).toUpperCase();
+  return 'ND';
+};
+
 export const shortName = (fullName: string | undefined | null, username: string | undefined | null): string => {
   if (fullName && fullName.trim()) return fullName;
   if (username && username.trim()) return username;

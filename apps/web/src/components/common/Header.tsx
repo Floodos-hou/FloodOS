@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { ShieldCheck, LogOut, Clock, RotateCcw, FastForward, ChevronDown, AlertTriangle } from 'lucide-react';
-import { orgLabel, roleLabel, shortName } from '../../utils/labels';
+import { orgLabel, roleLabel, shortName, avatarInitials } from '../../utils/labels';
 import { FloodOsLogo } from './FloodOsLogo';
 
 interface HeaderProps {
@@ -106,8 +106,8 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={profileOpen}
               aria-haspopup="true"
             >
-              <div className="h-7 w-7 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold grid place-items-center ring-1 ring-cyan-400/30">
-                {shortName(user?.full_name, user?.username)}
+              <div className="h-7 w-7 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold grid place-items-center ring-1 ring-cyan-400/30 text-xs tracking-wider">
+                {avatarInitials(user?.full_name, user?.username)}
               </div>
               <div className="hidden sm:block">
                 <div className="font-bold text-slate-100 leading-tight">

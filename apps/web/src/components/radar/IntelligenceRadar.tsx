@@ -82,7 +82,7 @@ export const IntelligenceRadar: React.FC<IntelligenceRadarProps> = ({
                       Phương tiện {vehicleId} gặp sự cố kỹ thuật hiện trường
                     </h2>
                     <p className="mt-0.5 text-xs text-slate-700">
-                      {incidentType[inc.incident_type] || inc.incident_type} • Dự kiến xử lý: <strong>{inc.estimated_downtime_hours || 4} giờ</strong>
+                      {incidentType(inc.incident_type) || inc.incident_type} • Dự kiến xử lý: <strong>{inc.estimated_downtime_hours || 4} giờ</strong>
                     </p>
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export const IntelligenceRadar: React.FC<IntelligenceRadarProps> = ({
               >
                 <div>
                   <p className="font-bold text-slate-800">
-                    Phương tiện {inc.vehicle_id || inc.machine_id}: {incidentType[inc.incident_type] || inc.incident_type}
+                    Phương tiện {inc.vehicle_id || inc.machine_id}: {incidentType(inc.incident_type) || inc.incident_type}
                   </p>
                   <p className="text-slate-500 text-[11px]">Mã sự cố: #{inc.incident_id}</p>
                 </div>

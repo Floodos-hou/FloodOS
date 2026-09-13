@@ -43,6 +43,7 @@ interface DispatcherWorkspaceProps {
   vehicles: RescueVehicle[];
   incidents: FieldIncident[];
   zones: FloodZone[];
+  mapElement?: React.ReactNode;
   onVerifyReport: (reportId: string, priority: FloodPriority, notes?: string, decision?: 'VERIFIED' | 'REJECTED') => Promise<void>;
   onDispatchOrder: (data: {
     report_id: string;
@@ -67,6 +68,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
   vehicles,
   incidents,
   zones,
+  mapElement,
   onVerifyReport,
   onDispatchOrder,
   onApproveReplan,
@@ -236,7 +238,10 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Tabs Bar */}
+      {/* Main Cockpit Split Layout (Queue on Left, Tactical Map on Right) */}
+      <div className={mapElement ? "grid grid-cols-1 xl:grid-cols-[480px_minmax(0,1fr)] gap-4 items-start" : "space-y-4"}>
+        <div className="space-y-3 min-w-0">
+          {/* Tabs Bar */}
       <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-2">
         <button
           onClick={() => setActiveTab('UNVERIFIED')}
@@ -302,7 +307,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
       </div>
 
       {/* Main Tab Content */}
-      <div className="grid grid-cols-1 gap-4">
+      <div className={mapElement ? "max-h-[calc(100vh-270px)] overflow-y-auto pr-1 space-y-3" : "grid grid-cols-1 gap-4"}>
         {/* TAB 1: UNVERIFIED */}
         {activeTab === 'UNVERIFIED' && (
           <div>
@@ -511,7 +516,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                               <Truck className="w-3.5 h-3.5" /> Phương tiện:
                             </span>
                             <span className="font-bold text-blue-900">
-                              {assignedVehicle ? `${assignedVehicle.vehicle_name} (${vehicleType[assignedVehicle.vehicle_type] || assignedVehicle.vehicle_type})` : order.vehicle_id}
+                              {assignedVehicle ? `${assignedVehicle.vehicle_name} (${vehicleType(assignedVehicle.vehicle_type) || assignedVehicle.vehicle_type})` : order.vehicle_id}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
@@ -686,6 +691,15 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
           </div>
         )}
       </div>
+        </div>
+
+        {/* Right Column: Embedded Tactical Map */}
+        {mapElement && (
+          <div className="sticky top-20 min-w-0">
+            {mapElement}
+          </div>
+        )}
+      </div>
 
       {/* MODAL 1: VERIFY REPORT */}
       {verifyingReport && (
@@ -844,7 +858,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                 <option value="">Chọn phương tiện khả dụng</option>
                 {vehicles.map((v) => (
                   <option key={v.vehicle_id} value={v.vehicle_id} disabled={!isVehicleAvailable(v, busyVehicleIds)}>
-                    {v.vehicle_name} ({vehicleType[v.vehicle_type] || v.vehicle_type}) - Trạng thái: {v.status} - Nhiên liệu: {v.fuel_percent}%
+                    {v.vehicle_name} ({vehicleType(v.vehicle_type) || v.vehicle_type}) - Trạng thái: {v.status} - Nhiên liệu: {v.fuel_percent}%
                   </option>
                 ))}
               </select>

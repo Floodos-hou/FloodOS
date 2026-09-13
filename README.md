@@ -186,8 +186,21 @@ Trung tâm tác chiến số tại [`apps/web`](apps/web) được xây dựng t
   <img src="docs/assets/screenshots/floodos-replan-radar.png" alt="Radar chi viện và phục hồi đứt gãy sự cố FloodOS" width="100%">
 </p>
 
-### 🔍 6. Trình kiểm chứng bằng chứng mật mã (Proof Inspector)
-- Tích hợp cửa sổ kiểm chứng chuỗi băm SHA-256 trực quan ngay trên giao diện: đối soát phả hệ dữ liệu (`lineage`) và chứng minh tính toàn vẹn của chuỗi sự kiện nối liền từ Genesis block.
+### 🛠️ 6. Quản lý nguồn lực & Hạ tầng điểm sơ tán (Resource Manager Workspace)
+- **Theo dõi phương tiện & Trạm đo:** Giám sát mức nhiên liệu, tình trạng máy, tọa độ thực tế của xuồng và xe lội nước; cảnh báo mực nước tự động tại các trạm đo ngập thủy văn.
+- **Quản lý sức chứa điểm trú ẩn:** Cập nhật số người sơ tán tại các nhà văn hóa, trường học, điểm cao ráo; xử lý và nghiệm thu phiếu sửa chữa kỹ thuật (`repair-ticket`).
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-resource-manager.png" alt="Quản lý nguồn lực và điểm sơ tán FloodOS" width="100%">
+</p>
+
+### 🔐 7. Cổng xác thực công vụ tập trung & Kiểm chứng mật mã (Unified Login & Proof Inspector)
+- **Đăng nhập điều hành OIDC PKCE:** Form đăng nhập công vụ đồng bộ, bảo vệ theo chuẩn RFC 7636 PKCE S256 ngầm qua Keycloak OIDC, không lộ cơ chế demo, tuyệt đối không dùng 2 cổng đăng nhập trùng lặp.
+- **Trình kiểm chứng chuỗi băm:** Tích hợp cửa sổ kiểm chứng chuỗi băm SHA-256 trực quan ngay trên giao diện: đối soát phả hệ dữ liệu (`lineage`) và chứng minh tính toàn vẹn của chuỗi sự kiện nối liền từ Genesis block.
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-login.png" alt="Cổng đăng nhập điều hành công vụ FloodOS" width="100%">
+</p>
 
 ---
 
