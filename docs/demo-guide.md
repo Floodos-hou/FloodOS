@@ -63,9 +63,9 @@ curl -i http://localhost:9080/api/v1/health
 ```
 
 ### 2. Mở giao diện và thực hiện Demo
-- **Cổng điều hành tác chiến:** Truy cập `http://localhost:5173`.
-- **Hỗ trợ kịch bản nổi (Demo Guide):** Bấm nút tròn **🎬 Kịch bản demo** ở góc dưới bên phải màn hình để xem chỉ dẫn chi tiết từng bước và chuyển đổi nhanh giữa các vai trò.
+- **Cổng điều hành tác chiến:** Truy cập `http://localhost:3000` (hoặc `http://localhost:5173` khi chạy Vite dev server).
+- **Thực hiện kịch bản tuần tự theo 7 bước thật:** Đăng nhập vào từng tài khoản công vụ tương ứng (`reporter_lan`, `dispatcher_hoa`, `team_cuong`, `resource_giang`, `team_binh` với mật khẩu `123456`) để thao tác các quy trình nghiệp vụ thực tế qua backend API và Flowable BPMN.
 - **Cổng tra cứu phả hệ công khai (Tầng 3):** Truy cập `http://localhost:9080/trace/CORR-REP-001` để trình diễn tính năng kiểm chứng chuỗi băm độc lập từ kho dữ liệu lạnh Parquet.
 
 ### 3. Đặt lại trạng thái ban đầu để demo lại
-- Trên thanh điều hướng Header, người dùng có vai trò quản trị hoặc ban chỉ huy có thể bấm nút **Đặt lại dữ liệu demo** để hệ thống gọi `POST /api/v1/sim/reset`, làm mới toàn bộ kịch bản về thời điểm bắt đầu.
+- Trên thanh điều hướng Header, người dùng có vai trò quản trị hoặc ban chỉ huy có thể bấm nút **Đặt lại** để hệ thống gọi `POST /api/v1/sim/reset`, làm mới toàn bộ kịch bản về thời điểm bắt đầu phục vụ các lượt trình diễn kế tiếp.

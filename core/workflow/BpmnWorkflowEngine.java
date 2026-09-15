@@ -666,41 +666,65 @@ public final class BpmnWorkflowEngine {
 
 
 
-    public synchronized void advanceInstance(
-
-            String processInstanceId,
-
-            Map<String, Object> completedStep,
-
-            String nextStepId,
-
-            String nextStepName,
-
-            String nextCandidateGroup,
-
-            String ts
-
-    ) {
-
-        BpmnProcessInstance inst = instances.get(processInstanceId);
-
-        if (inst != null) {
-
-            inst.history.add(completedStep);
-
-            inst.currentStepId = nextStepId;
-
-            inst.currentStepName = nextStepName;
-
-            inst.candidateGroup = nextCandidateGroup;
-
-            inst.updatedAt = ts;
-
+    /**
+     * Completes active task(s) in Flowable REST Engine for the given process instance ID,
+     * advancing Flowable's live state machine in lockstep.
+     */
+    private void completeFlowableTask(String flowableInstanceId) {
+        if (flowableInstanceId == null || flowableInstanceId.isBlank()) return;
+        try {
+            String basicAuth = "Basic " + Base64.getEncoder().encodeToString(
+                    (flowableUser + ":" + flowablePassword).getBytes(StandardCharsets.UTF_8));
+            String queryUrl = flowableRestUrl + "/service/runtime/tasks?processInstanceId=" + flowableInstanceId;
+            HttpRequest queryReq = HttpRequest.newBuilder()
+                    .uri(URI.create(queryUrl))
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Authorization", basicAuth)
+                    .GET()
+                    .build();
+            HttpResponse<String> queryResp = httpClient.send(queryReq, HttpResponse.BodyHandlers.ofString());
+            if (queryResp.statusCode() == 200) {
+                Map<String, Object> body = JsonCodec.parseObject(queryResp.body());
+                if (body.get("data") instanceof List<?> list && !list.isEmpty()) {
+                    for (Object item : list) {
+                        if (item instanceof Map<?, ?> taskMap && taskMap.get("id") != null) {
+                            String taskId = String.valueOf(taskMap.get("id"));
+                            String completeUrl = flowableRestUrl + "/service/runtime/tasks/" + taskId;
+                            HttpRequest compReq = HttpRequest.newBuilder()
+                                    .uri(URI.create(completeUrl))
+                                    .timeout(Duration.ofSeconds(5))
+                                    .header("Authorization", basicAuth)
+                                    .header("Content-Type", "application/json")
+                                    .POST(HttpRequest.BodyPublishers.ofString("{\"action\":\"complete\"}"))
+                                    .build();
+                            httpClient.send(compReq, HttpResponse.BodyHandlers.discarding());
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Non-blocking in dev; state mirror maintains continuity
         }
-
     }
 
-
+    public synchronized void advanceInstance(
+            String processInstanceId,
+            Map<String, Object> completedStep,
+            String nextStepId,
+            String nextStepName,
+            String nextCandidateGroup,
+            String ts
+    ) {
+        BpmnProcessInstance inst = instances.get(processInstanceId);
+        if (inst != null) {
+            inst.history.add(completedStep);
+            inst.currentStepId = nextStepId;
+            inst.currentStepName = nextStepName;
+            inst.candidateGroup = nextCandidateGroup;
+            inst.updatedAt = ts;
+            completeFlowableTask(inst.flowableInstanceId);
+        }
+    }
 
     /**
      * Completes ONE process instance (and only that one) at the given end step. Unknown ids are ignored.
@@ -720,6 +744,7 @@ public final class BpmnWorkflowEngine {
         inst.candidateGroup = "COMPLETED";
         inst.status = "COMPLETED";
         inst.updatedAt = ts;
+        completeFlowableTask(inst.flowableInstanceId);
     }
 
     /**

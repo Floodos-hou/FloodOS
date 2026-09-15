@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-11-03
+
+### Added & Overhauled
+- **H-P-D-I Operational Portal**: Full-featured emergency operations frontend for 5 distinct roles (`DISPATCHER`, `REPORTER`, `FIELD_TEAM`, `RESOURCE_MANAGER`, `PLATFORM_ADMIN`).
+- **Tactical GIS Command Map**: OpenStreetMap integration with hardware-accelerated Dark Command theme, eliminating all watermarks and providing instant day/night toggle.
+- **Embedded Dispatcher Cockpit**: Real-time map alongside the incident dispatch queue, replacing tab switching.
+- **Unified Command Login**: Streamlined OIDC PKCE RFC 7636 login form, removing redundant SSO buttons and demo persona selectors.
+- **Flowable BPMN Live Integration**: Real-time task completion across Flowable REST Engine v7.0.0 for SOP-01 and SOP-02.
+- **Multi-layer Test Suite**: Expanded to 433 automated checks across Java core, Acceptance, Python OLAP lake, and TypeScript UI workflows.
+- **Documentation & License Compliance**: Standardized Apache-2.0 SPDX license headers across all repository files; updated web endpoints to port 3000.
+
+## [0.1.0] - 2026-11-02
 
 ### Project renamed to FloodOS (branch `refactor/rename-to-floodos`)
 

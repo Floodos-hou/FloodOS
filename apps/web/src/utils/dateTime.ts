@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 FloodOS Contributors
+
 export function toDateTimeLocal(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';

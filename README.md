@@ -266,7 +266,7 @@ curl -i http://localhost:9080/api/v1/health
 
 | Giao diện / Dịch vụ | Địa chỉ URL | Ghi chú |
 |---|---|---|
-| **Trung tâm tác chiến FloodOS** | `http://localhost:5173` | Giao diện tác chiến 5 vai trò, bản đồ số MapLibre |
+| **Trung tâm tác chiến FloodOS** | `http://localhost:3000` | Cổng web chính thức qua Nginx container (`5173` khi chạy Vite dev) |
 | **Cổng truy xuất công khai Tầng 3** | `http://localhost:9080/trace/CORR-REP-001` | Cổng tra cứu phả hệ & kiểm chứng SHA-256 |
 | **Keycloak Identity Console** | `http://localhost:8080` | Quản trị định danh & realm `floodos` |
 | **APISIX Gateway Dashboard** | `http://localhost:9080` | Cổng Zero-Trust Gateway quản trị định tuyến |
@@ -305,9 +305,11 @@ bash tests/e2e_full_stack_test.sh
   [Java Core & Apps Unit Tests]     : 191/191 PASS  (100%)
   [Acceptance Golden Path Tests]    :  50/50  PASS  (100%)
   [Python Lake & Telemetry Tests]   : 114/114 PASS  (100%)
-  [Web Tactical Frontend Tests]     :  13/13  PASS  (100%)
+  [Web Tactical Frontend Tests]     :  33/33  PASS  (100%)
   [Digital Twin 3D Logic Tests]     :  33/33  PASS  (100%)
   [Full-Stack Container Assertions] :  12/12  PASS  (100%)
+========================================================================
+  TOTAL AUTOMATED TEST COVERAGE     : 433/433 PASS  (100%)
 ========================================================================
 ```
 
