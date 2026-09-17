@@ -29,6 +29,11 @@ async function testUser(username, expectedText, screenshotName) {
   await page.waitForSelector('#username');
   await page.waitForSelector('#password');
 
+  if (screenshotName === 'login_dispatcher_success.png') {
+    await page.screenshot({ path: 'scratch/login_screen_clean.png', fullPage: true });
+    console.log('Saved clean login page screenshot to scratch/login_screen_clean.png');
+  }
+
   // Type credentials
   await page.$eval('#username', el => { el.value = ''; });
   await page.type('#username', username);
