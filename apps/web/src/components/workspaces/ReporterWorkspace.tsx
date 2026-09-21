@@ -136,26 +136,30 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
   return (
     <div className="space-y-6">
       {/* Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-sky-900 to-blue-900 p-6 text-white shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-900 p-5 text-white border border-slate-800 shadow-xl">
         <div>
-          <h2 className="text-2xl font-bold">Cổng Tiếp nhận Cứu trợ Người dân</h2>
-          <p className="mt-1 text-sm text-sky-100">
-            Khu vực của bạn đang ngập hoặc cần hỗ trợ y tế, sơ tán? Hãy gửi tin báo ngay để Ban Chỉ huy điều phối lực lượng.
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-950 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-400 border border-cyan-800/60 mb-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            Cổng Tiếp Nhận Ứng Cứu Khẩn Cấp &amp; Sơ Tán
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-white">Gửi Tin Báo Ngập &amp; Yêu Cầu Cứu Trợ</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            Khu vực của bạn đang ngập hoặc cần hỗ trợ sơ tán người già, trẻ nhỏ? Gửi tin báo ngay để Ban Chỉ Huy PCTT điều phối lực lượng.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-6 py-3.5 text-base font-bold text-slate-950 shadow-lg hover:bg-amber-400 transition"
+          className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-rose-950 hover:bg-rose-500 transition"
         >
-          <AlertTriangle className="h-5 w-5" />
-          <span>🚨 Báo điểm ngập khẩn cấp</span>
+          <AlertTriangle className="h-4 w-4" />
+          <span>Báo điểm ngập khẩn cấp</span>
         </button>
       </div>
 
       {/* Reports List */}
       <section className="space-y-4">
-        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
           <span>Tin báo ngập của tôi</span>
           <span className="text-sm font-semibold text-slate-500">({reports.length} tin)</span>
         </h3>
@@ -177,13 +181,13 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
               return (
                 <div
                   key={r.report_id}
-                  className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md hover:shadow-lg transition space-y-4"
+                  className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl hover:border-slate-700 transition space-y-3.5 text-slate-100"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{nt.icon}</span>
-                        <h4 className="text-lg font-bold text-slate-900">{nt.text}</h4>
+                        <h4 className="text-base font-bold text-white">{nt.text}</h4>
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         Mã tin: <strong>{r.report_id}</strong> · {new Date(r.created_at).toLocaleTimeString('vi-VN')}
@@ -201,18 +205,18 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                     </div>
                   </div>
 
-                  <p className="rounded-2xl bg-slate-50 p-3.5 text-sm text-slate-800 italic border border-slate-100">
+                  <p className="rounded-xl bg-slate-950 p-3 text-xs text-slate-300 italic border border-slate-800/80">
                     "{r.description}"
                   </p>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-2xl">
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 font-mono">
                     <div>Mực nước: <strong className="text-cyan-800">{r.depth_cm} cm</strong></div>
                     <div>Số người cần cứu: <strong>{r.people_affected} người</strong></div>
                   </div>
 
                   {/* Order assignment notice if dispatched */}
                   {relatedOrder && (
-                    <div className="rounded-2xl bg-sky-50 p-3 border border-sky-200 text-xs text-sky-900 space-y-1">
+                    <div className="rounded-xl bg-sky-950/70 p-3 border border-sky-800/60 text-xs text-sky-200 space-y-1">
                       <div>Lực lượng điều động: <strong>{relatedOrder.team_name || relatedOrder.team_id}</strong></div>
                       <div>Phương tiện: <strong>{relatedOrder.vehicle_name || relatedOrder.vehicle_id}</strong></div>
                       <div>Tiến độ: <strong>{Math.round(relatedOrder.progress_pct || 0)}%</strong></div>
@@ -266,6 +270,40 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
             })}
           </div>
         )}
+      </section>
+
+
+      {/* Live Safe Shelters Finder Section */}
+      <section className="space-y-3 pt-4 border-t border-slate-800">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <span>Điểm sơ tán an toàn lân cận</span>
+            <span className="text-xs font-mono font-semibold text-slate-400">({shelters.length} điểm)</span>
+          </h3>
+          <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Trực ban 24/7
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {shelters.map((sh) => (
+            <div key={sh.shelter_id} className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 shadow-md flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="font-bold text-white text-sm">{sh.name}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/70 font-mono font-bold">
+                    {sh.occupancy ?? 0}/{sh.capacity} chỗ
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mb-2 leading-relaxed">{sh.address}</p>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800 pt-2 font-mono">
+                <span className="text-emerald-400 font-semibold">Mở cửa tiếp nhận</span>
+                <span>[{sh.lat.toFixed(4)}, {sh.lng.toFixed(4)}]</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Create Flood Report Modal */}

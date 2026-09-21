@@ -387,7 +387,7 @@ export const App: React.FC = () => {
   );
 
   return (
-    <div className={`min-h-screen flex flex-col text-slate-800 ${isStaff ? 'pb-20' : 'pb-10'}`}>
+    <div className={`min-h-screen flex flex-col text-slate-100 bg-slate-950 ${isStaff ? 'pb-20' : 'pb-10'}`}>
       <Header
         simTime={state?.sim_clock?.sim_time || ''}
         onTick={handleSimTick}
@@ -400,9 +400,9 @@ export const App: React.FC = () => {
       {/* Navigation */}
       <nav
         aria-label="Điều hướng chính"
-        className="sticky top-[68px] z-20 border-b border-slate-200 bg-white/95 backdrop-blur shadow-sm"
+        className="sticky top-[68px] z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md shadow-xl"
       >
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
+        <div className="mx-auto flex max-w-[1720px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
           {/* Main Action Tabs */}
           <div className="flex items-center gap-2 overflow-x-auto">
             {tabs.map((t) => (
@@ -411,17 +411,17 @@ export const App: React.FC = () => {
                 type="button"
                 onClick={() => setActiveTab(t.id)}
                 aria-current={activeTab === t.id ? 'page' : undefined}
-                className={`relative flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
+                className={`relative flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition border ${
                   activeTab === t.id
-                    ? 'bg-blue-900 text-white shadow'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    ? 'bg-cyan-600 text-white border-cyan-500 shadow-lg shadow-cyan-950/60'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <span aria-hidden="true">{t.icon}</span>
                 <span>{t.label}</span>
                 {t.alert && (
                   <span
-                    className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse"
+                    className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-rose-500 ring-2 ring-slate-950 animate-pulse"
                     role="img"
                     aria-label="Có sự cố khẩn cấp"
                   />
@@ -436,17 +436,17 @@ export const App: React.FC = () => {
               type="button"
               onClick={loadTacticalState}
               disabled={isLoading}
-              className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-100 transition shadow-sm"
+              className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 border border-slate-700 hover:bg-slate-800 transition shadow-sm"
               title="Làm mới trạng thái từ Gateway"
             >
               <RefreshCw
                 aria-hidden="true"
-                className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-blue-700' : ''}`}
+                className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`}
               />
               <span className="hidden sm:inline">Cập nhật</span>
             </button>
             {stateUpdatedAt && (
-              <span className="hidden xl:inline text-xs text-slate-500" aria-live="polite">
+              <span className="hidden xl:inline text-xs font-mono text-slate-400" aria-live="polite">
                 {stateUpdatedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
@@ -454,7 +454,7 @@ export const App: React.FC = () => {
         </div>
       </nav>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 sm:p-6">
+      <main className="mx-auto w-full max-w-[1720px] flex-1 space-y-4 p-3 sm:p-5">
         {notice && (
           <div
             role={notice.kind === 'err' ? 'alert' : 'status'}
