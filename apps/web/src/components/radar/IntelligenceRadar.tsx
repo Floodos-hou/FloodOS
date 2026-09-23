@@ -2,14 +2,14 @@
 // Copyright 2026 FloodOS Contributors
 
 import React from 'react';
-import { FieldIncident, MachineIncident, UserRole } from '../../types';
+import { FieldIncident, UserRole } from '../../types';
 import { formatLocalTime } from '../../utils/dateTime';
 import { incidentStatus, incidentType, severity } from '../../utils/labels';
 import { StatusBadge } from '../common/StatusBadge';
 import { ShieldAlert, CheckCircle2, Waves, Compass, AlertTriangle, Truck } from 'lucide-react';
 
 interface IntelligenceRadarProps {
-  incidents: (FieldIncident | MachineIncident | any)[];
+  incidents: FieldIncident[];
   currentUserRole: UserRole;
   onApproveRescue?: (incidentId: string, optionId: string) => void;
   conflictError?: { code: string; message: string; details?: any } | null;

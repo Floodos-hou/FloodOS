@@ -53,15 +53,15 @@
     <rect x="14" y="60" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
     <circle cx="34" cy="86" r="12" fill="#3B82F6" fill-opacity="0.2"/>
     <text x="34" y="90" font-family="system-ui, sans-serif" font-size="11" fill="#60A5FA" text-anchor="middle">👤</text>
-    <text x="56" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Điều phối viên HTX</text>
-    <text x="56" y="96" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: COORDINATOR | HTX_CT_01</text>
+    <text x="56" y="80" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Điều phối viên PCTT</text>
+    <text x="56" y="96" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: DISPATCHER | BCH_HN_01</text>
 
     <!-- Actor 2 -->
     <rect x="14" y="122" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
     <circle cx="34" cy="148" r="12" fill="#10B981" fill-opacity="0.2"/>
     <text x="34" y="152" font-family="system-ui, sans-serif" font-size="11" fill="#34D399" text-anchor="middle">🚜</text>
-    <text x="56" y="142" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Lái máy gặt / Thiết bị</text>
-    <text x="56" y="158" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: OPERATOR | HTX_CT_01</text>
+    <text x="56" y="142" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">Đội cứu hộ hiện trường</text>
+    <text x="56" y="158" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Role: FIELD_TEAM | BCH_HN_01</text>
 
     <!-- Actor 3 -->
     <rect x="14" y="184" width="212" height="52" rx="8" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
@@ -119,7 +119,7 @@
     <text x="28" y="254" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Injects Upstream Headers:</text>
     <rect x="26" y="262" width="218" height="58" rx="6" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
     <text x="34" y="278" font-family="monospace" font-size="8.5" fill="#38BDF8">X-User-Id: u-coordinator-01</text>
-    <text x="34" y="292" font-family="monospace" font-size="8.5" fill="#34D399">X-Org-Id: HTX_CT_01</text>
+    <text x="34" y="292" font-family="monospace" font-size="8.5" fill="#34D399">X-Org-Id: BCH_HN_01</text>
     <text x="34" y="306" font-family="monospace" font-size="8.5" fill="#FBBF24">X-User-Roles: COORDINATOR</text>
 
     <!-- Plugin 3: Upstream Routing -->
@@ -166,8 +166,8 @@
     <rect x="16" y="320" width="238" height="95" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
     <text x="28" y="344" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#A7F3D0">🌫️ FOG OF WAR (MÀN SƯƠNG BẢO MẬT)</text>
     <text x="28" y="362" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">• Che giấu hoàn toàn dữ liệu máy móc,</text>
-    <text x="28" y="376" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">thửa ruộng giữa các HTX độc lập.</text>
-    <text x="28" y="392" font-family="monospace" font-size="9" fill="#F87171">HTX_CT_01 ⊄ HTX_ST_02 (ZERO LEAK)</text>
+    <text x="28" y="376" font-family="system-ui, sans-serif" font-size="9.5" fill="#CBD5E1">vụ việc giữa các đơn vị PCTT độc lập.</text>
+    <text x="28" y="392" font-family="monospace" font-size="9" fill="#F87171">BCH_HN_01 ⊄ BCH_HN_02 (ZERO LEAK)</text>
     <text x="28" y="406" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">Ngăn chặn lộ bí mật vị trí &amp; sản lượng</text>
 
     <!-- S3 Storage Hash Sealing -->
@@ -193,7 +193,7 @@
     <text x="24" y="120" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">Thực thi tại mỗi kết nối DB:</text>
     <rect x="20" y="126" width="210" height="66" rx="5" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
     <text x="26" y="142" font-family="monospace" font-size="8" fill="#FCD34D">SET LOCAL app.current_org_id</text>
-    <text x="26" y="154" font-family="monospace" font-size="8" fill="#4ADE80">  = 'HTX_CT_01';</text>
+    <text x="26" y="154" font-family="monospace" font-size="8" fill="#4ADE80">  = 'BCH_HN_01';</text>
     <text x="26" y="168" font-family="monospace" font-size="8" fill="#FCD34D">SET LOCAL app.current_user_role</text>
     <text x="26" y="180" font-family="monospace" font-size="8" fill="#38BDF8">  = 'COORDINATOR';</text>
 
@@ -215,7 +215,7 @@
     <text x="24" y="406" font-family="system-ui, sans-serif" font-size="9" fill="#CBD5E1">Chuỗi băm tuần tự chống sửa đổi:</text>
     <rect x="20" y="414" width="210" height="102" rx="5" fill="#0F172A" stroke="#334155" stroke-width="0.6"/>
     <text x="26" y="430" font-family="monospace" font-size="8" fill="#A78BFA">Block #481: PrevHash [6f4a...]</text>
-    <text x="26" y="444" font-family="monospace" font-size="8" fill="#60A5FA">   ↓ Event: M01_BROKEN</text>
+    <text x="26" y="444" font-family="monospace" font-size="8" fill="#60A5FA">   ↓ Event: V02_BROKEN</text>
     <text x="26" y="458" font-family="monospace" font-size="8" fill="#A78BFA">Block #482: PrevHash [8b7e...]</text>
     <text x="26" y="472" font-family="monospace" font-size="8" fill="#60A5FA">   ↓ Event: M02_REPLAN_APPROVED</text>
     <text x="26" y="486" font-family="monospace" font-size="8" fill="#34D399">Block #483: Sealed Hash Chain</text>

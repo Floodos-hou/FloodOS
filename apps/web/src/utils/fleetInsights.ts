@@ -16,8 +16,8 @@ export interface MachineLike {
   current_lng: number;
 }
 
-export interface FieldLike {
-  harvest_progress_pct?: number;
+export interface ZoneLike {
+  progress_pct?: number;
   visibility?: string;
 }
 
@@ -78,14 +78,14 @@ export interface FleetKpis {
   moving: number;
   avgFuelPct: number;
   lowFuel: number;
-  avgHarvestPct: number;
+  avgProgressPct: number;
   activeShifts: number;
 }
 
 /** Headline numbers for the KPI strip. */
-export function computeKpis(machines: MachineLike[], fields: FieldLike[], assignments: AssignmentLike[]): FleetKpis {
+export function computeKpis(machines: MachineLike[], zones: ZoneLike[], assignments: AssignmentLike[]): FleetKpis {
   const count = (s: string) => machines.filter((m) => m.status === s).length;
-  const visible = fields.filter((f) => f.visibility === undefined || f.visibility === 'FULL');
+  const visible = zones.filter((z) => z.visibility === undefined || z.visibility === 'FULL');
   const avg = (xs: number[]) => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
   return {
     machines: machines.length,
@@ -96,7 +96,7 @@ export function computeKpis(machines: MachineLike[], fields: FieldLike[], assign
     moving: count('MOVING') + count('EN_ROUTE'),
     avgFuelPct: Math.round(avg(machines.map((m) => m.fuel_pct ?? 100)) * 10) / 10,
     lowFuel: machines.filter((m) => (m.fuel_pct ?? 100) < 25).length,
-    avgHarvestPct: Math.round(avg(visible.map((f) => f.harvest_progress_pct ?? 0)) * 10) / 10,
+    avgProgressPct: Math.round(avg(visible.map((z) => z.progress_pct ?? 0)) * 10) / 10,
     activeShifts: assignments.filter((a) => a.status === 'IN_PROGRESS' || a.status === 'DISPATCHED' || a.status === 'ON_SCENE').length,
   };
 }

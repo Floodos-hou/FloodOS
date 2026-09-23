@@ -105,7 +105,6 @@ services:
     depends_on:
       - core-api
       - web-app
-      - twin-app
 
   # 6. FLOODOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
   core-api:
@@ -344,21 +343,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 180s
-
-  # 15. TIER-2 APP #2: true-scale 3D digital twin of the same Tier-1 platform data (served by the gateway under /twin/)
-  twin-app:
-    build:
-      context: ./apps
-      dockerfile: twin3d/Dockerfile
-      args:
-        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
-    container_name: floodos-twin-app
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   pgdata:

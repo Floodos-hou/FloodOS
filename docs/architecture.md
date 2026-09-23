@@ -5,10 +5,8 @@ FloodOS theo mô hình **DX-OS Open-Core** của đề thi OLP 2026: tách **N�
 > Trạng thái từng thành phần (Có / Mô phỏng / Chưa có) nằm ở [README, mục 3](../README.md). Tài liệu này mô tả thiết kế và nói rõ phần nào chưa làm.
 
 <p align="center">
-  <img src="assets/architecture_diagram.svg" alt="Sơ đồ kiến trúc nền (một số nhãn trong hình còn theo nguyên mẫu cũ; sơ đồ Mermaid bên dưới là bản đúng)" width="100%">
+  <img src="assets/architecture_diagram.svg" alt="Sơ đồ kiến trúc nền FloodOS" width="100%">
 </p>
-
-> **Lưu ý về hình SVG**: `assets/*.svg` được vẽ cho nguyên mẫu thu hoạch lúa; nhãn nghiệp vụ trong ảnh chưa được vẽ lại. Sơ đồ Mermaid dưới đây phản ánh đúng mã nguồn hiện tại.
 
 ```mermaid
 flowchart TD
@@ -18,7 +16,7 @@ flowchart TD
     end
 
     subgraph T2 ["TẦNG 2 — KHÔNG GIAN NĂNG LỰC H-P-D-I"]
-        UI["Giao diện: CHƯA làm lại cho FloodOS (apps/web, apps/twin3d là UI cũ)"]
+        UI["apps/web — Giao diện tác chiến FloodOS (React 19, MapLibre GL, TailwindCSS)"]
     end
 
     subgraph T1 ["TẦNG 1 — LÕI HEADLESS (core/ + dịch vụ hạ tầng), KHÔNG chứa từ của nghiệp vụ"]
@@ -96,8 +94,6 @@ Giao diện tác chiến FloodOS ([`apps/web`](../apps/web)) được xây dựn
 - **Process:** Trực quan hóa tiến trình thực thi quy trình cứu nạn Flowable BPMN SOP-01 và SOP-02.
 - **Data:** Bản đồ GIS MapLibre GL thời gian thực, tích hợp dữ liệu vùng ngập, trạm đo thủy văn và phương tiện cứu hộ không có watermark.
 - **Intelligence:** Radar chi viện tính toán khoảng cách Haversine và thuật toán chấm điểm thay thế tức thì khi phương tiện gặp sự cố.
-
-Giao diện 3D Digital Twin ([`apps/twin3d`](../apps/twin3d)) phục vụ mô phỏng không gian ba chiều mô hình ngập lụt thủy văn.
 
 ## 4. Tầng 3 — Truy xuất vụ việc công khai (`apps/traceability`)
 

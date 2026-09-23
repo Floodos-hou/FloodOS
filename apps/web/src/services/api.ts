@@ -100,115 +100,19 @@ export const api = {
   // --------------------------------------------------------------------------
   async getTacticalState(token: string): Promise<TacticalState> {
     const raw = await request<any>('/state', {}, token);
-    // Enrich with backwards-compatibility aliases so apps/twin3d functions cleanly
-    const zones = raw.zones || [];
-    const vehicles = raw.vehicles || [];
-    const reports = raw.reports || [];
-    const orders = raw.orders || [];
-    const teams = raw.teams || [];
-
-    const fields = zones.map((z: any) => ({
-      field_id: z.zone_id,
-      organization_id: z.organization_id,
-      owner_user_id: '',
-      owner_name: z.name,
-      name: z.name,
-      hamlet: 'Địa bàn Hà Nội',
-      crop: 'Vùng ngập lụt',
-      area_ha: z.polygon && z.polygon[0] ? 1.0 : 0.5,
-      readiness_status: z.risk_level === 'CRITICAL' ? 'HARVESTING' : 'GROWING',
-      harvest_progress_pct: z.risk_level === 'CRITICAL' ? 80 : 20,
-      window_start: '',
-      window_end: '',
-      center_lat: z.center_lat,
-      center_lng: z.center_lng,
-      polygon: z.polygon || [],
-      visibility: z.visibility || 'FULL',
-    }));
-
-    const machines = vehicles.map((v: any) => ({
-      machine_id: v.vehicle_id,
-      organization_id: v.organization_id,
-      owner_user_id: v.manager_user_id,
-      name: v.name,
-      machine_type: v.vehicle_type,
-      model: v.vehicle_type,
-      capacity_ha_per_hr: v.capacity_value,
-      status: v.status || 'IDLE',
-      fuel_pct: v.fuel_pct || 80,
-      health_pct: v.health_pct || 95,
-      current_lat: v.current_lat,
-      current_lng: v.current_lng,
-      assigned_operator_id: v.assigned_team_id || '',
-      telemetry_updated_at: v.telemetry_updated_at || '',
-      visibility: v.visibility || 'FULL',
-    }));
-
-    const service_requests = reports.map((r: any) => ({
-      request_id: r.report_id,
-      organization_id: r.organization_id,
-      field_id: r.zone_id,
-      requester_user_id: r.reporter_user_id,
-      area_ha: 1.0,
-      requested_start: r.created_at,
-      requested_end: '',
-      priority: r.priority,
-      status: r.status,
-      bpmn_process_id: r.bpmn_process_id,
-      correlation_id: r.correlation_id,
-      notes: r.description,
-      created_at: r.created_at,
-    }));
-
-    const assignments = orders.map((o: any) => ({
-      assignment_id: o.order_id,
-      organization_id: o.organization_id,
-      request_id: o.report_id,
-      field_id: o.zone_id,
-      machine_id: o.vehicle_id,
-      operator_id: o.team_id,
-      start_time: o.start_time,
-      end_time: o.end_time,
-      status: o.status,
-      replaces_assignment_id: o.replaces_order_id,
-      superseded_by_assignment_id: o.superseded_by_order_id,
-      correlation_id: o.correlation_id,
-      created_by_user_id: o.created_by,
-      created_at: o.created_at,
-      field_name: o.zone_name,
-      machine_name: o.vehicle_name,
-      operator_name: o.team_name,
-    }));
-
-    const operators = teams.map((t: any) => ({
-      operator_id: t.team_id,
-      user_id: t.lead_user_id,
-      organization_id: t.organization_id,
-      full_name: t.name,
-      skills: t.skills || [],
-      rating: t.rating || 5,
-      status: t.status || 'AVAILABLE',
-    }));
-
     return {
       ...raw,
-      zones,
-      vehicles,
-      reports,
-      orders,
-      teams,
+      zones: raw.zones || [],
+      vehicles: raw.vehicles || [],
+      reports: raw.reports || [],
+      orders: raw.orders || [],
+      teams: raw.teams || [],
       incidents: raw.incidents || [],
       resolutions: raw.resolutions || [],
       shelters: raw.shelters || [],
       gauges: raw.gauges || [],
       bpmn_instances: raw.bpmn_instances || [],
       audit_logs: raw.audit_logs || [],
-      fields,
-      machines,
-      service_requests,
-      assignments,
-      operators,
-      acceptances: [],
     };
   },
 
@@ -443,112 +347,5 @@ export const api = {
   async simTick(token: string) {
     // Stub for UI simulation clock tick
     return { ok: true };
-  },
-
-  // --------------------------------------------------------------------------
-  // Backward-compatibility wrappers for legacy code & twin3d
-  // --------------------------------------------------------------------------
-  async createRequest(
-    token: string,
-    payload: {
-      field_id: string;
-      requested_start: string;
-      requested_end: string;
-      priority: string;
-      notes: string;
-    }
-  ) {
-    return this.createFloodReport(token, {
-      lat: 20.9662,
-      lng: 105.8714,
-      depth_cm: 50,
-      need_type: 'EVACUATION',
-      people_affected: 4,
-      description: payload.notes || 'Cần hỗ trợ ngập lụt',
-      zone_id: payload.field_id,
-    });
-  },
-
-  async dispatchAssignment(
-    token: string,
-    payload: {
-      request_id: string;
-      field_id?: string;
-      machine_id: string;
-      operator_id: string;
-      start_time: string;
-      end_time: string;
-    }
-  ) {
-    return this.createDispatchOrder(token, {
-      report_id: payload.request_id,
-      vehicle_id: payload.machine_id,
-      team_id: payload.operator_id,
-      start_time: payload.start_time,
-      end_time: payload.end_time,
-    });
-  },
-
-  async updateAssignmentStatus(
-    token: string,
-    asgId: string,
-    payload: { status: 'IN_PROGRESS' | 'COMPLETED'; progress_pct?: number; note?: string }
-  ) {
-    return this.updateOrderStatus(token, asgId, {
-      status: payload.status,
-      progress_pct: payload.progress_pct,
-      outcome: 'COMPLETED',
-      final_depth_cm: 10,
-    });
-  },
-
-  async reportIncident(
-    token: string,
-    payload: {
-      machine_id: string;
-      severity: string;
-      incident_type: string;
-      description: string;
-      estimated_downtime_hours: number;
-      evidence_filename?: string;
-      evidence_data_url?: string;
-    }
-  ) {
-    return this.reportFieldIncident(token, {
-      vehicle_id: payload.machine_id,
-      severity: payload.severity,
-      incident_type: payload.incident_type || 'PROPELLER_FOULED',
-      description: payload.description,
-      estimated_downtime_hours: payload.estimated_downtime_hours,
-      evidence_filename: payload.evidence_filename,
-      evidence_data_url: payload.evidence_data_url,
-    });
-  },
-
-  async updateRepair(
-    token: string,
-    incidentId: string,
-    payload: { diagnosis?: string; is_resolved?: boolean }
-  ) {
-    return this.updateRepairTicket(token, incidentId, {
-      action: payload.is_resolved ? 'RESOLVED' : 'IN_PROGRESS',
-      notes: payload.diagnosis || 'Đã sửa chữa',
-    });
-  },
-
-  async confirmAcceptance(
-    token: string,
-    payload: {
-      assignment_id: string;
-      action?: string;
-      rating?: number;
-      notes?: string;
-    }
-  ) {
-    return this.confirmResolution(token, {
-      decision: 'CONFIRMED',
-      notes: payload.notes || 'Xác nhận an toàn',
-      assignment_id: payload.assignment_id,
-    });
   },
 };

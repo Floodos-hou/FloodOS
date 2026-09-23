@@ -38,5 +38,5 @@ Mọi yêu cầu kỹ thuật phải được triển khai theo chu trình chu�
 
 ## 4. TIÊU CHUẨN CHẤT LƯỢNG CAO NHẤT (PRODUCTION-GRADE STANDARDS)
 - **Fail-Fast & Zero Silent Errors:** Khi thiếu cấu hình bắt buộc trên production, hệ thống phải báo lỗi dừng ngay lập tức thay vì âm thầm hoạt động sai lệch.
-- **Bảo toàn dữ liệu & Quyền riêng tư:** Kiểm chứng nghiêm ngặt Row Level Security (RLS) để nông hộ, điều phối viên, đối tác chỉ thấy đúng phạm vi dữ liệu được phép.
+- **Bảo toàn dữ liệu & Quyền riêng tư:** Kiểm chứng nghiêm ngặt Row Level Security (RLS) để người báo tin, điều phối viên, đội hiện trường, đối tác chỉ thấy đúng phạm vi dữ liệu được phép.
 - **Báo cáo trung thực & Minh chứng rõ ràng:** Sau khi thực thi, luôn cung cấp kết quả lệnh, mã thoát (exit code), logs xác nhận và đường dẫn tệp cụ thể để người dùng có thể đối chứng tức thì.

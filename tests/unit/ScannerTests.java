@@ -156,7 +156,7 @@ final class ScannerTests {
         test("a clean file is reported clean and counted", () -> {
             try (FakeClamd f = new FakeClamd()) {
                 MalwareScanner s = scannerFor(f, 3000, 1 << 20);
-                MalwareScanner.Verdict v = s.scan("hello harvest".getBytes(StandardCharsets.UTF_8));
+                MalwareScanner.Verdict v = s.scan("hello flood relief".getBytes(StandardCharsets.UTF_8));
                 isTrue(v.clean(), "clean");
                 equal(1L, s.status().get("scanned"), "scanned counter");
                 equal(0L, s.status().get("infected"), "infected counter");

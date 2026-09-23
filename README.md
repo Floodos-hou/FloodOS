@@ -105,7 +105,6 @@ flowchart TD
 
     subgraph T2 ["TẦNG 2 — KHÔNG GIAN NĂNG LỰC H-P-D-I"]
         WEB["💻 apps/web — Trung tâm tác chiến số (React 19, MapLibre GL, TailwindCSS)"]
-        TWIN["🌐 apps/twin3d — Bản sao số 3D (Three.js, WebGL)"]
     end
 
     subgraph T1 ["TẦNG 1 — NỀN TẢNG DỊCH VỤ LÕI HEADLESS (Domain-Neutral Core PaaS)"]
@@ -119,7 +118,6 @@ flowchart TD
     end
 
     WEB -->|REST / PKCE| GW
-    TWIN -->|REST| GW
     TR -->|Read-only| LAKE
     GW --> IAM
     GW --> FO
