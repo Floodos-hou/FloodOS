@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import type { FloodReport, DispatchOrder, FloodZone, SafeShelter, ReportResolution } from '../../types';
 import { needType, reportStatus, priority } from '../../utils/labels';
+import { StatusBadge } from '../common/StatusBadge';
 import { Modal } from '../common/Modal';
 import { resolutionIdForReport, validateDisputeReason, validateReportDescription } from '../../utils/workflowRules';
 import { AlertTriangle, CheckCircle2, Waves, Send, GitBranch } from 'lucide-react';
@@ -28,12 +29,10 @@ interface ReporterWorkspaceProps {
   onOpenLineage?: (corrId: string) => void;
 }
 
-const HANOI_PRESETS = [
-  { label: 'Hoàng Mai - Định Công (Khu trũng ven sông)', lat: 20.9782, lng: 105.8450 },
-  { label: 'Đống Đa - Nguyễn Khuyến / Văn Miếu', lat: 21.0264, lng: 105.8361 },
-  { label: 'Thanh Trì - Triều Khúc / Tân Triều', lat: 20.9850, lng: 105.7984 },
-  { label: 'Nam Từ Liêm - Phú Đô / Lê Quang Đạo', lat: 21.0150, lng: 105.7720 },
-  { label: 'Tây Hồ - Thụy Khuê / Trích Sài', lat: 21.0451, lng: 105.8182 },
+const DEFAULT_HANOI_PRESETS = [
+  { label: 'Hoàng Mai (Khu trũng ven sông - mô phỏng PCTT)', lat: 20.9782, lng: 105.8450 },
+  { label: 'Điểm trũng ven sông B (mô phỏng PCTT)', lat: 20.9585, lng: 105.8835 },
+  { label: 'Cụm trũng thấp C (mô phỏng PCTT)', lat: 20.9730, lng: 105.8590 },
   { label: 'Tự nhập tọa độ thủ công', lat: 20.9662, lng: 105.8714 },
 ];
 
@@ -49,8 +48,9 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [presetIndex, setPresetIndex] = useState(0);
-  const [lat, setLat] = useState(HANOI_PRESETS[0].lat);
-  const [lng, setLng] = useState(HANOI_PRESETS[0].lng);
+  const activePresets = zones.length > 0 ? [...zones.map((z) => ({ label: `${z.name} (Điểm giám sát PCTT)`, lat: z.center_lat, lng: z.center_lng })), { label: 'Tự nhập tọa độ thủ công', lat: 20.9662, lng: 105.8714 }] : DEFAULT_HANOI_PRESETS;
+  const [lat, setLat] = useState(activePresets[0].lat);
+  const [lng, setLng] = useState(activePresets[0].lng);
   const [depthCm, setDepthCm] = useState(55);
   const [need, setNeed] = useState('EVACUATION');
   const [peopleAffected, setPeopleAffected] = useState(5);
@@ -165,7 +165,7 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
         </h3>
 
         {reports.length === 0 ? (
-          <div className="rounded-3xl border-2 border-dashed border-slate-300 p-12 text-center text-slate-500 bg-white">
+          <div className="rounded-3xl border-2 border-dashed border-slate-800 p-12 text-center text-slate-400 bg-slate-900/60">
             <Waves className="mx-auto h-12 w-12 text-slate-400" />
             <p className="mt-3 text-base font-semibold">Bạn chưa gửi tin báo ngập nào.</p>
             <p className="text-xs text-slate-400 mt-1">Khi gặp sự cố ngập lụt, hãy bấm nút báo tin ở trên.</p>
@@ -194,9 +194,7 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-0.5 text-xs font-bold text-sky-800">
-                        {st.icon} {st.text}
-                      </span>
+                      <StatusBadge status={r.status} type="report" />
                       {r.priority && (
                         <span className="text-[11px] font-semibold text-slate-500">
                           Ưu tiên: <strong>{prio.text}</strong>
@@ -210,7 +208,7 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                   </p>
 
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 font-mono">
-                    <div>Mực nước: <strong className="text-cyan-800">{r.depth_cm} cm</strong></div>
+                    <div>Mực nước: <strong className="text-cyan-400 font-mono">{r.depth_cm} cm</strong></div>
                     <div>Số người cần cứu: <strong>{r.people_affected} người</strong></div>
                   </div>
 
@@ -325,21 +323,21 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                 onChange={(e) => {
                   const idx = Number(e.target.value);
                   setPresetIndex(idx);
-                  if (idx < HANOI_PRESETS.length) {
-                    setLat(HANOI_PRESETS[idx].lat);
-                    setLng(HANOI_PRESETS[idx].lng);
+                  if (idx < activePresets.length) {
+                    setLat(activePresets[idx].lat);
+                    setLng(activePresets[idx].lng);
                   }
                 }}
                 className="w-full rounded-xl border border-slate-300 p-2.5 text-sm font-semibold focus:border-sky-500 focus:outline-none mb-2"
               >
-                {HANOI_PRESETS.map((p, idx) => (
+                {activePresets.map((p, idx) => (
                   <option key={p.label} value={idx}>
                     📍 {p.label}
                   </option>
                 ))}
               </select>
 
-              {presetIndex === HANOI_PRESETS.length - 1 && (
+              {presetIndex === activePresets.length - 1 && (
                 <div className="grid grid-cols-2 gap-2 mt-1 mb-2">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500">Vĩ độ (Latitude)</label>

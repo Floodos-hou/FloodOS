@@ -14,6 +14,7 @@ import {
   orderStatus,
   needType,
   vehicleType,
+  vehicleStatus,
   incidentType,
 } from '../../utils/labels';
 import { Modal } from '../common/Modal';
@@ -208,7 +209,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
               {myTeam ? myTeam.team_name : 'Đội Ứng Cứu Xung Kích'}
             </h2>
             <p className="text-xs text-blue-200">
-              Đội trưởng: <strong>{myTeam?.leader_name || 'Nguyễn Văn Cường'}</strong> • Chuyên trách: {myTeam?.specialty || 'Cứu hộ vùng ngập sâu'}
+              Đội trưởng: <strong>{myTeam?.leader_name || 'Chưa phân công'}</strong> • Chuyên trách: {myTeam?.specialty || 'Cứu hộ vùng ngập sâu'}
             </p>
           </div>
         </div>
@@ -216,7 +217,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
         <div className="flex items-center gap-2">
           <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 border border-emerald-400 text-emerald-300 flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
-            Tín hiệu bộ đàm thông suốt
+            Kênh Điều Hành C2 Trực Tuyến
           </span>
         </div>
       </div>
@@ -250,10 +251,10 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                 {targetReport?.address_hint || `Khu vực ngập [${(targetReport?.latitude ?? targetReport?.lat ?? 0).toFixed(4)}, ${(targetReport?.longitude ?? targetReport?.lng ?? 0).toFixed(4)}]`}
               </div>
               <div className="text-xs text-slate-400 space-y-1">
-                <div>Nhu cầu: <strong className="text-slate-900">{targetReport ? needType(targetReport.need_type).text : 'Cứu trợ khẩn cấp'}</strong></div>
+                <div>Nhu cầu: <strong className="text-white">{targetReport ? needType(targetReport.need_type).text : "Cứu trợ khẩn cấp"}</strong></div>
                 <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport ? reportDepthCm(targetReport) : 0} cm</strong></div>
-                <div>Số người cần cứu: <strong className="text-slate-900">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
-                <div>Người liên hệ: <strong className="text-slate-900">{targetReport?.reporter_name} ({targetReport?.reporter_phone})</strong></div>
+                <div>Số người cần cứu: <strong className="text-white">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
+                <div>Người liên hệ: <strong className="text-white">{targetReport?.reporter_name || targetReport?.reporter_phone ? `${targetReport.reporter_name || "Người dân"} ${targetReport.reporter_phone ? `(${targetReport.reporter_phone})` : ""}` : "Chưa có thông tin liên hệ"}</strong></div>
               </div>
               {targetReport && onSelectReport && (
                 <button
@@ -283,11 +284,11 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
               <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 pt-1">
                 <div className="flex items-center gap-1">
                   <Fuel className="w-3.5 h-3.5 text-amber-500" />
-                  Nhiên liệu: <strong>{assignedVehicle?.fuel_percent || 100}%</strong>
+                  Nhiên liệu: <strong className="font-mono">{assignedVehicle?.fuel_pct ?? assignedVehicle?.fuel_percent ?? 0}%</strong>
                 </div>
                 <div className="flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  Tình trạng: <strong>{assignedVehicle?.status || 'Tốt'}</strong>
+                  Tình trạng: <strong className="text-white">{assignedVehicle ? vehicleStatus(assignedVehicle.status).text : 'Chưa có dữ liệu'}</strong>
                 </div>
               </div>
               <div className="text-[11px] text-slate-500 italic pt-1">
@@ -319,7 +320,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                 <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-cyan-500 to-sky-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(5, Math.min(100, activeOrder.progress_pct || 0))}%` }}
+                    style={{ width: `${Math.max(0, Math.min(100, activeOrder.progress_pct || 0))}%` }}
                   />
                 </div>
               </div>

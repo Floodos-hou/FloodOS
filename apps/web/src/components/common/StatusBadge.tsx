@@ -18,9 +18,10 @@ interface StatusBadgeProps {
   label?: { text: string; tone: Tone; icon: string };
   status?: string;
   type?: 'report' | 'order' | 'vehicle' | 'zone' | 'gauge' | 'shelter' | string;
+  className?: string;
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ label, status, type }) => {
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ label, status, type, className = '' }) => {
   let resolved: Label | undefined = label;
   if (!resolved && status) {
     if (type === 'report') resolved = reportStatus(status);
@@ -35,7 +36,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ label, status, type })
   const toneClass = TONE_CLASS[resolved.tone] || TONE_CLASS.neutral;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${toneClass}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shrink-0 ${toneClass} ${className}`}>
       {resolved.icon && <span aria-hidden="true">{resolved.icon}</span>}
       {resolved.text}
     </span>

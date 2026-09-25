@@ -61,6 +61,17 @@ type TabType = 'ALL' | 'UNVERIFIED' | 'READY_DISPATCH' | 'ACTIVE_ORDERS' | 'INCI
 const INPUT_STYLE = 'w-full rounded-xl border-2 border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-200 transition-all';
 const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700';
 
+
+const getReportLocationText = (report: FloodReport, zoneList: FloodZone[]): string => {
+  if (report.address_hint) return report.address_hint;
+  const matchedZone = zoneList.find((z) => z.zone_id === report.zone_id);
+  if (matchedZone) return matchedZone.name;
+  const lat = report.latitude ?? report.lat;
+  const lng = report.longitude ?? report.lng;
+  if (lat && lng) return `Vùng trũng [${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
+  return 'Chưa có dữ liệu vị trí';
+};
+
 export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
   reports,
   orders,
@@ -209,13 +220,13 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
   return (
     <div className="space-y-4">
       {/* Main Cockpit Split Layout (Queue on Left, Tactical Map on Right) */}
-      <div className={mapElement ? "grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] gap-4 items-start" : "space-y-4"}>
+      <div className={mapElement ? "grid grid-cols-1 xl:grid-cols-[480px_minmax(0,1fr)] gap-4 items-start" : "space-y-4"}>
         <div className="space-y-3 min-w-0">
           {/* Tabs Bar */}
           <div className="flex items-center gap-1.5 border-b border-slate-800 overflow-x-auto pb-2">
             <button
               onClick={() => setActiveTab('UNVERIFIED')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap border ${
                 activeTab === 'UNVERIFIED'
                   ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/60'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
@@ -227,7 +238,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
             <button
               onClick={() => setActiveTab('READY_DISPATCH')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap border ${
                 activeTab === 'READY_DISPATCH'
                   ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-950/60'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
@@ -239,20 +250,20 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
             <button
               onClick={() => setActiveTab('ACTIVE_ORDERS')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap border ${
                 activeTab === 'ACTIVE_ORDERS'
                   ? 'bg-cyan-600 text-white border-cyan-500 shadow-lg shadow-cyan-950/60'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
               <Navigation className="w-3.5 h-3.5 text-cyan-300" />
-              Ca đang chạy ({activeOrders.length})
+              Ca đang cơ động ({activeOrders.length})
             </button>
 
             {activeIncidents.length > 0 && (
               <button
                 onClick={() => setActiveTab('INCIDENTS')}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap border ${
                   activeTab === 'INCIDENTS'
                     ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-950/60'
                     : 'bg-slate-900 text-purple-300 border-slate-800 hover:bg-slate-800'
@@ -265,7 +276,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
             <button
               onClick={() => setActiveTab('ALL')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap border ${
                 activeTab === 'ALL'
                   ? 'bg-slate-800 text-white border-slate-700 shadow-lg'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
@@ -309,7 +320,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
                       <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
                         <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span>{report.address_hint || `Khu vực toạ độ [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}</span>
+                        <span className="leading-snug">{getReportLocationText(report, zones)}</span>
                       </h4>
 
                       <div className="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
@@ -397,7 +408,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
                       <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
                         <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>{report.address_hint || `Khu vực [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}</span>
+                        <span className="leading-snug">{getReportLocationText(report, zones)}</span>
                       </h4>
 
                       <div className="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
@@ -477,7 +488,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
                         <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
                           <Navigation className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span>Mục tiêu: {targetReport?.address_hint || `Tin báo #${order.report_id}`}</span>
+                          <span className="leading-snug">Mục tiêu: {targetReport ? getReportLocationText(targetReport, zones) : `Tin báo #${order.report_id}`}</span>
                         </h4>
 
                         <div className="space-y-1.5 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
@@ -486,7 +497,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                               <Truck className="w-3.5 h-3.5" /> Phương tiện:
                             </span>
                             <span className="font-bold text-cyan-300 font-mono">
-                              {assignedVehicle ? `${assignedVehicle.vehicle_name} (${vehicleType(assignedVehicle.vehicle_type) || assignedVehicle.vehicle_type})` : order.vehicle_id}
+                              {assignedVehicle ? `${assignedVehicle.name || assignedVehicle.vehicle_name} (${vehicleType(assignedVehicle.vehicle_type) || assignedVehicle.vehicle_type})` : order.vehicle_id}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
@@ -494,7 +505,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                               <Users className="w-3.5 h-3.5" /> Đội cứu hộ:
                             </span>
                             <span className="font-bold text-slate-200">
-                              {assignedTeam ? `${assignedTeam.team_name} (${assignedTeam.leader_name})` : order.team_id}
+                              {assignedTeam ? `${assignedTeam.name || assignedTeam.team_name} (${assignedTeam.leader_name || "Đội trưởng"})` : order.team_id}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
@@ -543,9 +554,9 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
               return (
                 <div
                   key={incident.incident_id}
-                  className="bg-white rounded-2xl border-2 border-purple-300 p-6 shadow-md"
+                  className="bg-slate-900 rounded-2xl border border-purple-900/60 p-6 shadow-xl text-slate-100"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-3 mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3 mb-4">
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 uppercase">
                         SỰ CỐ HIỆN TRƯỜNG
@@ -557,17 +568,17 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-bold text-slate-900 mb-1">
+                  <h3 className="text-lg font-bold text-white mb-1">
                     {incident.description}
                   </h3>
-                  <p className="text-xs text-slate-600 mb-4">
+                  <p className="text-xs text-slate-400 mb-4">
                     Phương tiện gặp sự cố: <strong className="text-rose-600">{brokenVehicle?.vehicle_name || incident.vehicle_id}</strong> • Vị trí: [{(incident.location?.lat ?? 20.9660).toFixed(4)}, {(incident.location?.lng ?? 105.8710).toFixed(4)}]
                   </p>
 
                   {/* Replan Candidates if available */}
                   {incident.replan_candidates && incident.replan_candidates.length > 0 && (
                     <div className="space-y-3 mb-5">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
                         <Waves className="w-4 h-4 text-purple-600" />
                         Các phương án chi viện do thuật toán xếp hạng:
                       </h4>
@@ -577,8 +588,8 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                             key={cand.option_id}
                             className={`p-4 rounded-xl border-2 transition-all ${
                               cand.rank === 1
-                                ? 'border-purple-500 bg-purple-50/60 shadow-sm'
-                                : 'border-slate-200 bg-slate-50'
+                                ? 'border-purple-500/80 bg-purple-950/40 text-purple-200 shadow-sm'
+                                : 'border-slate-800 bg-slate-950 text-slate-300'
                             }`}
                           >
                             <div className="flex items-center justify-between mb-2">
@@ -604,7 +615,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                     <button
                       type="button"
                       onClick={() => openReplan(incident)}
@@ -626,7 +637,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
             {reports.map((report) => (
               <div
                 key={report.report_id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-slate-300 transition-all"
+                className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl hover:border-slate-700 transition-all text-slate-100"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <span className="font-mono text-xs text-slate-400">#{report.report_id}</span>
@@ -637,14 +648,14 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                     </span>
                   </div>
                 </div>
-                <h4 className="font-semibold text-slate-800 text-sm mb-1">
-                  {report.address_hint || `Khu vực [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}
+                <h4 className="font-bold text-white text-sm mb-1 flex items-center gap-1.5">
+                  {getReportLocationText(report, zones)}
                 </h4>
-                <div className="text-xs text-slate-500 flex items-center gap-3 mb-2">
+                <div className="text-xs text-slate-400 flex items-center gap-3 mb-2">
                   <span>Nhu cầu: <strong>{needType(report.need_type).text}</strong></span>
                   <span>Độ ngập: <strong className="text-rose-600">{reportDepthCm(report)} cm</strong></span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800">
                   <span>{new Date(report.created_at).toLocaleTimeString('vi-VN')}</span>
                   {onSelectReport && (
                     <button
@@ -686,7 +697,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
             )}
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-              <div><strong>Địa bàn:</strong> {verifyingReport.address_hint || 'Hà Nội'}</div>
+              <div><strong>Địa bàn:</strong> {getReportLocationText(verifyingReport, zones)}</div>
               <div><strong>Nhu cầu:</strong> {needType(verifyingReport.need_type).text} • <strong>Độ ngập:</strong> {reportDepthCm(verifyingReport)} cm</div>
               <div><strong>Người báo:</strong> {verifyingReport.reporter_name} ({verifyingReport.reporter_phone})</div>
             </div>
@@ -794,7 +805,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
             )}
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1">
-              <div><strong>Điểm đến:</strong> {dispatchReport.address_hint || 'Hà Nội'}</div>
+              <div><strong>Điểm đến:</strong> {getReportLocationText(dispatchReport, zones)}</div>
               <div><strong>Ưu tiên:</strong> {priorityLabel(dispatchReport.priority).text} • <strong>Nhu cầu:</strong> {needType(dispatchReport.need_type).text}</div>
             </div>
 
@@ -810,7 +821,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                 <option value="">Chọn đội đang sẵn sàng</option>
                 {teams.map((t) => (
                   <option key={t.team_id} value={t.team_id} disabled={!isTeamAvailable(t, busyTeamIds)}>
-                    {t.team_name} - {t.leader_name} ({t.status}) [{t.specialty}]
+                    {t.name || t.team_name} - {t.leader_name || "Đội trưởng"} ({t.status}) [{t.specialty || "Cứu nạn"}]
                   </option>
                 ))}
               </select>
@@ -828,7 +839,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                 <option value="">Chọn phương tiện khả dụng</option>
                 {vehicles.map((v) => (
                   <option key={v.vehicle_id} value={v.vehicle_id} disabled={!isVehicleAvailable(v, busyVehicleIds)}>
-                    {v.vehicle_name} ({vehicleType(v.vehicle_type) || v.vehicle_type}) - Trạng thái: {v.status} - Nhiên liệu: {v.fuel_percent}%
+                    {v.name || v.vehicle_name} ({vehicleType(v.vehicle_type) || v.vehicle_type}) - Trạng thái: {v.status} - Nhiên liệu: {v.fuel_pct ?? v.fuel_percent ?? 0}%
                   </option>
                 ))}
               </select>
