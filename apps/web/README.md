@@ -1,7 +1,7 @@
 # FloodOS Web — Trung Tâm Điều Hành Phối Hợp Ứng Phó Ngập Lụt (Operations Portal)
 
-Ứng dụng React 19 + TypeScript + Vite + Tailwind CSS 4 + MapLibre GL cho nông hộ, điều phối viên HTX,
-người vận hành, chủ máy và đội sửa chữa. Mọi dữ liệu đi qua API Gateway (APISIX); không có mock.
+Ứng dụng React 19 + TypeScript + Vite + Tailwind CSS 4 + MapLibre GL cho người dân / người báo tin, điều phối viên,
+đội cơ động hiện trường và người quản lý nguồn lực cứu trợ. Mọi dữ liệu đi qua API Gateway (APISIX); không có mock.
 
 ## Chạy
 
