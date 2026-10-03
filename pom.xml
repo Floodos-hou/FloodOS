@@ -5,11 +5,11 @@
 
     <groupId>org.floodos</groupId>
     <artifactId>floodos-parent</artifactId>
-    <version>0.1.0-alpha</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>FloodOS :: DX-OS Open-Core Platform</name>
-    <description>Open-Core Platform-as-a-Service for Digital Agricultural Mechanization & Smart Rural Logistics</description>
+    <description>Open-Core Platform-as-a-Service for Urban Flood Response Coordination & Tactical Command</description>
 
     <licenses>
         <license>
