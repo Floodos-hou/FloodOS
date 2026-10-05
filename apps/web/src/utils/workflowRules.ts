@@ -45,14 +45,3 @@ export const resolutionIdForReport = (
   const order = orders.find((item) => item.report_id === reportId);
   return order ? `RES-${order.order_id}` : null;
 };
-
-export const selectAvailableResources = (
-  vehicles: Pick<RescueVehicle, 'vehicle_id' | 'status'>[],
-  teams: Pick<RescueTeam, 'team_id' | 'status'>[],
-  busyVehicleIds: Set<string>,
-  busyTeamIds: Set<string>,
-): { vehicleId: string | null; teamId: string | null } => {
-  const vehicle = vehicles.find((item) => isVehicleAvailable(item, busyVehicleIds));
-  const team = teams.find((item) => isTeamAvailable(item, busyTeamIds));
-  return { vehicleId: vehicle?.vehicle_id ?? null, teamId: team?.team_id ?? null };
-};

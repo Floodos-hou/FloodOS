@@ -6,13 +6,7 @@ export type UserRole =
   | 'DISPATCHER'
   | 'FIELD_TEAM'
   | 'RESOURCE_MANAGER'
-  | 'PLATFORM_ADMIN'
-  // Legacy aliases for backward compatibility with twin3d
-  | 'COORDINATOR'
-  | 'FARMER'
-  | 'OPERATOR'
-  | 'MACHINE_OWNER'
-  | 'REPAIR_TEAM';
+  | 'PLATFORM_ADMIN';
 
 export type FloodPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT' | 'CRITICAL' | string;
 

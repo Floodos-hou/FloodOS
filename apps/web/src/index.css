@@ -1,87 +1,73 @@
 @import "tailwindcss";
 
 /*
- * FloodOS Tactical Visual Identity — "Command & Control / Thủy văn Đô thị Hà Nội"
- * Deep tactical slate neutrals, hydrologic cyan/sky accents, and high-visibility emergency states.
+ * FloodOS visual identity — "bản vẽ thủy văn".
+ * Warm chart paper, deep river-ink, and the national flood alarm scale (BĐ1 / BĐ2 / BĐ3) as the only
+ * saturated colours. No glow, no gradients, no emoji: colour means a water level or a case state.
  */
 @theme {
-  --font-sans: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "SF Pro Text", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "SF Pro Display", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
-  --color-slate-950: #080d1a;
+  --color-paper: #f2efe6;
+  --color-sheet: #fbfaf6;
+  --color-sheet-2: #f6f3ea;
+  --color-line: #d8d2c2;
+  --color-line-2: #c3bba7;
 
-  --color-cyan-50: #ecfeff;
-  --color-cyan-100: #cffafe;
-  --color-cyan-200: #a5f3fc;
-  --color-cyan-300: #67e8f9;
-  --color-cyan-400: #22d3ee;
-  --color-cyan-500: #06b6d4;
-  --color-cyan-600: #0891b2;
-  --color-cyan-700: #0e7490;
-  --color-cyan-800: #155e75;
-  --color-cyan-900: #164e63;
-  --color-cyan-950: #083344;
+  --color-ink: #14262e;
+  --color-ink-2: #44575f;
+  --color-ink-3: #6b7b82;
+
+  --color-river: #0e5a7a;
+  --color-river-2: #0a4660;
+  --color-river-soft: #dcebf2;
+  --color-water: #2a8bb5;
+
+  --color-safe: #2f7d4f;
+  --color-safe-soft: #dff0e4;
+  --color-watch: #a87908;
+  --color-watch-soft: #f6ecc9;
+  --color-warn: #c85f17;
+  --color-warn-soft: #f9e1cf;
+  --color-crit: #b73220;
+  --color-crit-soft: #f6d9d3;
 }
 
 :root {
-  --tactical-grid: rgba(14, 165, 233, 0.03);
+  --shadow-pop: 0 1px 2px rgba(20, 38, 46, 0.08), 0 8px 24px -8px rgba(20, 38, 46, 0.25);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
   font-size: 15px;
 }
 
 body {
   margin: 0;
-  padding: 0;
-  background-color: var(--color-slate-950);
-  background-image: 
-    linear-gradient(to right, var(--tactical-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--tactical-grid) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-attachment: fixed;
-  color: var(--color-slate-100);
+  background: var(--color-paper);
+  color: var(--color-ink);
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3, h4, .font-display {
+h1, h2, h3, h4 {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-cyan-500);
+  outline: 2px solid var(--color-river);
   outline-offset: 2px;
 }
 
-/* Custom Tactical Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #0f172a;
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #0284c7;
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-line-2); border-radius: 999px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -91,38 +77,95 @@ h1, h2, h3, h4, .font-display {
   }
 }
 
-/* Tactical Pulse & Beacon Animations */
-@keyframes beaconPing {
-  0% { transform: scale(0.6); opacity: 0.9; }
-  100% { transform: scale(2.6); opacity: 0; }
+/* ---------- component layer ---------- */
+@layer components {
+  .panel {
+    background: var(--color-sheet);
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .eyebrow {
+    font-size: 0.6875rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-ink-3);
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    min-height: 2.25rem; padding: 0.4rem 0.85rem;
+    border-radius: 5px; border: 1px solid var(--color-line-2);
+    background: var(--color-sheet); color: var(--color-ink);
+    font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+    transition: background-color 120ms, border-color 120ms;
+  }
+  .btn:hover:not(:disabled) { background: var(--color-sheet-2); border-color: var(--color-ink-3); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--color-river); border-color: var(--color-river); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--color-river-2); border-color: var(--color-river-2); }
+  .btn-danger { background: var(--color-crit); border-color: var(--color-crit); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #96281a; border-color: #96281a; }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-lg { min-height: 3rem; padding: 0.6rem 1.1rem; font-size: 1rem; }
+
+  .input {
+    width: 100%; min-height: 2.5rem; padding: 0.5rem 0.7rem;
+    border-radius: 5px; border: 1px solid var(--color-line-2);
+    background: #fff; color: var(--color-ink); font-size: 0.875rem;
+  }
+  .input:focus { border-color: var(--color-river); outline: 2px solid var(--color-river-soft); outline-offset: 0; }
+  .label { display: block; margin-bottom: 0.3rem; font-size: 0.75rem; font-weight: 650; color: var(--color-ink-2); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.125rem 0.5rem; border-radius: 4px; border: 1px solid transparent;
+    font-size: 0.75rem; font-weight: 650; line-height: 1.25rem; white-space: nowrap;
+  }
+  .chip::before { content: ""; width: 0.4rem; height: 0.4rem; border-radius: 999px; background: currentColor; }
+  .chip-good    { color: var(--color-safe);  background: var(--color-safe-soft); }
+  .chip-warn    { color: var(--color-warn);  background: var(--color-warn-soft); }
+  .chip-watch   { color: var(--color-watch); background: var(--color-watch-soft); }
+  .chip-bad     { color: var(--color-crit);  background: var(--color-crit-soft); }
+  .chip-info    { color: var(--color-river); background: var(--color-river-soft); }
+  .chip-neutral { color: var(--color-ink-2); background: #ebe7da; }
+
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .rule-y > * + * { border-top: 1px solid var(--color-line); }
 }
 
-.beacon-pulse {
-  position: relative;
+/* ---------- map ---------- */
+.fo-pin {
+  position: relative; display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--pin, var(--color-river)); color: #fff;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(20, 38, 46, 0.45);
+  cursor: pointer; font: 700 11px/1 var(--font-sans);
 }
-.beacon-pulse::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 9999px;
-  border: 2px solid #06b6d4;
-  animation: beaconPing 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+.fo-pin svg { width: 14px; height: 14px; }
+.fo-pin.is-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; z-index: 5; }
+.fo-pin.is-pulse::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid var(--pin, var(--color-crit)); animation: foPulse 2s ease-out infinite;
+}
+.fo-pin.is-dim { opacity: 0.55; }
+.fo-pin-label {
+  position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%);
+  white-space: nowrap; padding: 2px 6px; border-radius: 3px;
+  background: var(--color-ink); color: #fff; font: 600 11px/1.2 var(--font-sans);
+  opacity: 0; pointer-events: none; transition: opacity 120ms;
+}
+.fo-pin:hover .fo-pin-label, .fo-pin.is-selected .fo-pin-label { opacity: 1; }
+.fo-square { border-radius: 4px; }
+.fo-diamond { border-radius: 4px; transform: rotate(45deg); }
+.fo-diamond > * { transform: rotate(-45deg); }
+
+@keyframes foPulse {
+  0% { transform: scale(0.8); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
 }
 
-@keyframes floodWarningPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-}
-
-.flood-warning-pulse {
-  animation: floodWarningPulse 1.8s ease-out infinite;
-}
-
-/* Map ticker entrance */
-@keyframes tickerIn {
-  from { opacity: 0; transform: translateX(-16px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-.ticker-in {
-  animation: tickerIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+.maplibregl-ctrl-group { border-radius: 5px !important; box-shadow: var(--shadow-pop) !important; border: 1px solid var(--color-line) !important; }
+.maplibregl-ctrl-attrib { font-size: 10px !important; background: rgba(251, 250, 246, 0.85) !important; }
