@@ -1,744 +1,294 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, LngLatBounds, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { MapEventTicker } from './MapEventTicker';
-import { nextHeading, screenRotation } from '../../utils/fleetInsights';
+import { Maximize, TriangleAlert } from 'lucide-react';
+import type { FloodZone, RescueVehicle, FloodReport, GaugeStation, SafeShelter } from '../../types';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
-import { HANOI_TACTICAL_BASEMAP_GEOJSON } from './hanoiTacticalVector';
-setWorkerUrl(maplibreWorkerUrl);
-import type { FloodZone, RescueVehicle, FloodReport, DispatchOrder, GaugeStation, SafeShelter, CandidateRescueOption, UserRole } from '../../types';
-import { Crosshair, Maximize2, Minimize2 } from 'lucide-react';
 import type { MapSelection } from './MapDetailPanel';
+setWorkerUrl(maplibreWorkerUrl);
+
+export interface MapRoute {
+  from: { lat: number; lng: number };
+  to: { lat: number; lng: number };
+  label: string;
+}
 
 interface TacticalMapProps {
   zones?: FloodZone[];
   vehicles?: RescueVehicle[];
   reports?: FloodReport[];
-  orders?: DispatchOrder[];
   gauges?: GaugeStation[];
   shelters?: SafeShelter[];
-  rescueCandidate?: CandidateRescueOption | null;
-  userRole?: UserRole | string;
+  /** straight line from a replacement vehicle to the impacted job (never a road route) */
+  route?: MapRoute | null;
   trails?: Record<string, [number, number][]>;
   live?: LiveFleetInfo;
+  /** `type:id` of the object shown in the side panel */
+  selectedKey?: string | null;
   onSelect?: (selection: MapSelection) => void;
-  fields?: any[];
-  machines?: any[];
-  assignments?: any[];
   className?: string;
   heightClass?: string;
 }
 
-// Center of pilot flood-response zone in Hanoi (Hoàng Mai / Thanh Trì / Sông Nhuệ)
-const HANOI_CENTER: [number, number] = [105.8450, 20.9780];
+const DEFAULT_CENTER: [number, number] = [105.845, 20.978];
 
-const BASEMAPS = {
-  dark: {
-    name: 'Tác chiến (Dark Command)',
-    style: {
-      version: 8,
-      sources: {
-        carto_dark: {
-          type: 'raster',
-          tiles: [
-            'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-            'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-            'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          ],
-          tileSize: 256,
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          maxzoom: 19,
-        },
-        tactical_hanoi_base: {
-          type: 'geojson',
-          data: HANOI_TACTICAL_BASEMAP_GEOJSON,
-        },
-      },
-      layers: [
-        {
-          id: 'tactical-bg',
-          type: 'background',
-          paint: {
-            'background-color': '#070d18',
-          },
-        },
-        {
-          id: 'carto-dark-tiles',
-          type: 'raster',
-          source: 'carto_dark',
-          paint: {
-            'raster-opacity': 0.88,
-          },
-        },
-        {
-          id: 'districts-fill',
-          type: 'fill',
-          source: 'tactical_hanoi_base',
-          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'type', 'lake']],
-          paint: {
-            'fill-color': '#0e172a',
-            'fill-opacity': 0.88,
-          },
-        },
-        {
-          id: 'districts-line',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'type', 'lake']],
-          paint: {
-            'line-color': '#1e293b',
-            'line-width': 1.5,
-          },
-        },
-        {
-          id: 'tactical-grid',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['==', 'type', 'grid'],
-          paint: {
-            'line-color': '#1e293b',
-            'line-width': 1,
-            'line-dasharray': [2, 4],
-            'line-opacity': 0.5,
-          },
-        },
-        {
-          id: 'lakes-fill',
-          type: 'fill',
-          source: 'tactical_hanoi_base',
-          filter: ['==', 'type', 'lake'],
-          paint: {
-            'fill-color': '#0369a1',
-            'fill-opacity': 0.85,
-          },
-        },
-        {
-          id: 'lakes-outline',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['==', 'type', 'lake'],
-          paint: {
-            'line-color': '#0284c7',
-            'line-width': 2,
-          },
-        },
-        {
-          id: 'rivers-glow',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['in', 'type', 'river', 'canal'],
-          paint: {
-            'line-color': '#0284c7',
-            'line-width': 10,
-            'line-opacity': 0.35,
-            'line-blur': 4,
-          },
-        },
-        {
-          id: 'rivers-line',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['in', 'type', 'river', 'canal'],
-          paint: {
-            'line-color': '#38bdf8',
-            'line-width': 3.5,
-          },
-        },
-      ],
+/** Real OpenStreetMap raster, desaturated so the case markers carry the colour. No hand-drawn geography. */
+const STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
     },
   },
-  voyager: {
-    name: 'Đô thị / Thủy văn (Hybrid)',
-    style: {
-      version: 8,
-      sources: {
-        tactical_hanoi_base: {
-          type: 'geojson',
-          data: HANOI_TACTICAL_BASEMAP_GEOJSON,
-        },
-        osm_source: {
-          type: 'raster',
-          tiles: [
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ],
-          tileSize: 256,
-          attribution: '&copy; OpenStreetMap contributors',
-          maxzoom: 19,
-        },
-      },
-      layers: [
-        {
-          id: 'tactical-bg',
-          type: 'background',
-          paint: {
-            'background-color': '#0f172a',
-          },
-        },
-        {
-          id: 'osm-layer',
-          type: 'raster',
-          source: 'osm_source',
-          paint: {
-            'raster-opacity': 0.75,
-          },
-        },
-        {
-          id: 'rivers-glow',
-          type: 'line',
-          source: 'tactical_hanoi_base',
-          filter: ['in', 'type', 'river', 'canal'],
-          paint: {
-            'line-color': '#0284c7',
-            'line-width': 8,
-            'line-opacity': 0.45,
-            'line-blur': 3,
-          },
-        },
-      ],
-    },
-  },
+  layers: [
+    { id: 'paper', type: 'background', paint: { 'background-color': '#ece8dc' } },
+    { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.55, 'raster-contrast': -0.05, 'raster-brightness-max': 0.95 } },
+  ],
 };
 
+const RISK_COLOR = ['match', ['get', 'risk_level'], 'CRITICAL', '#b73220', 'WARNING', '#c85f17', 'WATCH', '#a87908', '#2f7d4f'];
+
+const ICON: Record<string, string> = {
+  report: '<path d="M12 3 2.5 20h19L12 3z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4M12 17.2v.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  boat: '<path d="M3 17h18l-2 4H5l-2-4zM7 17V9h10v8M12 4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>',
+  truck: '<path d="M2 6h11v10H2zM13 9h5l3 3v4h-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7" cy="18" r="1.8" fill="currentColor"/><circle cx="17" cy="18" r="1.8" fill="currentColor"/>',
+  pump: '<path d="M12 3c3 4 5 6.5 5 9.5a5 5 0 0 1-10 0C7 9.5 9 7 12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  shelter: '<path d="M3 11 12 4l9 7M5 10v10h14V10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  gauge: '<path d="M9 3v18M9 6h5M9 10h3M9 14h5M9 18h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+};
+
+const vehicleGlyph = (t: string) => (t === 'RESCUE_BOAT' ? 'boat' : t === 'MOBILE_PUMP' ? 'pump' : 'truck');
+
+const CLOSED_STATUSES = ['RESOLVED', 'REJECTED', 'CANCELLED'];
+
+const reportColor = (r: FloodReport): string => {
+  if (CLOSED_STATUSES.includes(r.status)) return 'var(--color-ink-3)';
+  if (r.priority === 'URGENT' || r.priority === 'CRITICAL') return 'var(--color-crit)';
+  if (r.status === 'RECEIVED') return 'var(--color-watch)';
+  return 'var(--color-warn)';
+};
+
+const gaugeColor = (g: GaugeStation): string => {
+  if (g.alert_state === 'CRITICAL') return 'var(--color-crit)';
+  if (g.alert_state === 'WARNING') return 'var(--color-warn)';
+  if (g.alert_state === 'WATCH') return 'var(--color-watch)';
+  return g.level_cm == null ? 'var(--color-ink-3)' : 'var(--color-safe)';
+};
+
+const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
+
 export const TacticalMap: React.FC<TacticalMapProps> = ({
-  zones = [],
-  vehicles = [],
-  reports = [],
-  orders = [],
-  gauges = [],
-  shelters = [],
-  rescueCandidate,
-  userRole,
-  trails = {},
-  live,
-  onSelect,
-  fields,
-  machines,
-  assignments,
-  className = '',
-  heightClass = 'min-h-[580px] h-[calc(100vh-210px)]',
+  zones = [], vehicles = [], reports = [], gauges = [], shelters = [],
+  route = null, trails = {}, live, selectedKey = null, onSelect,
+  className = '', heightClass = 'h-full min-h-[420px]',
 }) => {
-  const activeZones: FloodZone[] = zones.length > 0 ? zones : (fields as any[]) || [];
-  const activeVehicles: RescueVehicle[] = vehicles.length > 0 ? vehicles : (machines as any[]) || [];
-  const activeOrders: DispatchOrder[] = orders.length > 0 ? orders : (assignments as any[]) || [];
+  const container = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markers = useRef<Map<string, Marker>>(new Map());
+  const zonesRef = useRef(zones);
+  const onSelectRef = useRef(onSelect);
+  const fitted = useRef(false);
+  const [loaded, setLoaded] = useState(false);
+  const [tilesFailed, setTilesFailed] = useState(false);
+  const [layers, setLayers] = useState({ reports: true, vehicles: true, shelters: true, gauges: true, zones: true });
 
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
-  const markersRef = useRef<Map<string, Marker>>(new Map());
-  const headingsRef = useRef<Map<string, { lat: number; lng: number; heading: number }>>(new Map());
-
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [mapBearing, setMapBearing] = useState(0);
-  const [basemap, setBasemap] = useState<'dark' | 'voyager'>('dark');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const [showReports, setShowReports] = useState(true);
-  const [showVehicles, setShowVehicles] = useState(true);
-  const [showShelters, setShowShelters] = useState(true);
-  const [showGauges, setShowGauges] = useState(true);
-
-  const handleCenterHanoi = () => {
-    if (map.current) {
-      map.current.flyTo({ center: HANOI_CENTER, zoom: 13.5, essential: true });
-    }
-  };
-
-  const setupSourcesAndLayers = (m: MapLibreMap) => {
-    if (m.getSource('flood-zones')) return;
-
-    // Add GeoJSON sources and layers for Zones polygons
-    m.addSource('flood-zones', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-
-    m.addLayer({
-      id: 'zones-fill',
-      type: 'fill',
-      source: 'flood-zones',
-      paint: {
-        'fill-color': [
-          'match',
-          ['get', 'risk_level'],
-          'CRITICAL', '#dc2626',
-          'WARNING', '#ea580c',
-          'WATCH', '#0284c7',
-          '#38bdf8'
-        ],
-        'fill-opacity': 0.35,
-      },
-    });
-
-    m.addLayer({
-      id: 'zones-outline',
-      type: 'line',
-      source: 'flood-zones',
-      paint: {
-        'line-color': [
-          'match',
-          ['get', 'risk_level'],
-          'CRITICAL', '#ef4444',
-          'WARNING', '#f97316',
-          'WATCH', '#38bdf8',
-          '#0ea5e9'
-        ],
-        'line-width': 2.5,
-      },
-    });
-
-    // Add Rescue Route Source (Haversine straight line)
-    m.addSource('rescue-route', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-
-    m.addLayer({
-      id: 'rescue-route-glow',
-      type: 'line',
-      source: 'rescue-route',
-      paint: {
-        'line-color': '#38bdf8',
-        'line-width': 8,
-        'line-opacity': 0.45,
-        'line-blur': 4,
-      },
-    });
-
-    m.addLayer({
-      id: 'rescue-route-line',
-      type: 'line',
-      source: 'rescue-route',
-      paint: {
-        'line-color': '#0284c7',
-        'line-width': 3,
-        'line-dasharray': [3, 2],
-      },
-    });
-
-    // Zone click handler
-    m.on('click', 'zones-fill', (e) => {
-      if (!e.features || !e.features[0]) return;
-      const zid = e.features[0].properties?.zone_id;
-      const found = activeZones.find((z) => z.zone_id === zid);
-      if (found && onSelect) onSelect({ type: 'zone', data: found });
-    });
-
-    m.on('mouseenter', 'zones-fill', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'zones-fill', () => { m.getCanvas().style.cursor = ''; });
-  };
-
-  // Initialize MapLibre
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+    zonesRef.current = zones;
+    onSelectRef.current = onSelect;
+  });
 
-    const m = new MapLibreMap({
-      container: mapContainer.current,
-      style: BASEMAPS[basemap].style as any,
-      center: HANOI_CENTER,
-      zoom: 13.5,
-      attributionControl: false,
-    });
-
-    m.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+  useEffect(() => {
+    if (!container.current || mapRef.current) return;
+    const m = new MapLibreMap({ container: container.current, style: STYLE, center: DEFAULT_CENTER, zoom: 12.5, attributionControl: false });
+    m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     m.addControl(new AttributionControl({ compact: true }), 'bottom-right');
-
-    m.on('rotate', () => setMapBearing(m.getBearing()));
+    m.on('error', (e) => { if ((e as { sourceId?: string }).sourceId === 'osm') setTilesFailed(true); });
+    m.on('data', (e) => {
+      const ev = e as { sourceId?: string; tile?: unknown };
+      if (ev.sourceId === 'osm' && ev.tile) setTilesFailed(false);
+    });
     m.on('load', () => {
-      setMapLoaded(true);
-      setupSourcesAndLayers(m);
-      m.resize();
+      m.addSource('zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': RISK_COLOR as never, 'fill-opacity': 0.2 } });
+      m.addLayer({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': RISK_COLOR as never, 'line-width': 2, 'line-dasharray': [3, 2] } });
+      m.addSource('trails', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({ id: 'trails', type: 'line', source: 'trails', paint: { 'line-color': '#0e5a7a', 'line-width': 2, 'line-opacity': 0.6 } });
+      m.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#14262e', 'line-width': 3, 'line-dasharray': [1.5, 1.5] } });
+      m.on('click', 'zones-fill', (e) => {
+        const id = e.features?.[0]?.properties?.zone_id;
+        const z = zonesRef.current.find((x) => x.zone_id === id);
+        if (z) onSelectRef.current?.({ type: 'zone', data: z });
+      });
+      m.on('mouseenter', 'zones-fill', () => { m.getCanvas().style.cursor = 'pointer'; });
+      m.on('mouseleave', 'zones-fill', () => { m.getCanvas().style.cursor = ''; });
+      setLoaded(true);
     });
-
-    map.current = m;
-
-    const ro = new ResizeObserver(() => {
-      if (map.current) {
-        map.current.resize();
-      }
-    });
-    ro.observe(mapContainer.current);
-
-    return () => {
-      ro.disconnect();
-      m.remove();
-      map.current = null;
-    };
+    mapRef.current = m;
+    const ro = new ResizeObserver(() => m.resize());
+    ro.observe(container.current);
+    const markerStore = markers.current;
+    return () => { ro.disconnect(); markerStore.clear(); m.remove(); mapRef.current = null; };
   }, []);
 
-  // Handle Basemap Switch
-  const toggleBasemap = () => {
-    const next = basemap === 'dark' ? 'voyager' : 'dark';
-    setBasemap(next);
-    if (map.current) {
-      map.current.setStyle(BASEMAPS[next].style as any);
-      map.current.once('style.load', () => {
-        if (map.current) {
-          setupSourcesAndLayers(map.current);
-          map.current.resize();
-        }
-      });
-    }
-  };
-
-  // Update Zones Polygons GeoJSON
+  // zone polygons (seed polygons; the legend says so)
   useEffect(() => {
-    if (!mapLoaded || !map.current) return;
-    const src = map.current.getSource('flood-zones') as GeoJSONSource | undefined;
+    const src = loaded ? (mapRef.current?.getSource('zones') as GeoJSONSource | undefined) : undefined;
     if (!src) return;
+    src.setData({
+      type: 'FeatureCollection',
+      features: layers.zones
+        ? zones.filter((z) => z.polygon?.length && z.visibility !== 'FOG_OF_WAR').map((z) => ({
+            type: 'Feature' as const,
+            properties: { zone_id: z.zone_id, risk_level: z.risk_level },
+            geometry: { type: 'Polygon' as const, coordinates: z.polygon },
+          }))
+        : [],
+    });
+  }, [loaded, zones, layers.zones]);
 
-    const features = activeZones
-      .filter((z) => z.polygon && z.polygon.length > 0 && z.visibility !== 'FOG_OF_WAR')
-      .map((z) => ({
-        type: 'Feature' as const,
-        properties: {
-          zone_id: z.zone_id,
-          name: z.name,
-          risk_level: z.risk_level,
-          water_level_cm: z.water_level_cm || 0,
-        },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: z.polygon,
-        },
-      }));
-
-    src.setData({ type: 'FeatureCollection', features });
-  }, [mapLoaded, activeZones]);
-
-  // Update Rescue Route Line (Haversine straight-line vector)
+  // trails: only positions actually received from the digital twin
   useEffect(() => {
-    if (!mapLoaded || !map.current) return;
-    const src = map.current.getSource('rescue-route') as GeoJSONSource | undefined;
+    const src = loaded ? (mapRef.current?.getSource('trails') as GeoJSONSource | undefined) : undefined;
     if (!src) return;
+    src.setData({
+      type: 'FeatureCollection',
+      features: Object.entries(trails).filter(([, pts]) => pts.length > 1).map(([id, pts]) => ({
+        type: 'Feature' as const, properties: { id }, geometry: { type: 'LineString' as const, coordinates: pts },
+      })),
+    });
+  }, [loaded, trails]);
 
-    if (!rescueCandidate) {
-      src.setData({ type: 'FeatureCollection', features: [] });
-      return;
-    }
-
-    const vId = (rescueCandidate as any).vehicle_id || rescueCandidate.machine_id;
-    const v = activeVehicles.find((x) => x.vehicle_id === vId || (x as any).machine_id === vId);
-    const destZone = activeZones[0];
-    if (v && destZone) {
-      src.setData({
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            properties: { kind: 'RESCUE_STRAIGHT_LINE' },
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [v.current_lng, v.current_lat],
-                [destZone.center_lng, destZone.center_lat],
-              ],
-            },
-          },
-        ],
-      });
-    }
-  }, [mapLoaded, rescueCandidate, activeVehicles, activeZones]);
-
-  // Update Markers on Map with Crisp Tactical Symbology
   useEffect(() => {
-    if (!map.current) return;
-    const currentMap = map.current;
-    const existing = markersRef.current;
+    const src = loaded ? (mapRef.current?.getSource('route') as GeoJSONSource | undefined) : undefined;
+    if (!src) return;
+    src.setData({
+      type: 'FeatureCollection',
+      features: route ? [{
+        type: 'Feature' as const, properties: { label: route.label },
+        geometry: { type: 'LineString' as const, coordinates: [[route.from.lng, route.from.lat], [route.to.lng, route.to.lat]] },
+      }] : [],
+    });
+  }, [loaded, route]);
+
+  const points = useMemo(() => {
+    const pts: { lng: number; lat: number }[] = [];
+    reports.forEach((r) => pts.push({ lng: r.lng, lat: r.lat }));
+    vehicles.forEach((v) => pts.push({ lng: v.current_lng, lat: v.current_lat }));
+    shelters.forEach((s) => pts.push({ lng: s.lng, lat: s.lat }));
+    gauges.forEach((g) => pts.push({ lng: g.lng, lat: g.lat }));
+    return pts.filter((p) => Number.isFinite(p.lng) && Number.isFinite(p.lat));
+  }, [reports, vehicles, shelters, gauges]);
+
+  const fitAll = React.useCallback(() => {
+    const m = mapRef.current;
+    if (!m || points.length === 0) return;
+    const b = new LngLatBounds();
+    points.forEach((p) => b.extend([p.lng, p.lat]));
+    m.fitBounds(b, { padding: 70, maxZoom: 15, duration: 600 });
+  }, [points]);
+
+  useEffect(() => {
+    if (loaded && !fitted.current && points.length > 0) { fitted.current = true; fitAll(); }
+  }, [loaded, points.length, fitAll]);
+
+  // DOM markers are updated in place on every render so colour and state never go stale
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m) return;
     const touched = new Set<string>();
-
-    // 1. Rescue Vehicles & Boats
-    if (showVehicles) activeVehicles.forEach((v) => {
-      const vId = v.vehicle_id || (v as any).machine_id || 'PT';
-      const key = `veh:${vId}`;
+    const upsert = (key: string, lng: number, lat: number, cls: string, color: string, glyph: string, label: string, sel: MapSelection) => {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
       touched.add(key);
-
-      const prev = headingsRef.current.get(vId) || null;
-      const next = nextHeading(prev, v.current_lat, v.current_lng);
-      headingsRef.current.set(vId, next);
-      const rot = screenRotation(next.heading, mapBearing);
-
-      let m = existing.get(key);
-      if (!m) {
-        const el = document.createElement('div');
-        el.className = 'cursor-pointer transition-transform duration-200 hover:scale-110 hover:z-50 relative';
-        const isBreakdown = v.status === 'BREAKDOWN';
-        const isBoat = v.vehicle_type === 'RESCUE_BOAT';
-        el.innerHTML = `
-          <div class="relative flex flex-col items-center">
-            <div class="h-9 w-9 rounded-xl border-2 flex items-center justify-center shadow-2xl transition-all ${
-              isBreakdown
-                ? 'bg-red-950 border-red-500 text-red-400 ring-4 ring-red-500/40'
-                : 'bg-slate-900 border-cyan-400 text-cyan-300 ring-2 ring-cyan-500/30'
-            }">
-              <svg class="h-5 w-5 transform transition-transform" style="transform: rotate(${rot}deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                ${isBoat
-                  ? '<path d="M2 20a2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1 2.4 2.4 0 0 1 2-1 2.4 2.4 0 0 1 2 1 2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1 2.4 2.4 0 0 1 2-1 2.4 2.4 0 0 1 2 1 2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1M4 17l1.5-6h13l1.5 6H4zM12 4v7M9 7l3-3 3 3"/>'
-                  : '<rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>'
-                }
-              </svg>
-            </div>
-            <div class="mt-1 whitespace-nowrap rounded-md bg-slate-950 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-100 shadow border border-slate-700 flex items-center gap-1.5">
-              <span>${vId}</span>
-              <span class="h-1.5 w-1.5 rounded-full ${isBreakdown ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}"></span>
-            </div>
-          </div>
-        `;
-        el.addEventListener('click', () => onSelect?.({ type: 'vehicle', data: v }));
-        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([v.current_lng, v.current_lat]).addTo(currentMap);
-        existing.set(key, m);
+      let mk = markers.current.get(key);
+      if (!mk) {
+        mk = new Marker({ element: document.createElement('div') }).setLngLat([lng, lat]).addTo(m);
+        markers.current.set(key, mk);
       } else {
-        m.setLngLat([v.current_lng, v.current_lat]);
+        mk.setLngLat([lng, lat]);
       }
-    });
+      const el = mk.getElement();
+      el.className = `fo-pin ${cls}${selectedKey === key ? ' is-selected' : ''}`;
+      el.style.setProperty('--pin', color);
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', label);
+      el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[glyph]}</svg><span class="fo-pin-label">${esc(label)}</span>`;
+      el.onclick = () => onSelectRef.current?.(sel);
+    };
 
-    // 2. Flood Incident Reports
-    if (showReports) reports.forEach((r) => {
-      const key = `rep:${r.report_id}`;
-      touched.add(key);
+    if (layers.shelters) shelters.forEach((s) => upsert(`shelter:${s.shelter_id}`, s.lng, s.lat, 'fo-square', 'var(--color-safe)', 'shelter', `${s.name} · ${s.occupancy}/${s.capacity} chỗ`, { type: 'shelter', data: s }));
+    if (layers.gauges) gauges.forEach((g) => upsert(`gauge:${g.station_id}`, g.lng, g.lat, 'fo-diamond', gaugeColor(g), 'gauge', `${g.name}${g.level_cm != null ? ` · ${g.level_cm} cm` : ' · chưa có số liệu'}`, { type: 'gauge', data: g }));
+    if (layers.vehicles) {
+      vehicles.forEach((v) => {
+        const broken = v.status === 'BREAKDOWN';
+        upsert(`vehicle:${v.vehicle_id}`, v.current_lng, v.current_lat, broken ? 'is-pulse' : '', broken ? 'var(--color-crit)' : 'var(--color-river)', vehicleGlyph(v.vehicle_type), `${v.name}${broken ? ' · hỏng' : ''}`, { type: 'vehicle', data: v });
+      });
+    }
+    if (layers.reports) {
+      reports.forEach((r) => {
+        const closed = CLOSED_STATUSES.includes(r.status);
+        const urgent = (r.priority === 'URGENT' || r.priority === 'CRITICAL') && !closed;
+        upsert(`report:${r.report_id}`, r.lng, r.lat, `${urgent ? 'is-pulse' : ''} ${closed ? 'is-dim' : ''}`, reportColor(r), 'report', `${r.report_id} · ${r.depth_cm} cm`, { type: 'report', data: r });
+      });
+    }
 
-      let m = existing.get(key);
-      if (!m) {
-        const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-110 hover:z-50 transition relative';
-        const isUrgent = r.priority === 'URGENT' || r.priority === 'CRITICAL';
-        const isResolved = r.status === 'RESOLVED' || r.status === 'CLOSED';
-        el.innerHTML = `
-          <div class="relative flex flex-col items-center">
-            <div class="flex items-center gap-1.5 rounded-xl border px-2 py-1 shadow-2xl transition font-mono font-bold ${
-              isResolved
-                ? 'bg-slate-900 border-slate-700 text-slate-400'
-                : isUrgent
-                ? 'bg-red-950 border-red-500 text-red-200 ring-4 ring-red-500/40 animate-pulse'
-                : 'bg-amber-950 border-amber-500 text-amber-200 ring-2 ring-amber-500/30'
-            }">
-              <svg class="h-4 w-4 shrink-0 text-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              <div class="flex flex-col leading-none">
-                <span class="text-[8px] uppercase tracking-wider font-mono opacity-80">${isUrgent ? 'Khẩn cấp' : 'Báo ngập'}</span>
-                <span class="font-mono text-[11px] font-extrabold">${r.depth_cm}cm</span>
-              </div>
-            </div>
-            <div class="mt-0.5 whitespace-nowrap rounded bg-slate-950 px-1.5 py-0.5 text-[9px] font-mono text-slate-300 border border-slate-800 shadow">
-              #${r.report_id} · ${r.people_affected} người
-            </div>
-          </div>
-        `;
-        el.addEventListener('click', () => onSelect?.({ type: 'report', data: r }));
-        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([r.lng, r.lat]).addTo(currentMap);
-        existing.set(key, m);
-      } else {
-        m.setLngLat([r.lng, r.lat]);
-      }
-    });
+    markers.current.forEach((mk, key) => { if (!touched.has(key)) { mk.remove(); markers.current.delete(key); } });
+  }, [loaded, vehicles, reports, shelters, gauges, layers, selectedKey]);
 
-    // 3. Safe Shelters
-    if (showShelters) shelters.forEach((sh) => {
-      const key = `sh:${sh.shelter_id}`;
-      touched.add(key);
-
-      let m = existing.get(key);
-      if (!m) {
-        const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-105 hover:z-50 transition relative';
-        el.innerHTML = `
-          <div class="flex items-center gap-1.5 rounded-lg bg-emerald-950 border border-emerald-500/80 px-2 py-1 text-emerald-300 shadow-xl text-xs font-mono font-bold">
-            <svg class="h-4 w-4 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            <div class="flex flex-col leading-tight">
-              <span class="text-[8px] uppercase tracking-wider text-emerald-400">Điểm trú ẩn</span>
-              <span class="text-[10px] text-white font-extrabold">${sh.occupancy}/${sh.capacity} chỗ</span>
-            </div>
-          </div>
-        `;
-        el.addEventListener('click', () => onSelect?.({ type: 'shelter', data: sh }));
-        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([sh.lng, sh.lat]).addTo(currentMap);
-        existing.set(key, m);
-      } else {
-        m.setLngLat([sh.lng, sh.lat]);
-      }
-    });
-
-    // 4. Gauge Stations
-    if (showGauges) gauges.forEach((g) => {
-      const key = `g:${g.station_id}`;
-      touched.add(key);
-
-      let m = existing.get(key);
-      if (!m) {
-        const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-105 hover:z-50 transition relative';
-        const isWarn = g.alert_state === 'WARNING' || g.alert_state === 'CRITICAL';
-        el.innerHTML = `
-          <div class="flex items-center gap-1.5 rounded-lg bg-slate-950 border px-2 py-1 shadow-xl text-xs font-mono font-bold ${
-            isWarn ? 'border-red-500 text-red-300 bg-red-950/80 ring-2 ring-red-500/30' : 'border-cyan-500/70 text-cyan-300'
-          }">
-            <svg class="h-4 w-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
-            </svg>
-            <div class="flex flex-col leading-tight">
-              <span class="text-[8px] uppercase tracking-wider text-slate-400">${g.station_id}</span>
-              <span class="text-[10px] text-white font-extrabold">${g.level_cm ?? '--'}cm</span>
-            </div>
-          </div>
-        `;
-        el.addEventListener('click', () => onSelect?.({ type: 'gauge', data: g }));
-        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([g.lng, g.lat]).addTo(currentMap);
-        existing.set(key, m);
-      } else {
-        m.setLngLat([g.lng, g.lat]);
-      }
-    });
-
-    // Cleanup stale markers
-    existing.forEach((marker, k) => {
-      if (!touched.has(k)) {
-        marker.remove();
-        existing.delete(k);
-      }
-    });
-  }, [activeVehicles, reports, shelters, gauges, mapBearing, showVehicles, showReports, showShelters, showGauges]);
+  const toggle = (k: keyof typeof layers) => setLayers((s) => ({ ...s, [k]: !s[k] }));
+  const items: { k: keyof typeof layers; label: string; n: number; color: string }[] = [
+    { k: 'reports', label: 'Tin báo', n: reports.length, color: 'bg-crit' },
+    { k: 'vehicles', label: 'Phương tiện', n: vehicles.length, color: 'bg-river' },
+    { k: 'shelters', label: 'Điểm trú', n: shelters.length, color: 'bg-safe' },
+    { k: 'gauges', label: 'Trạm đo', n: gauges.length, color: 'bg-watch' },
+    { k: 'zones', label: 'Vùng giám sát', n: zones.length, color: 'bg-warn' },
+  ];
 
   return (
-    <div className={`relative w-full overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950 ${heightClass} ${className} ${isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen min-h-screen' : ''}`}>
-            {/* Dark Theme Overrides for MapLibre Navigation and Attribution */}
-      <style>{`
-        .maplibregl-ctrl-group {
-          background-color: #0f172a !important;
-          border: 1px solid #334155 !important;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
-          border-radius: 0.75rem !important;
-          overflow: hidden;
-        }
-        .maplibregl-ctrl-group button {
-          background-color: #0f172a !important;
-          border-bottom: 1px solid #1e293b !important;
-        }
-        .maplibregl-ctrl-group button:hover {
-          background-color: #1e293b !important;
-        }
-        .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
-          filter: invert(1) brightness(1.6);
-        }
-        .maplibregl-ctrl-attrib {
-          background-color: rgba(15, 23, 42, 0.85) !important;
-          color: #94a3b8 !important;
-          border: 1px solid #334155 !important;
-          border-radius: 0.5rem !important;
-          padding: 2px 8px !important;
-          font-size: 10px !important;
-        }
-        .maplibregl-ctrl-attrib a {
-          color: #38bdf8 !important;
-        }
-      `}</style>
-{/* Map Container - Zero Hacky CSS Filter */}
-      <div 
-        ref={mapContainer} 
-        className="h-full w-full bg-slate-950" 
-      />
+    <div className={`relative overflow-hidden bg-paper ${heightClass} ${className}`}>
+      {/* inline style: maplibre-gl.css sets .maplibregl-map to position:relative and would beat a utility class */}
+      <div ref={container} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* Top Left HUD: Map Info & Controls */}
-      <div className="absolute top-3 left-3 z-10 max-w-sm sm:max-w-md rounded-xl bg-slate-950/95 backdrop-blur-md p-3 text-xs text-slate-200 border border-slate-800 shadow-2xl space-y-2">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="font-bold tracking-tight text-white uppercase text-[11px]">Bản đồ Tác chiến Thủy văn</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={toggleBasemap}
-              className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-cyan-300 border border-slate-700 transition"
-              title="Đổi lớp bản đồ nền"
-            >
-              {basemap === 'dark' ? '☀️ Ngày / Ảnh vệ tinh' : '🌙 Tác chiến Vector'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCenterHanoi}
-              className="px-2 py-0.5 rounded-md bg-sky-900 hover:bg-sky-800 text-[10px] font-bold text-sky-100 border border-sky-700 transition flex items-center gap-1"
-              title="Căn tâm Hà Nội"
-            >
-              <Crosshair className="h-3 w-3" />
-              <span>Hà Nội</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="px-1.5 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-300 transition border border-slate-700"
-              title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
-            >
-              {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Tactical Layer Filter Toggles */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+      <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-4rem)] flex-wrap gap-1.5">
+        {items.map((it) => (
           <button
+            key={it.k}
             type="button"
-            onClick={() => setShowReports(!showReports)}
-            className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
-              showReports
-                ? 'bg-red-950 text-red-300 border-red-500/60 shadow-inner'
-                : 'bg-slate-900 text-slate-500 border-slate-800'
-            }`}
+            aria-pressed={layers[it.k]}
+            onClick={() => toggle(it.k)}
+            className={`flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-semibold shadow-sm ${layers[it.k] ? 'border-line-2 bg-sheet text-ink' : 'border-line bg-sheet/70 text-ink-3'}`}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-red-400"></span>
-            <span>Tin ngập ({reports.length})</span>
+            <span className={`h-2 w-2 rounded-full ${it.color} ${layers[it.k] ? '' : 'opacity-30'}`} />
+            {it.label} <span className="num text-ink-3">{it.n}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setShowVehicles(!showVehicles)}
-            className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
-              showVehicles
-                ? 'bg-sky-950 text-sky-300 border-sky-500/60 shadow-inner'
-                : 'bg-slate-900 text-slate-500 border-slate-800'
-            }`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-            <span>Phương tiện ({activeVehicles.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowShelters(!showShelters)}
-            className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
-              showShelters
-                ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60 shadow-inner'
-                : 'bg-slate-900 text-slate-500 border-slate-800'
-            }`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-            <span>Điểm trú ({shelters.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowGauges(!showGauges)}
-            className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
-              showGauges
-                ? 'bg-blue-950 text-blue-300 border-blue-500/60 shadow-inner'
-                : 'bg-slate-900 text-slate-500 border-slate-800'
-            }`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-            <span>Trạm đo ({gauges.length})</span>
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Live Event Ticker in Bottom Corner */}
-      <MapEventTicker
-        machines={activeVehicles as any}
-        rescueCandidate={rescueCandidate as any}
-      />
+      <button type="button" onClick={fitAll} title="Căn khung theo dữ liệu" aria-label="Căn khung theo dữ liệu" className="btn absolute right-3 top-[88px] z-10 !min-h-8 !px-2">
+        <Maximize className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      <div className="absolute bottom-3 left-3 z-10 max-w-[75%] rounded border border-line bg-sheet/95 px-2 py-1 text-[11px] text-ink-2 shadow-sm">
+        Vùng giám sát: dữ liệu thí điểm.
+        {live?.enabled && !live.connected && ' Mất kết nối bản sao số, vị trí xe có thể cũ.'}
+        {route && ` Nét đứt: đường chim bay ${route.label}.`}
+      </div>
+
+      {tilesFailed && (
+        <div role="status" className="absolute inset-x-3 bottom-16 z-10 mx-auto flex max-w-md items-center gap-2 rounded border border-warn bg-warn-soft px-3 py-2 text-xs text-ink">
+          <TriangleAlert className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+          Không tải được bản đồ nền (OpenStreetMap). Các điểm dữ liệu vẫn đúng vị trí nhưng không có nền đường.
+        </div>
+      )}
     </div>
   );
 };
