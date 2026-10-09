@@ -287,7 +287,8 @@ export const api = {
     const isResolved = payload.is_resolved !== undefined
       ? payload.is_resolved
       : (payload.action === 'RESOLVED');
-    const diagnosis = payload.diagnosis || payload.notes || 'Đã kiểm tra và xử lý kỹ thuật phương tiện.';
+    const diagnosis = (payload.diagnosis || payload.notes || '').trim();
+    if (!diagnosis) throw new Error('Cần ghi rõ kết quả kiểm tra, sửa chữa.');
     const body = {
       diagnosis,
       is_resolved: isResolved,

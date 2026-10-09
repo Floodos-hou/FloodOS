@@ -2,32 +2,11 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useState } from 'react';
-import {
-  RescueVehicle,
-  SafeShelter,
-  GaugeStation,
-  FieldIncident,
-} from '../../types';
-import {
-  vehicleType,
-  vehicleStatus,
-  shelterStatus,
-  gaugeAlertState,
-} from '../../utils/labels';
+import type { RescueVehicle, SafeShelter, GaugeStation, FieldIncident } from '../../types';
+import { vehicleType, incidentType, incidentStatus } from '../../utils/labels';
+import { StatusBadge } from '../common/StatusBadge';
 import { Modal } from '../common/Modal';
-import {
-  Truck,
-  Fuel,
-  HeartPulse,
-  Wrench,
-  Home,
-  Waves,
-  Activity,
-  BatteryCharging,
-  CheckCircle2,
-  AlertTriangle,
-  Users,
-} from 'lucide-react';
+import { EmptyState, Field, GaugeRuler, Metric, ageText } from '../ui/kit';
 
 interface ResourceManagerWorkspaceProps {
   vehicles: RescueVehicle[];
@@ -40,514 +19,171 @@ interface ResourceManagerWorkspaceProps {
   onSelectGauge?: (gauge: GaugeStation) => void;
 }
 
-type SectionTab = 'VEHICLES' | 'SHELTERS' | 'GAUGES' | 'REPAIRS';
+type Section = 'VEHICLES' | 'SHELTERS' | 'GAUGES' | 'REPAIR';
 
-const INPUT_STYLE = 'w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-white outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all';
-const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-300';
+const pctText = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v)}%`);
+const meter = (v: number | null | undefined, lowIsBad = true) => {
+  if (v == null) return 'bg-line-2';
+  if (lowIsBad) return v < 25 ? 'bg-crit' : v < 50 ? 'bg-warn' : 'bg-safe';
+  return 'bg-river';
+};
 
 export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> = ({
-  vehicles,
-  shelters,
-  gauges,
-  incidents,
-  onUpdateShelterOccupancy,
-  onResolveTicket,
-  onSelectShelter,
-  onSelectGauge,
+  vehicles, shelters, gauges, incidents, onUpdateShelterOccupancy, onResolveTicket, onSelectShelter, onSelectGauge,
 }) => {
-  const [activeTab, setActiveTab] = useState<SectionTab>('VEHICLES');
+  const [section, setSection] = useState<Section>('VEHICLES');
+  const [editing, setEditing] = useState<SafeShelter | null>(null);
+  const [occupancy, setOccupancy] = useState('');
+  const [resolving, setResolving] = useState<FieldIncident | null>(null);
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Shelter update state
-  const [editingShelter, setEditingShelter] = useState<SafeShelter | null>(null);
-  const [newOccupancy, setNewOccupancy] = useState<number>(0);
-  const [isUpdatingShelter, setIsUpdatingShelter] = useState(false);
+  const ready = vehicles.filter((v) => v.status === 'IDLE').length;
+  const broken = vehicles.filter((v) => v.status === 'BREAKDOWN' || v.status === 'MAINTENANCE').length;
+  const repairQueue = incidents.filter((i) => i.repair_ticket_id && i.status !== 'RESOLVED');
+  const openSeats = shelters.reduce((n, s) => n + Math.max(0, s.capacity - (s.occupancy ?? s.current_occupancy ?? 0)), 0);
 
-  // Repair resolution state
-  const [resolvingIncident, setResolvingIncident] = useState<FieldIncident | null>(null);
-  const [resolutionNotes, setResolutionNotes] = useState('');
-  const [isResolving, setIsResolving] = useState(false);
+  const tabs: { id: Section; label: string; n: number }[] = [
+    { id: 'VEHICLES', label: 'Phương tiện', n: vehicles.length },
+    { id: 'SHELTERS', label: 'Điểm trú', n: shelters.length },
+    { id: 'GAUGES', label: 'Trạm đo', n: gauges.length },
+    { id: 'REPAIR', label: 'Sửa chữa', n: repairQueue.length },
+  ];
 
-  const availableVehicles = vehicles.filter((v) => v.status === 'AVAILABLE' || v.status === 'IDLE' || v.status === 'READY');
-  const activeIncidents = incidents.filter((i) => i.status !== 'RESOLVED');
-
-  const openShelterEdit = (s: SafeShelter) => {
-    setEditingShelter(s);
-    setNewOccupancy(s.current_occupancy ?? s.occupancy ?? 0);
-  };
-
-  const handleShelterSubmit = async (e: React.FormEvent) => {
+  const saveOccupancy = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingShelter || !onUpdateShelterOccupancy) return;
-    setIsUpdatingShelter(true);
-    try {
-      await onUpdateShelterOccupancy(editingShelter.shelter_id, newOccupancy);
-      setEditingShelter(null);
-    } finally {
-      setIsUpdatingShelter(false);
-    }
+    if (!editing || !onUpdateShelterOccupancy) return;
+    const n = Number(occupancy);
+    if (occupancy === '' || Number.isNaN(n) || n < 0 || n > editing.capacity) { setError(`Sĩ số phải từ 0 đến ${editing.capacity}.`); return; }
+    setBusy(true); setError(null);
+    try { await onUpdateShelterOccupancy(editing.shelter_id, n); setEditing(null); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Không cập nhật được sĩ số.'); }
+    finally { setBusy(false); }
   };
 
-  const openResolveTicket = (inc: FieldIncident) => {
-    setResolvingIncident(inc);
-    setResolutionNotes('Đã gỡ rác chân vịt, thay chốt định vị và kiểm tra áp suất dầu. Phương tiện sẵn sàng tác chiến.');
-  };
-
-  const handleResolveSubmit = async (e: React.FormEvent) => {
+  const saveRepair = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resolvingIncident || !onResolveTicket) return;
-    setIsResolving(true);
-    try {
-      await onResolveTicket(resolvingIncident.incident_id, resolutionNotes);
-      setResolvingIncident(null);
-    } finally {
-      setIsResolving(false);
-    }
+    if (!resolving || !onResolveTicket) return;
+    if (notes.trim().length < 3) { setError('Ghi rõ kết quả kiểm tra, sửa chữa (ít nhất 3 ký tự).'); return; }
+    setBusy(true); setError(null);
+    try { await onResolveTicket(resolving.incident_id, notes.trim()); setResolving(null); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Không đóng được phiếu sửa chữa.'); }
+    finally { setBusy(false); }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 to-teal-950 p-5 rounded-2xl border border-slate-800 text-white shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-teal-500/20 rounded-xl text-teal-300 border border-teal-500/30">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">Hạ Tầng &amp; Nguồn Lực Ứng Phó</h2>
-            <p className="text-xs text-teal-200">
-              Quản lý đội xe xuồng cứu nạn • Điểm sơ tán an toàn • Trạm đo ngập thủy văn tự động
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs text-emerald-300 font-semibold">{availableVehicles.length}/{vehicles.length} phương tiện sẵn sàng</span>
-          </div>
-        </div>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="panel grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+        <Metric label="Xe sẵn sàng" value={`${ready}/${vehicles.length}`} tone={ready === 0 && vehicles.length > 0 ? 'crit' : 'river'} hint="trạng thái rảnh, chưa nhận lệnh" />
+        <Metric label="Xe hỏng / bảo dưỡng" value={broken} tone={broken > 0 ? 'warn' : undefined} />
+        <Metric label="Chỗ trống điểm trú" value={openSeats} hint={`${shelters.length} điểm`} />
+        <Metric label="Phiếu sửa chữa mở" value={repairQueue.length} tone={repairQueue.length > 0 ? 'warn' : undefined} />
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 overflow-x-auto pb-2">
-        <button
-          onClick={() => setActiveTab('VEHICLES')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'VEHICLES'
-              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          Đội Phương Tiện Cứu Nạn ({vehicles.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('SHELTERS')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'SHELTERS'
-              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Home className="w-4 h-4" />
-          Điểm Trú Ẩn An Toàn ({shelters.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('GAUGES')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'GAUGES'
-              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Waves className="w-4 h-4" />
-          Trạm Đo Ngập Thủy Văn ({gauges.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('REPAIRS')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'REPAIRS'
-              ? 'bg-rose-600 border border-rose-500 text-white shadow-lg shadow-rose-950'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          Phiếu Sửa Chữa ({activeIncidents.length})
-        </button>
+      <div className="flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Nhóm nguồn lực">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={section === t.id} onClick={() => setSection(t.id)}
+            className={`shrink-0 border-b-2 px-3 py-2 text-sm font-semibold ${section === t.id ? 'border-river text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}>
+            {t.label} <span className="num text-xs text-ink-3">{t.n}</span>
+          </button>
+        ))}
       </div>
 
-      {/* TAB 1: VEHICLES */}
-      {activeTab === 'VEHICLES' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vehicles.map((v) => {
-            const isBroken = v.status === 'MAINTENANCE' || v.status === 'BREAKDOWN';
-            const isReady = v.status === 'AVAILABLE' || v.status === 'IDLE' || v.status === 'READY';
-            const isWorking = v.status === 'DISPATCHED' || v.status === 'WORKING' || v.status === 'EN_ROUTE';
-            return (
-              <div
-                key={v.vehicle_id}
-                className={`bg-slate-900/90 rounded-2xl border p-5 shadow-xl text-slate-100 flex flex-col justify-between transition-all ${
-                  isBroken ? 'border-rose-800 bg-rose-950/30' : 'border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <span className="font-mono text-xs font-bold text-slate-500">#{v.vehicle_id}</span>
-                    <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold border whitespace-nowrap ${
-                        isReady
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
-                          : isWorking
-                          ? 'bg-sky-950/80 text-sky-300 border-sky-800/80'
-                          : isBroken
-                          ? 'bg-rose-950/80 text-rose-300 border-rose-800/80'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      {vehicleStatus(v.status).text}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-white text-base mb-1">{v.name || v.vehicle_name || v.vehicle_id}</h3>
-                  <div className="text-xs text-slate-400 mb-4">
-                    Loại: <strong>{vehicleType(v.vehicle_type) || v.vehicle_type}</strong>
-                  </div>
-
-                  <div className="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <Fuel className="w-3.5 h-3.5 text-amber-500" /> Nhiên liệu:
-                      </span>
-                      <span className="font-bold text-slate-100 font-mono">
-                        {v.fuel_pct !== undefined && v.fuel_pct !== null ? `${v.fuel_pct}%` : (v.fuel_percent !== undefined ? `${v.fuel_percent}%` : 'Chưa có dữ liệu')}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <HeartPulse className="w-3.5 h-3.5 text-emerald-500" /> Tình trạng máy:
-                      </span>
-                      <span className="font-bold text-slate-100 font-mono">
-                        {v.health_pct !== undefined && v.health_pct !== null ? `${v.health_pct}%` : (v.health_percent !== undefined ? `${v.health_percent}%` : 'Chưa có dữ liệu')}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 flex items-center gap-1.5">
-                        <Activity className="w-3.5 h-3.5 text-blue-500" /> Nguồn toạ độ:
-                      </span>
-                      <span className="font-medium text-slate-300">Mô phỏng IoT</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
-                  <span>Toạ độ: [{v.current_lat.toFixed(4)}, {v.current_lng.toFixed(4)}]</span>
-                  {v.assigned_team_id && <span className="font-semibold text-slate-300">Đội: {v.assigned_team_id}</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* TAB 2: SHELTERS */}
-      {activeTab === 'SHELTERS' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {shelters.map((s) => {
-            const pct = Math.min(100, Math.round(((s.current_occupancy ?? s.occupancy ?? 0) / (s.capacity || 1)) * 100));
-            const isFull = pct >= 95;
-
-            return (
-              <div
-                key={s.shelter_id}
-                className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl hover:border-slate-700 transition-all flex flex-col justify-between text-slate-100"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="font-mono text-xs font-bold text-slate-500">#{s.shelter_id}</span>
-                    <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
-                        isFull
-                          ? 'bg-rose-950/80 text-rose-300 border-rose-800'
-                          : s.status === 'OPEN' || s.status === 'ACTIVE'
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      {isFull ? 'GẦN KÍN CHỖ' : shelterStatus(s.status).text || s.status}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-white text-base mb-1">{s.name || s.shelter_name}</h3>
-                  <p className="text-xs text-slate-400 mb-4">{s.address || "Khu vực cao ráo an toàn"}</p>
-
-                  <div className="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-xs mb-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 font-semibold">Công suất tiếp nhận:</span>
-                      <span className="font-bold text-cyan-300">
-                        {s.current_occupancy} / {s.capacity} người ({pct}%)
-                      </span>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="text-[11px] text-slate-500 flex justify-between pt-1">
-                      <span>Người phụ trách: {s.contact_phone || 'Trực ban phường'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
-                  {onSelectShelter && (
-                    <button
-                      type="button"
-                      onClick={() => onSelectShelter(s)}
-                      className="flex-1 py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    >
-                      Bản đồ
-                    </button>
-                  )}
-                  {onUpdateShelterOccupancy && (
-                    <button
-                      type="button"
-                      onClick={() => openShelterEdit(s)}
-                      className="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow"
-                    >
-                      Cập nhật số người
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* TAB 3: GAUGES */}
-      {activeTab === 'GAUGES' && (
-        <div className="space-y-4">
-          <div className="p-3 bg-amber-950/60 border border-amber-800/60 rounded-xl text-xs text-amber-300 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-            <span>
-              <strong>Lưu ý minh bạch:</strong> Mực nước trạm quan trắc hiện được cấp bởi bộ mô phỏng IoT thủy văn Hà Nội để thử nghiệm kịch bản ngập cục bộ.
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {gauges.map((g) => {
-              const isDanger = g.alert_state === 'DANGER' || g.alert_state === 'WARNING';
-
-              return (
-                <div
-                  key={g.station_id}
-                  className={`bg-slate-900/90 rounded-2xl border p-5 shadow-xl transition-all flex flex-col justify-between text-slate-100 ${
-                    isDanger ? 'border-rose-800 bg-rose-950/40' : 'border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="font-mono text-xs font-bold text-slate-500">#{g.station_id}</span>
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                          g.alert_state === 'DANGER'
-                            ? 'bg-rose-600 text-white animate-pulse'
-                            : g.alert_state === 'WARNING'
-                            ? 'bg-amber-500 text-white'
-                            : g.alert_state === 'WATCH'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        {gaugeAlertState(g.alert_state).text}
-                      </span>
-                    </div>
-
-                    <h3 className="font-bold text-white text-base mb-1">{g.name || g.station_name}</h3>
-                    <p className="text-xs text-slate-400 mb-4">Lưu vực: {g.river_stream || "Sông Nhuệ / Kênh xả"}</p>
-
-                    <div className="space-y-2 bg-slate-950/70 p-4 rounded-xl border border-slate-800 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">Mực nước hiện tại:</span>
-                        <span className="text-base font-black text-rose-600">{g.water_level_cm} cm</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">Ngưỡng báo động:</span>
-                        <span className="font-bold text-slate-200">{g.warning_level_cm} cm</span>
-                      </div>
-                      <div className="flex justify-between items-center pt-1 border-t border-slate-800 text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <BatteryCharging className="w-3.5 h-3.5 text-emerald-500" /> Pin trạm: {g.battery_pct}%
-                        </span>
-                        <span>Đo lúc: {new Date(g.last_telemetry_at || g.level_updated_at || Date.now()).toLocaleTimeString('vi-VN')}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {onSelectGauge && (
-                    <div className="pt-3 border-t border-slate-100 mt-4">
-                      <button
-                        type="button"
-                        onClick={() => onSelectGauge(g)}
-                        className="w-full py-2 px-3 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-                      >
-                        Định vị trạm trên bản đồ tác chiến →
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: REPAIR TICKETS */}
-      {activeTab === 'REPAIRS' && (
-        <div className="space-y-4">
-          {activeIncidents.length === 0 ? (
-            <div className="bg-slate-900/90 border border-emerald-900/60 rounded-2xl p-8 text-center text-emerald-300">
-              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="font-bold text-lg">Không có phương tiện cần bảo dưỡng khẩn cấp</h3>
-              <p className="text-sm text-emerald-600 mt-1">
-                Toàn bộ xuồng và xe lội nước đang ở tình trạng kỹ thuật đạt chuẩn.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {activeIncidents.map((inc) => (
-                <div
-                  key={inc.incident_id}
-                  className="bg-white rounded-2xl border-2 border-rose-200 p-5 shadow-sm flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="font-mono text-xs font-bold text-slate-500">#{inc.incident_id}</span>
-                      <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-rose-100 text-rose-800">
-                        {inc.severity}
-                      </span>
-                    </div>
-
-                    <h4 className="font-bold text-slate-900 text-base mb-1">
-                      {inc.description}
-                    </h4>
-                    <p className="text-xs text-slate-600 mb-3">
-                      Phương tiện: <strong className="text-rose-600">{inc.vehicle_id}</strong> • Báo cáo lúc: {new Date(inc.reported_at || inc.created_at).toLocaleTimeString('vi-VN')}
-                    </p>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
-                    {onResolveTicket && (
-                      <button
-                        type="button"
-                        onClick={() => openResolveTicket(inc)}
-                        className="py-2 px-4 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow flex items-center gap-1.5"
-                      >
-                        <Wrench className="w-3.5 h-3.5" />
-                        Xác nhận Sửa Chữa Xong
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+      {section === 'VEHICLES' && (
+        <div className="panel overflow-x-auto">
+          {vehicles.length === 0 ? <EmptyState title="Chưa có phương tiện nào" /> : (
+            <table className="w-full min-w-[640px] text-sm">
+              <thead><tr className="border-b border-line text-left"><th className="eyebrow p-3">Phương tiện</th><th className="eyebrow p-3">Trạng thái</th><th className="eyebrow p-3">Nhiên liệu</th><th className="eyebrow p-3">Kỹ thuật</th><th className="eyebrow p-3">Vị trí</th></tr></thead>
+              <tbody className="rule-y">
+                {vehicles.map((v) => {
+                  const fuel = v.fuel_pct ?? v.fuel_percent; const health = v.health_pct ?? v.health_percent;
+                  return (
+                    <tr key={v.vehicle_id}>
+                      <td className="p-3"><div className="font-semibold">{v.name}</div><div className="text-xs text-ink-3">{vehicleType(v.vehicle_type)} · {v.capacity_value} {v.capacity_unit}</div></td>
+                      <td className="p-3"><StatusBadge status={v.status} type="vehicle" /></td>
+                      <td className="p-3"><div className="num font-semibold">{pctText(fuel)}</div><div className="mt-1 h-1.5 w-20 rounded-sm bg-sheet-2 ring-1 ring-line"><div className={`h-full rounded-sm ${meter(fuel)}`} style={{ width: `${fuel ?? 0}%` }} /></div></td>
+                      <td className="p-3"><div className="num font-semibold">{pctText(health)}</div><div className="mt-1 h-1.5 w-20 rounded-sm bg-sheet-2 ring-1 ring-line"><div className={`h-full rounded-sm ${meter(health)}`} style={{ width: `${health ?? 0}%` }} /></div></td>
+                      <td className="p-3 text-xs text-ink-2">{v.telemetry_source ?? 'Chưa rõ nguồn'}{v.position_is_simulated ? ' (mô phỏng)' : ''}<div className="text-ink-3">{ageText(v.telemetry_updated_at) ?? 'chưa có bản ghi'}</div></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       )}
 
-      {/* MODAL: UPDATE SHELTER OCCUPANCY */}
-      {editingShelter && (
-        <Modal
-          isOpen={true}
-          onClose={() => setEditingShelter(null)}
-          title={`Cập Nhật Sĩ Số: ${editingShelter.shelter_name}`}
-        >
-          <form onSubmit={handleShelterSubmit} className="space-y-4">
-            <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs">
-              <div><strong>Địa chỉ:</strong> {editingShelter.address}</div>
-              <div><strong>Sức chứa tối đa:</strong> {editingShelter.capacity} người</div>
-            </div>
+      {section === 'SHELTERS' && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {shelters.length === 0 && <div className="panel md:col-span-2"><EmptyState title="Chưa có điểm trú nào" /></div>}
+          {shelters.map((s) => {
+            const occ = s.occupancy ?? s.current_occupancy ?? 0; const pct = s.capacity > 0 ? Math.min(100, Math.round((occ / s.capacity) * 100)) : 0;
+            return (
+              <article key={s.shelter_id} className="panel p-4">
+                <div className="flex items-start justify-between gap-2"><div><h4 className="text-base">{s.name}</h4>{s.address && <p className="text-xs text-ink-3">{s.address}</p>}</div><StatusBadge status={s.status === 'ACTIVE' ? 'OPEN' : s.status} type="shelter" /></div>
+                <div className="mt-3 flex items-baseline justify-between"><span className="num text-xl font-bold">{occ}<span className="text-sm font-normal text-ink-3">/{s.capacity} chỗ</span></span><span className="eyebrow">{s.occupancy_source}</span></div>
+                <div className="mt-1 h-2 rounded-sm bg-sheet-2 ring-1 ring-line"><div className={`h-full rounded-sm ${pct >= 100 ? 'bg-crit' : pct >= 80 ? 'bg-warn' : 'bg-safe'}`} style={{ width: `${pct}%` }} /></div>
+                <div className="mt-3 flex gap-2">
+                  {onUpdateShelterOccupancy && <button type="button" className="btn" onClick={() => { setError(null); setOccupancy(String(occ)); setEditing(s); }}>Cập nhật sĩ số</button>}
+                  {onSelectShelter && <button type="button" className="btn btn-ghost" onClick={() => onSelectShelter(s)}>Xem trên bản đồ</button>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
-            <div>
-              <label className={LABEL_STYLE}>Số người đang có mặt tại điểm sơ tán</label>
-              <input
-                type="number"
-                min={0}
-                max={editingShelter.capacity * 2}
-                value={newOccupancy}
-                onChange={(e) => setNewOccupancy(parseInt(e.target.value) || 0)}
-                className={INPUT_STYLE}
-                required
-              />
-            </div>
+      {section === 'GAUGES' && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {gauges.length === 0 && <div className="panel md:col-span-2"><EmptyState title="Chưa có trạm đo nào" /></div>}
+          {gauges.map((g) => (
+            <article key={g.station_id} className="panel p-4">
+              <div className="flex items-start justify-between gap-2"><div><h4 className="text-base">{g.name}</h4>{g.river_stream && <p className="text-xs text-ink-3">{g.river_stream}</p>}</div><StatusBadge status={g.alert_state} type="gauge" /></div>
+              <GaugeRuler className="mt-3" level={g.level_cm ?? g.water_level_cm} warn={g.warn_level_cm ?? g.warning_level_cm} crit={g.critical_level_cm} source={g.source} />
+              <p className="mt-2 text-xs text-ink-3">Số đo gần nhất: {ageText(g.level_updated_at ?? g.last_telemetry_at) ?? 'chưa có bản ghi'}{g.battery_pct != null ? ` · pin ${g.battery_pct}%` : ''}{g.is_simulated ? ' · trạm mô phỏng' : ''}</p>
+              {onSelectGauge && <button type="button" className="btn btn-ghost mt-2 !min-h-8 text-xs" onClick={() => onSelectGauge(g)}>Xem trên bản đồ</button>}
+            </article>
+          ))}
+        </div>
+      )}
 
-            <div className="flex items-center justify-end gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setEditingShelter(null)}
-                className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isUpdatingShelter}
-                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow disabled:opacity-50"
-              >
-                {isUpdatingShelter ? 'Đang lưu...' : 'Lưu Thay Đổi'}
-              </button>
-            </div>
+      {section === 'REPAIR' && (
+        <div className="panel">
+          {repairQueue.length === 0 ? <EmptyState title="Không có phiếu sửa chữa đang mở" hint="Phiếu được tạo khi đội hiện trường báo sự cố và điều phối viên duyệt phương án thay thế." /> : (
+            <ul className="rule-y">
+              {repairQueue.map((i) => (
+                <li key={i.incident_id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{vehicles.find((v) => v.vehicle_id === i.vehicle_id)?.name ?? i.vehicle_id} · {incidentType(i.incident_type)}</div>
+                    <div className="text-xs text-ink-3">Phiếu {i.repair_ticket_id} · {incidentStatus(i.status).text} · ngừng ước tính {i.estimated_downtime_hours} giờ</div>
+                    {i.description && <p className="mt-1 text-sm">{i.description}</p>}
+                  </div>
+                  {onResolveTicket && <button type="button" className="btn btn-primary" onClick={() => { setError(null); setNotes(''); setResolving(i); }}>Đóng phiếu, trả xe về sẵn sàng</button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <Modal title={`Sĩ số: ${editing.name}`} onClose={() => setEditing(null)} size="max-w-sm">
+          <form onSubmit={saveOccupancy} className="space-y-3">
+            {error && <p role="alert" className="rounded border border-crit bg-crit-soft p-2 text-xs text-crit">{error}</p>}
+            <Field label={`Số người đang ở điểm trú (tối đa ${editing.capacity})`} htmlFor="occ"><input id="occ" inputMode="numeric" className="input" value={occupancy} onChange={(e) => setOccupancy(e.target.value.replace(/[^0-9]/g, ''))} /></Field>
+            <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu sĩ số'}</button>
           </form>
         </Modal>
       )}
 
-      {/* MODAL: RESOLVE TICKET */}
-      {resolvingIncident && (
-        <Modal
-          isOpen={true}
-          onClose={() => setResolvingIncident(null)}
-          title={`Nghiệm Thu Sửa Chữa #${resolvingIncident.incident_id}`}
-        >
-          <form onSubmit={handleResolveSubmit} className="space-y-4">
-            <div className="p-3 bg-teal-50 rounded-xl border border-teal-200 text-xs">
-              <div><strong>Phương tiện:</strong> {resolvingIncident.vehicle_id}</div>
-              <div><strong>Sự cố ban đầu:</strong> {resolvingIncident.description}</div>
-            </div>
-
-            <div>
-              <label className={LABEL_STYLE}>Nội dung nghiệm thu kỹ thuật</label>
-              <textarea
-                rows={3}
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-                className={INPUT_STYLE}
-                required
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setResolvingIncident(null)}
-                className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isResolving}
-                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow disabled:opacity-50"
-              >
-                {isResolving ? 'Đang cập nhật...' : 'Xác Nhận Đưa Xe Trở Lại Trực'}
-              </button>
-            </div>
+      {resolving && (
+        <Modal title="Đóng phiếu sửa chữa" onClose={() => setResolving(null)}>
+          <form onSubmit={saveRepair} className="space-y-3">
+            {error && <p role="alert" className="rounded border border-crit bg-crit-soft p-2 text-xs text-crit">{error}</p>}
+            <p className="text-sm">{vehicles.find((v) => v.vehicle_id === resolving.vehicle_id)?.name ?? resolving.vehicle_id} · {incidentType(resolving.incident_type)}</p>
+            <Field label="Kết quả kiểm tra và sửa chữa" htmlFor="repair-notes"><textarea id="repair-notes" rows={3} className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+            <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? 'Đang lưu…' : 'Xác nhận xe đã sửa xong'}</button>
           </form>
         </Modal>
       )}
