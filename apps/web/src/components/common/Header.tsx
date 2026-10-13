@@ -37,8 +37,8 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-line bg-sheet px-3 sm:px-4">
-      <FloodOsLogo size={28} showText subtitle={orgLabel(orgName, user?.organization_id)} />
+    <header className="sticky top-0 z-30 flex h-12 items-center gap-2 overflow-x-clip sm:gap-3 border-b border-line bg-sheet px-3 sm:px-4">
+      <FloodOsLogo className="min-w-0 max-w-[42vw] sm:max-w-sm" size={28} showText subtitle={orgLabel(orgName, user?.organization_id)} />
 
       <span
         className="chip chip-watch"

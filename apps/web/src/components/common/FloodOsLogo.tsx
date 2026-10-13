@@ -27,7 +27,7 @@ export const FloodOsMark: React.FC<{ size?: number; inverse?: boolean }> = ({ si
 
 export const FloodOsLogo: React.FC<FloodOsLogoProps> = ({ size = 32, className = '', showText = false, subtitle, inverse = false }) => (
   <div className={`inline-flex items-center gap-2.5 ${className}`}>
-    <FloodOsMark size={size} inverse={inverse} />
+    <span className="shrink-0"><FloodOsMark size={size} inverse={inverse} /></span>
     {showText && (
       <div className="min-w-0 leading-tight">
         <div className={`font-display text-[17px] font-bold tracking-tight ${inverse ? 'text-sheet' : 'text-ink'}`}>FloodOS</div>

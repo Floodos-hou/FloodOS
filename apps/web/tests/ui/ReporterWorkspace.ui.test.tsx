@@ -32,7 +32,7 @@ const fillReportForm = (description = 'Có 5 người bị mắc kẹt') => {
   fireEvent.click(within(dialog).getByRole('button', { name: /nhập tọa độ thủ công/i }));
   fireEvent.change(within(dialog).getByLabelText('Vĩ độ'), { target: { value: '20.9782' } });
   fireEvent.change(within(dialog).getByLabelText('Kinh độ'), { target: { value: '105.845' } });
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Dùng' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Áp dụng' }));
   fireEvent.click(within(dialog).getByRole('button', { name: '50' }));
   fireEvent.change(within(dialog).getByLabelText(/có bao nhiêu người/i), { target: { value: '5' } });
   fireEvent.change(within(dialog).getByLabelText(/mô tả ngắn/i), { target: { value: description } });
@@ -56,7 +56,7 @@ describe('Reporter workspace business flows and exceptions', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /nhập tọa độ thủ công/i }));
     fireEvent.change(within(dialog).getByLabelText('Vĩ độ'), { target: { value: '200' } });
     fireEvent.change(within(dialog).getByLabelText('Kinh độ'), { target: { value: '105' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Dùng' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Áp dụng' }));
     expect(within(dialog).getByText('Tọa độ không hợp lệ.')).toBeTruthy();
     expect(within(dialog).getByText('Chưa chọn vị trí')).toBeTruthy();
   });

@@ -221,7 +221,7 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
                 <div className="mt-2 grid grid-cols-[1fr_1fr_auto] items-end gap-2">
                   <Field label="Vĩ độ" htmlFor="m-lat"><input id="m-lat" inputMode="decimal" className="input" value={manualLat} onChange={(e) => setManualLat(e.target.value)} /></Field>
                   <Field label="Kinh độ" htmlFor="m-lng"><input id="m-lng" inputMode="decimal" className="input" value={manualLng} onChange={(e) => setManualLng(e.target.value)} /></Field>
-                  <button type="button" className="btn" onClick={applyManual}>Dùng</button>
+                  <button type="button" className="btn" onClick={applyManual}>Áp dụng</button>
                 </div>
               )}
               {placeError && <p role="alert" className="mt-2 text-xs text-crit">{placeError}</p>}
