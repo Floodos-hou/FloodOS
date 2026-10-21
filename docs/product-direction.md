@@ -65,9 +65,9 @@ Không thay schema bằng cách đổi tên hàng loạt `fields` thành `flood_
 
 ## Tình trạng mã nguồn hiện tại
 
-Backend đã được chuyển đổi hoàn toàn sang FloodOS chuẩn PCTT (mô hình, API, BPMN, RBAC/RLS, seed, telemetry, kiểm thử, Postman). Chi tiết và trạng thái từng hạng mục: [README, mục 3](../README.md).
+Backend và giao diện FloodOS (`apps/web`) đã được hoàn thiện đồng bộ sang chuẩn PCTT (mô hình, API, BPMN, RBAC/RLS, seed, telemetry, bản đồ vector PMTiles ngoại tuyến, 4 cockpit tác chiến theo vai trò, kiểm thử tự động, Postman). Chi tiết và trạng thái từng hạng mục: [README, mục 3](../README.md).
 
-**Còn thiếu và được ghi rõ là chưa làm:** giao diện FloodOS (`apps/web` và `apps/twin3d` vẫn là giao diện cũ không khớp API mới), hoàn tất user task Flowable qua REST, giám sát Prometheus/Grafana, GitOps/ArgoCD, triển khai Internet, quản trị đơn vị, hàng đợi ngoại tuyến, thành phần AI, dữ liệu quan trắc thật, định tuyến thật.
+**Các hạng mục tiếp tục phát triển theo lộ trình:** hoàn tất user task Flowable qua REST, giám sát Prometheus/Grafana, GitOps/ArgoCD, triển khai Internet môi trường production hoàn chỉnh, quản trị đơn vị, hàng đợi ngoại tuyến đồng bộ nền, thành phần AI phân tích rủi ro, kết nối cảm biến trạm quan trắc thủy văn vật lý thật, thuật toán định tuyến giao thông tránh ngập theo mạng lưới đường bộ thực tế.
 
 ## Lộ trình còn lại
 

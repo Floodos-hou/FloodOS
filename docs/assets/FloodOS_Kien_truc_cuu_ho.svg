@@ -37,11 +37,11 @@
 <text x="88" y="599" fill="#b8cddb" font-size="15" font-weight="400">Bản đồ · tin báo · điều phối</text>
 <text x="88" y="621" fill="#b8cddb" font-size="15" font-weight="400">Giao diện theo 5 vai trò</text>
 <rect x="70" y="700" width="280" height="140" rx="14" fill="#142d40" stroke="#28495e" />
-<rect x="70" y="714" width="4" height="112" rx="2" fill="#f4a364" />
-<text x="88" y="731" fill="#f3faff" font-size="19" font-weight="650">Bản sao số 3D</text>
-<text x="88" y="757" fill="#b8cddb" font-size="15" font-weight="400">apps/twin3d · Three.js</text>
-<text x="88" y="779" fill="#b8cddb" font-size="15" font-weight="400">Vị trí &amp; trạng thái tài nguyên</text>
-<text x="88" y="825" fill="#f4a364" font-size="12" font-weight="600">CÒN THÀNH PHẦN KẾ THỪA²</text>
+<rect x="70" y="714" width="4" height="112" rx="2" fill="#28c9da" />
+<text x="88" y="731" fill="#f3faff" font-size="19" font-weight="650">Bản đồ Ngoại tuyến</text>
+<text x="88" y="757" fill="#b8cddb" font-size="15" font-weight="400">PMTiles · MapLibre GL</text>
+<text x="88" y="779" fill="#b8cddb" font-size="15" font-weight="400">Tự phục vụ không cần Internet</text>
+<text x="88" y="825" fill="#58d68d" font-size="12" font-weight="600">CHUẨN TÁC CHIẾN MỚI²</text>
 <rect x="70" y="880" width="280" height="125" rx="14" fill="#142d40" stroke="#28495e" />
 <rect x="70" y="894" width="4" height="97" rx="2" fill="#28c9da" />
 <text x="88" y="911" fill="#f3faff" font-size="19" font-weight="650">Tác nghiệp hiện trường</text>
@@ -144,5 +144,5 @@
 <text x="48" y="1190" fill="#c5dae6" font-size="16" font-weight="400">Báo tin · điều phối · cứu hộ</text>
 <text x="48" y="1216" fill="#86a6b9" font-size="13" font-weight="400">Mỗi quyết định có dấu vết kiểm toán</text>
 <text x="48" y="1275" fill="#94b2c3" font-size="13" font-weight="400">¹ Nhãn nguồn hỗ trợ dữ liệu thiết bị; chưa kiểm chứng kết nối cảm biến quan trắc thật.</text>
-<text x="48" y="1300" fill="#94b2c3" font-size="13" font-weight="400">² Ứng dụng 3D còn mô hình và thuật ngữ cũ. Sơ đồ mô tả cấu trúc dịch vụ, không biểu thị các tiến trình triển khai riêng.</text>
+<text x="48" y="1300" fill="#94b2c3" font-size="13" font-weight="400">² Hỗ trợ tải bản đồ vector PMTiles tự lưu trữ nội bộ, tự động chuyển đổi sang OpenStreetMap trực tuyến khi chưa có tệp lưu trữ.</text>
 </svg>
