@@ -21,7 +21,7 @@ java -Dfile.encoding=UTF-8 -cp "$OUT/classes" org.floodos.tests.unit.UnitTestRun
 
 echo "=== [1b/2] Web logic tests (node --test) ==="
 if command -v node >/dev/null 2>&1; then
-    (cd apps/web && node --test "tests/*.test.ts") || status=1
+    (cd apps/web && node --experimental-strip-types --test "tests/*.test.ts") || status=1
 else
     echo "node not found: web logic tests skipped"
 fi

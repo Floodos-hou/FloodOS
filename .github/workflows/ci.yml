@@ -26,10 +26,10 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Set up Node.js 20
+    - name: Set up Node.js 22 (Active LTS)
       uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: 22
         cache: 'npm'
         cache-dependency-path: 'apps/web/package-lock.json'
 
