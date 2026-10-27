@@ -136,35 +136,47 @@ h1, h2, h3, h4 {
   .rule-y > * + * { border-top: 1px solid var(--color-line); }
 }
 
-/* ---------- map ---------- */
-.fo-pin {
-  position: relative; display: grid; place-items: center;
-  width: 28px; height: 28px; border-radius: 50%;
-  background: var(--pin, var(--color-river)); color: #fff;
-  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(20, 38, 46, 0.45);
-  cursor: pointer; font: 700 11px/1 var(--font-sans);
+/* ---------- map markers (see components/map/mapIcons.ts) ---------- */
+.fo-marker { display: block; }
+.fo-pin { position: relative; display: block; width: 30px; height: 30px; color: #fff; cursor: pointer; font: 700 10px/1 var(--font-sans); }
+.fo-pin.fo-static { display: inline-block; flex: none; cursor: default; vertical-align: middle; width: 26px; height: 26px; }
+.fo-pin:hover { z-index: 6; }
+.fo-body {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: var(--pin, var(--color-river)); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(20, 38, 46, 0.5);
 }
-.fo-pin svg { width: 14px; height: 14px; }
-.fo-pin.is-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; z-index: 5; }
+.fo-body svg { width: 15px; height: 15px; }
+.fo-circle .fo-body { border-radius: 50%; }
+.fo-square .fo-body { border-radius: 6px; }
+.fo-diamond .fo-body { border-radius: 5px; transform: rotate(45deg) scale(0.82); }
+.fo-diamond .fo-body svg { transform: rotate(-45deg); }
+.fo-drop .fo-body { border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+.fo-drop .fo-body svg { transform: rotate(45deg); }
+.fo-pin.is-selected { z-index: 5; }
+.fo-pin.is-selected .fo-body { outline: 3px solid var(--color-ink); outline-offset: 2px; }
+.fo-pin.is-dim { opacity: 0.55; }
 .fo-pin.is-pulse::after {
-  content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  content: ""; position: absolute; inset: -7px; border-radius: 50%; pointer-events: none;
   border: 2px solid var(--pin, var(--color-crit)); animation: foPulse 2s ease-out infinite;
 }
-.fo-pin.is-dim { opacity: 0.55; }
+.fo-chip {
+  position: absolute; top: -8px; right: -11px; z-index: 2; min-width: 20px; padding: 1px 4px; border-radius: 9px;
+  background: #fff; color: var(--pin, var(--color-ink)); border: 1.5px solid var(--pin, var(--color-ink));
+  font: 700 10px/1.2 var(--font-sans); text-align: center;
+}
+.fo-bar { position: absolute; left: 3px; right: 3px; bottom: -8px; height: 6px; border-radius: 3px; overflow: hidden; background: #fff; border: 1px solid var(--pin); }
+.fo-bar i { display: block; height: 100%; background: var(--pin); }
 .fo-pin-label {
-  position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%);
+  position: absolute; left: 50%; top: calc(100% + 10px); transform: translateX(-50%);
   white-space: nowrap; padding: 2px 6px; border-radius: 3px;
   background: var(--color-ink); color: #fff; font: 600 11px/1.2 var(--font-sans);
   opacity: 0; pointer-events: none; transition: opacity 120ms;
 }
 .fo-pin:hover .fo-pin-label, .fo-pin.is-selected .fo-pin-label { opacity: 1; }
-.fo-square { border-radius: 4px; }
-.fo-diamond { border-radius: 4px; transform: rotate(45deg); }
-.fo-diamond > * { transform: rotate(-45deg); }
 
 @keyframes foPulse {
   0% { transform: scale(0.8); opacity: 0.9; }
-  100% { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
 }
 
 .maplibregl-ctrl-group { border-radius: 5px !important; box-shadow: var(--shadow-pop) !important; border: 1px solid var(--color-line) !important; }

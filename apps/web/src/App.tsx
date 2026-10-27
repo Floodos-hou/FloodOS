@@ -216,6 +216,7 @@ export const App: React.FC = () => {
         live={liveInfo}
         selectedKey={selection ? selectionKey(selection) : null}
         onSelect={setSelection}
+        legendOpen={tab === 'MAP'}
         heightClass={tab === 'MAP' ? 'h-[calc(100vh-9rem)] min-h-[420px]' : 'h-full'}
       />
     </Suspense>

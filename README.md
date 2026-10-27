@@ -16,7 +16,7 @@
 [![Java: 21 LTS](https://img.shields.io/badge/Java-21_LTS-orange.svg?style=for-the-badge&logo=openjdk&logoColor=white)](pom.xml)
 [![Frontend: React 19 + MapLibre](https://img.shields.io/badge/Frontend-React_19_|_MapLibre_GL-61dafb.svg?style=for-the-badge&logo=react&logoColor=black)](apps/web)
 [![Security: Zero-Trust APISIX](https://img.shields.io/badge/Security-Zero--Trust_Gateway-10b981.svg?style=for-the-badge)](infra/gateway/apisix.yaml)
-[![Tests: 400/400 Passing](https://img.shields.io/badge/Tests-400%2F400_PASS_(100%25)-success.svg?style=for-the-badge)](tests/run_unit_tests.sh)
+[![Tests: 429/429 Passing](https://img.shields.io/badge/Tests-429%2F429_PASS_(100%25)-success.svg?style=for-the-badge)](tests/run_unit_tests.sh)
 [![Standard: ETSI NGSI-LD](https://img.shields.io/badge/Standard-ETSI_NGSI--LD-0ea5e9.svg?style=for-the-badge)](core/data-services/NgsiLdTwinMapper.java)
 
 ---
@@ -167,13 +167,20 @@ flowchart LR
 
 Trung tâm tác chiến số tại [`apps/web`](apps/web) được xây dựng trên nền tảng **React 19**, **TypeScript**, **TailwindCSS** và **MapLibre GL**, kết nối 100% với API backend thật qua APISIX Zero-Trust Gateway:
 
-### 🗺️ 1. Bản đồ tác chiến số thời gian thực (Tactical Command Map)
-- **Bản đồ nền CARTO Dark Matter:** Định vị trực quan không gian thực địa Hà Nội (sông Hồng, hồ nước, các tuyến đê, cầu cống, khu dân cư trũng thấp).
-- **Giám sát phương tiện IoT:** Hiển thị vị trí, hướng di chuyển và trạng thái (`IDLE`, `EN_ROUTE`, `RESCUING`, `BREAKDOWN`) của xuồng cứu hộ và xe bơm lưu động.
-- **Trạm đo thủy văn & Điểm sơ tán:** Hiển thị mực nước thực tế theo ngưỡng an toàn/nguy hiểm bằng biểu tượng sóng thủy văn chuẩn mực.
+### 🗺️ 1. Bản đồ tác chiến số thời gian thực & Bản đồ vector ngoại tuyến PMTiles
+- **Ngôn ngữ thiết kế Bản vẽ Thủy văn (Hydrology Blueprint):** Chuyển đổi toàn diện sang phong cách bản vẽ công vụ sáng rõ (giấy bản đồ, mực xanh sẫm, 4 cấp màu báo động thủy văn, thước đo mực nước và dòng sông tiến trình 5 trạm của vụ việc).
+- **Bản đồ vector ngoại tuyến tự lưu trữ (PMTiles):** Phục vụ tệp vector OpenStreetMap nội bộ (`hanoi.pmtiles`, 9.1 MB, 392 vector tiles, z0–z14) qua HTTP Range Requests, hoạt động độc lập hoàn toàn không cần kết nối Internet với chú thích xác nhận trên màn hình: *"Nền: dữ liệu OpenStreetMap lưu trong hệ thống."*
+- **Ký hiệu chuẩn hóa & Chú thích tương tác:** Phân cấp trực quan theo hình học (*giọt nước = tin báo ngập, hình tròn = phương tiện, hình vuông = điểm sơ tán, hình thoi = trạm đo thủy văn*), chip hiển thị số đo thực tế và thanh tỷ lệ đầy điểm sơ tán.
 
 <p align="center">
   <img src="docs/assets/screenshots/floodos-overview.png" alt="Bản đồ tác chiến số thời gian thực FloodOS" width="100%">
+</p>
+
+> [!TIP]
+> **Khả năng tác chiến khi mất Internet:** Dưới đây là minh chứng bản đồ FloodOS tải trực tiếp dữ liệu vector từ tệp `hanoi.pmtiles` lưu trữ nội bộ tại máy chủ, hiển thị rõ nét sông Hồng và các tuyến giao thông huyết mạch mà không phát sinh bất kỳ yêu cầu mạng nào ra Internet:
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-offline-basemap.png" alt="Bản đồ vector ngoại tuyến OpenStreetMap PMTiles tự phục vụ trong hệ thống" width="100%">
 </p>
 
 ### 📋 2. Trung tâm điều phối PCTT (Dispatcher Command Cockpit)
@@ -342,10 +349,11 @@ bash tests/e2e_full_stack_test.sh
   [Java Core & Apps Unit Tests]     : 191/191 PASS  (100%)
   [Acceptance Golden Path Tests]    :  50/50  PASS  (100%)
   [Python Lake & Telemetry Tests]   : 114/114 PASS  (100%)
-  [Web Tactical Frontend Tests]     :  33/33  PASS  (100%)
+  [Web Domain Helpers & Logic Tests]:  40/40  PASS  (100%)
+  [Web Vitest UI Workspace Tests]   :  22/22  PASS  (100%)
   [Full-Stack Container Assertions] :  12/12  PASS  (100%)
 ========================================================================
-  TOTAL AUTOMATED TEST COVERAGE     : 400/400 PASS  (100%)
+  TOTAL AUTOMATED TEST COVERAGE     : 429/429 PASS  (100%)
 ========================================================================
 ```
 
