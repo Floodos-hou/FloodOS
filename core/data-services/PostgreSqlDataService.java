@@ -394,9 +394,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : ownerUserId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : ownerUserId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, fieldId);
                 ps.setString(2, orgId);
@@ -466,9 +464,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : ownerUserId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : ownerUserId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, machineId);
                 ps.setString(2, orgId);
@@ -513,9 +509,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, operatorId);
             ps.setString(2, userId);
@@ -564,9 +558,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : requesterUserId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : requesterUserId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, requestId);
                 ps.setString(2, orgId);
@@ -620,9 +612,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : createdBy));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : createdBy);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, assignmentId);
                 ps.setString(2, orgId);
@@ -684,9 +674,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : reportedByUserId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : reportedByUserId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, incidentId);
                 ps.setString(2, orgId);
@@ -744,9 +732,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : (farmerConfirmedBy != null ? farmerConfirmedBy : operatorSubmittedBy)));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : (farmerConfirmedBy != null ? farmerConfirmedBy : operatorSubmittedBy));
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, acceptanceId);
                 ps.setString(2, orgId);
@@ -794,9 +780,7 @@ public final class PostgreSqlDataService {
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId != null ? userId : actorUserId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId != null ? userId : actorUserId);
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, eventId);
                 ps.setString(2, orgId);
@@ -849,9 +833,7 @@ public final class PostgreSqlDataService {
 
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
-            try (Statement s = conn.createStatement()) {
-                s.execute(TenantRlsContext.buildPostgresRlsPolicySql(orgId, role, userId));
-            }
+            TenantRlsContext.applyPostgresRlsSession(conn, orgId, role, userId);
             try (Statement s = conn.createStatement();
                  ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
                 var meta = rs.getMetaData();

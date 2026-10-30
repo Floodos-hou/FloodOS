@@ -1991,18 +1991,20 @@ public final class KeycloakOidcEngine {
 
 
     public static Map<String, Object> generatePkceSession(String redirectUri, String state) {
+        purgeExpiredPkceSessions();
         String verifier = generateCodeVerifier();
         String challenge = generateCodeChallenge(verifier);
         String s = (state != null && !state.isBlank()) ? state : "state-" + UUID.randomUUID().toString().substring(0, 8);
         String rUri = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : "http://localhost:8000/callback";
+        String issuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", DEFAULT_ISSUER);
 
-        String authUrl = buildPkceAuthorizationUrl(DEFAULT_ISSUER, DEFAULT_AUDIENCE, rUri, challenge, s);
+        String authUrl = buildPkceAuthorizationUrl(issuer, DEFAULT_AUDIENCE, rUri, challenge, s);
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("flow", "OIDC_AUTHORIZATION_CODE_WITH_PKCE");
         res.put("standard", "RFC 7636 / OpenID Connect Core 1.0");
         res.put("client_id", DEFAULT_AUDIENCE);
-        res.put("issuer", DEFAULT_ISSUER);
+        res.put("issuer", issuer);
         res.put("authorization_url", authUrl);
         res.put("code_verifier", verifier);
         res.put("code_challenge", challenge);
@@ -2162,6 +2164,42 @@ public final class KeycloakOidcEngine {
 
 
 
+    public static final List<String> OPENAGRIOS_ROLE_HIERARCHY = List.of(
+            "PLATFORM_ADMIN",
+            "COORDINATOR",
+            "OPERATOR",
+            "FARMER",
+            "REPAIR_TEAM"
+    );
+
+    /**
+     * Resolves dominant OpenAgriOS application role from Keycloak realm roles.
+     * Prioritizes valid business roles over system roles like 'default-roles-openagrios' or 'offline_access'.
+     */
+    public static String resolveOpenAgriOsRole(List<?> rawRoles) {
+        if (rawRoles == null || rawRoles.isEmpty()) {
+            return "FARMER";
+        }
+        java.util.Set<String> assigned = new java.util.HashSet<>();
+        for (Object r : rawRoles) {
+            if (r != null) {
+                assigned.add(String.valueOf(r).trim().toUpperCase(java.util.Locale.ROOT));
+            }
+        }
+        for (String candidate : OPENAGRIOS_ROLE_HIERARCHY) {
+            if (assigned.contains(candidate)) {
+                return candidate;
+            }
+        }
+        for (Object r : rawRoles) {
+            String roleStr = String.valueOf(r).trim();
+            if (!roleStr.startsWith("default-roles") && !roleStr.equals("offline_access") && !roleStr.equals("uma_authorization")) {
+                return roleStr;
+            }
+        }
+        return "FARMER";
+    }
+
     public record PkceSession(
             String code,
             String codeChallenge,
@@ -2173,28 +2211,61 @@ public final class KeycloakOidcEngine {
     ) {}
 
     public static final Map<String, PkceSession> pendingPkceSessions = new java.util.concurrent.ConcurrentHashMap<>();
+    public static final long PKCE_SESSION_TTL_SECONDS = 60L;
+
+    public static void purgeExpiredPkceSessions() {
+        Instant cutoff = Instant.now().minusSeconds(PKCE_SESSION_TTL_SECONDS);
+        pendingPkceSessions.entrySet().removeIf(entry -> {
+            PkceSession s = entry.getValue();
+            return s == null || s.createdAt() == null || s.createdAt().isBefore(cutoff);
+        });
+    }
 
     public static boolean verifyPkceCodeChallenge(String code, String codeVerifier) {
-        return verifyPkceCodeChallenge(code, codeVerifier, null);
+        return verifyPkceCodeChallenge(code, codeVerifier, null, null, null);
     }
 
     public static boolean verifyPkceCodeChallenge(String code, String codeVerifier, String state) {
+        return verifyPkceCodeChallenge(code, codeVerifier, state, null, null);
+    }
+
+    public static boolean verifyPkceCodeChallenge(String code, String codeVerifier, String state, String clientId, String redirectUri) {
+        purgeExpiredPkceSessions();
         if (codeVerifier == null || codeVerifier.length() < 43 || codeVerifier.length() > 128) {
             return false;
         }
-        PkceSession session = pendingPkceSessions.remove(code);
-        if (session != null) {
-            if (state != null && !state.isBlank() && session.state() != null && !session.state().isBlank()) {
-                if (!state.equals(session.state())) {
-                    return false; // CSRF state mismatch detection
-                }
-            }
-            String computed = generateCodeChallenge(codeVerifier);
-            return computed.equals(session.codeChallenge());
+        if (code == null || code.isBlank()) {
+            return false;
         }
-        return false;
+        PkceSession session = pendingPkceSessions.remove(code);
+        if (session == null) {
+            return false;
+        }
+        // Enforce 60-second TTL
+        if (session.createdAt() != null && Duration.between(session.createdAt(), Instant.now()).getSeconds() > PKCE_SESSION_TTL_SECONDS) {
+            return false;
+        }
+        // Mandatory CSRF anti-tampering: if session has state, input state MUST match
+        if (session.state() != null && !session.state().isBlank()) {
+            if (state == null || !state.equals(session.state())) {
+                return false;
+            }
+        } else if (state != null && !state.isBlank()) {
+            return false;
+        }
+        // Match client_id if present
+        if (clientId != null && !clientId.isBlank() && session.clientId() != null && !session.clientId().isBlank()) {
+            if (!clientId.equals(session.clientId())) {
+                return false;
+            }
+        }
+        // Match redirect_uri if present
+        if (redirectUri != null && !redirectUri.isBlank() && session.redirectUri() != null && !session.redirectUri().isBlank()) {
+            if (!redirectUri.equals(session.redirectUri())) {
+                return false;
+            }
+        }
+        String computed = generateCodeChallenge(codeVerifier);
+        return computed.equals(session.codeChallenge());
     }
 }
-
-
-

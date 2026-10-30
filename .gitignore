@@ -31,3 +31,9 @@ tmp/
 *.pptx
 OpenAgriOS_De_xuat*
 OpenAgriOS_Ke_hoach*
+
+# Postman local app workspace caches
+.postman/
+postman/
+tests/postman/postman/
+tests/postman/.postman/
