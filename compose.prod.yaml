@@ -30,6 +30,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
+    entrypoint: ["/bin/sh", "/entrypoint-sync.sh"]
 
   keycloak:
     restart: always
@@ -60,6 +61,7 @@ services:
     environment:
       OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       OPENAGRIOS_STORAGE_MODE: POSTGRESQL_PRODUCTION
+      OPENAGRIOS_STRICT_RFC9700: "${OPENAGRIOS_STRICT_RFC9700:-true}"
       POSTGRES_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
       KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}

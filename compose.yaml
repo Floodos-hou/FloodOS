@@ -76,12 +76,14 @@ services:
 
 
 
+      - ./infra/db/docker-entrypoint-sync.sh:/entrypoint-sync.sh:ro
       - ./infra/db/init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/02-schema.sql:ro
 
 
 
       - pgdata:/var/lib/postgresql/data
+    entrypoint: ["/bin/sh", "/entrypoint-sync.sh"]
 
 
 

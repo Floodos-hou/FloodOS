@@ -223,6 +223,9 @@ public final class AgriOpsService {
      */
     /**
      * Programmatically acquires an Authorization Code for PKCE flow (RFC 7636).
+     * NOTE: This endpoint serves as a Headless CI/CD & Automated Test Bridge. In human-facing
+     * web/mobile applications, RFC 9700 mandates browser redirection directly to Keycloak's
+     * {@code authorization_url} issued by {@link #generatePkceSession(Map)}.
      * In KEYCLOAK_PRODUCTION: completes Keycloak login flow and returns genuine Keycloak code.
      * In DEV_MOCK_STANDALONE: validates store credentials and issues mock code bound to code_challenge.
      */

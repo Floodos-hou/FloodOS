@@ -16,21 +16,19 @@ psql -v ON_ERROR_STOP=1 \
      -v app_pass="$APP_PASS" \
      --username "$POSTGRES_USER" \
      --dbname "$POSTGRES_DB" <<-EOSQL
-    DO \$\$
-    BEGIN
-        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'app_user') THEN
-            EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_user', :'app_pass');
-        ELSE
-            EXECUTE format('ALTER ROLE %I WITH PASSWORD %L', :'app_user', :'app_pass');
-        END IF;
-    END \$\$;
+    -- psql does not substitute :variables inside dollar-quoted blocks, so build statements
+    -- with format(%I/%L) outside DO and run them with \gexec (injection-safe quoting).
+    SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_user', :'app_pass')
+    WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'app_user') \gexec
+    SELECT format('ALTER ROLE %I WITH PASSWORD %L', :'app_user', :'app_pass')
+    WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = :'app_user') \gexec
 
     -- Least-Privilege & RLS Preservation (TRUNCATE is strictly prohibited to enforce Row-Level Security)
-    GRANT USAGE ON SCHEMA public TO "$APP_USER";
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$APP_USER";
-    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$APP_USER";
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$APP_USER";
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$APP_USER";
+    SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'app_user') \gexec
+    SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'app_user') \gexec
+    SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'app_user') \gexec
+    SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'app_user') \gexec
+    SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'app_user') \gexec
 EOSQL
 
 echo ">>> [OpenAgriOS DB Init] Application role '$APP_USER' successfully synchronized with environment password."
