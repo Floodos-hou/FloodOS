@@ -30,7 +30,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
-    entrypoint: ["/bin/sh", "/entrypoint-sync.sh"]
+    entrypoint: ["/bin/sh", "/entrypoint-sync.sh", "postgres"]
 
   keycloak:
     restart: always

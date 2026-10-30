@@ -22,11 +22,20 @@ sync_on_startup() {
     done
 
     if [ -f /docker-entrypoint-initdb.d/01-init-db.sh ]; then
-        /bin/sh /docker-entrypoint-initdb.d/01-init-db.sh >/dev/null 2>&1 || true
-        echo ">>> [OpenAgriOS DB] Application role credentials automatically synchronized with current environment."
+        if output=$(/bin/sh /docker-entrypoint-initdb.d/01-init-db.sh 2>&1); then
+            echo ">>> [OpenAgriOS DB] Application role credentials automatically synchronized with current environment."
+        else
+            echo "!!! [OpenAgriOS DB ERROR] Failed to synchronize application role credentials:" >&2
+            echo "$output" >&2
+        fi
     fi
 }
 
 sync_on_startup &
+
+# If no arguments provided to entrypoint, default to running the postgres server
+if [ $# -eq 0 ]; then
+    set -- postgres
+fi
 
 exec /usr/local/bin/docker-entrypoint.sh "$@"

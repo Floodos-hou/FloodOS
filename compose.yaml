@@ -83,7 +83,7 @@ services:
 
 
       - pgdata:/var/lib/postgresql/data
-    entrypoint: ["/bin/sh", "/entrypoint-sync.sh"]
+    entrypoint: ["/bin/sh", "/entrypoint-sync.sh", "postgres"]
 
 
 
