@@ -979,13 +979,6 @@ public final class AgriOpsService {
         String ts = nowIso();
         String orgId = auth.organizationId();
 
-        DispatchAssignment oldAsg = store.assignments.get(oldAsgId);
-        if (oldAsg != null) {
-            oldAsg.status = "SUPERSEDED";
-            oldAsg.supersededByAssignmentId = newAsgId;
-            store.persistAssignment(oldAsg, auth.role(), auth.userId());
-        }
-
         DispatchAssignment newAsg = new DispatchAssignment(
                 newAsgId, orgId,
                 String.valueOf(chosen.get("for_request_id")),
@@ -998,6 +991,13 @@ public final class AgriOpsService {
                 inc.correlationId, auth.userId(), ts
         );
         store.persistAssignment(newAsg, auth.role(), auth.userId());
+
+        DispatchAssignment oldAsg = store.assignments.get(oldAsgId);
+        if (oldAsg != null) {
+            oldAsg.status = "SUPERSEDED";
+            oldAsg.supersededByAssignmentId = newAsgId;
+            store.persistAssignment(oldAsg, auth.role(), auth.userId());
+        }
 
         ServiceRequest sr = store.serviceRequests.get(newAsg.requestId);
         if (sr != null) {
@@ -1168,7 +1168,7 @@ public final class AgriOpsService {
 
         WorkAcceptance acc = new WorkAcceptance(
                 accId, orgId, asgId, asg.requestId, areaHa,
-                s3Obj.objectKey(), "op_nam", auth.username(), "CONFIRMED",
+                s3Obj.objectKey(), "usr_op_nam", (auth.userId() != null && !auth.userId().isBlank()) ? auth.userId() : "usr_farmer_ba", "CONFIRMED",
                 notes, asg.correlationId, ts, ts
         );
         store.persistWorkAcceptance(acc, auth.role(), auth.userId());
