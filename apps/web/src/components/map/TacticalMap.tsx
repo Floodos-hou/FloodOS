@@ -6,13 +6,13 @@ import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, LngL
 import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { Maximize, TriangleAlert } from 'lucide-react';
+import { Box, Maximize, TriangleAlert } from 'lucide-react';
 import type { FloodZone, RescueVehicle, FloodReport, GaugeStation, SafeShelter } from '../../types';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 import type { MapSelection } from './MapDetailPanel';
 import { MapLegend } from './MapLegend';
 import { gaugeSpec, markerClassName, markerInnerHtml, reportSpec, shelterSpec, vehicleSpec, type MarkerSpec } from './mapIcons';
-import { OFFLINE_BASEMAP_PATH, isPmtilesHeader, offlineStyle, onlineStyle, type BasemapKind } from './basemap';
+import { BUILDINGS_3D, OFFLINE_BASEMAP_PATH, isPmtilesHeader, offlineStyle, onlineStyle, type BasemapKind } from './basemap';
 setWorkerUrl(maplibreWorkerUrl);
 addProtocol('pmtiles', new Protocol().tile);
 
@@ -75,6 +75,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const [basemap, setBasemap] = useState<Basemap | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [tilesFailed, setTilesFailed] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const [layers, setLayers] = useState({ reports: true, vehicles: true, shelters: true, gauges: true, zones: true });
 
   useEffect(() => {
@@ -121,6 +122,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const markerStore = markers.current;
     return () => { ro.disconnect(); markerStore.clear(); m.remove(); mapRef.current = null; };
   }, [basemap]);
+
+  // 3D view: tilt the camera and extrude the OpenStreetMap buildings (only the offline vector basemap has them)
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !loaded) return;
+    if (basemap?.kind === 'offline' && m.getLayer(BUILDINGS_3D)) m.setLayoutProperty(BUILDINGS_3D, 'visibility', view3d ? 'visible' : 'none');
+    m.easeTo({ pitch: view3d ? 55 : 0, bearing: view3d ? -20 : 0, duration: 600 });
+  }, [loaded, view3d, basemap]);
 
   // zone polygons (seed polygons; the legend says so)
   useEffect(() => {
@@ -193,9 +202,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       touched.add(key);
       let mk = markers.current.get(key);
       if (!mk) {
-        // the incident drop points down at its location; every other marker is centred on it
-        const isDrop = spec.shape === 'drop';
-        mk = new Marker({ element: document.createElement('div'), anchor: 'center', offset: isDrop ? [0, -21] : [0, 0] }).setLngLat([lng, lat]).addTo(m);
+        mk = new Marker({ element: document.createElement('div'), anchor: 'center' }).setLngLat([lng, lat]).addTo(m);
         markers.current.set(key, mk);
       } else {
         mk.setLngLat([lng, lat]);
@@ -245,6 +252,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           </button>
         ))}
       </div>
+
+      <button
+        type="button" onClick={() => setView3d((v) => !v)} aria-pressed={view3d}
+        title={view3d ? 'Về góc nhìn phẳng' : 'Nghiêng bản đồ, nhà dựng khối 3D'} aria-label="Chế độ 3D"
+        className={`btn absolute right-3 top-[128px] z-10 !min-h-8 !px-2 ${view3d ? '!border-river !bg-river-soft !text-river' : ''}`}
+      >
+        <Box className="h-4 w-4" aria-hidden="true" /> <span className="text-xs">3D</span>
+      </button>
 
       <button type="button" onClick={fitAll} title="Căn khung theo dữ liệu" aria-label="Căn khung theo dữ liệu" className="btn absolute right-3 top-[88px] z-10 !min-h-8 !px-2">
         <Maximize className="h-4 w-4" aria-hidden="true" />

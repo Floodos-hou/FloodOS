@@ -22,6 +22,9 @@ export function isPmtilesHeader(bytes: Uint8Array): boolean {
 
 const PAPER = '#ece8dc';
 
+/** id of the extruded-buildings layer that the 3D view switches on (offline vector basemap only) */
+export const BUILDINGS_3D = 'buildings-3d';
+
 /** Raster fallback: public OpenStreetMap tiles, desaturated so case markers carry the colour. */
 export function onlineStyle() {
   return {
@@ -85,6 +88,17 @@ export function offlineStyle(pmtilesUrl: string) {
         paint: { 'line-color': '#bcd6e4', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1, 16, 4] as unknown[] },
       },
       { id: 'buildings', type: 'fill' as const, source: 'basemap', 'source-layer': 'buildings', minzoom: 13, paint: { 'fill-color': '#e2dccb', 'fill-outline-color': '#d4cdb8' } },
+      // shown only in 3D view; OSM height when the tile has it, otherwise a plain two-storey block
+      {
+        id: BUILDINGS_3D, type: 'fill-extrusion' as const, source: 'basemap', 'source-layer': 'buildings', minzoom: 14,
+        layout: { visibility: 'none' as const },
+        paint: {
+          'fill-extrusion-color': '#d9d2bd',
+          'fill-extrusion-height': ['coalesce', ['get', 'height'], 7] as unknown[],
+          'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0] as unknown[],
+          'fill-extrusion-opacity': 0.92,
+        },
+      },
       { id: 'rail', type: 'line' as const, source: 'basemap', 'source-layer': 'roads', filter: ['==', ['get', 'kind'], 'rail'] as unknown[], paint: { 'line-color': '#a39e8c', 'line-width': 1, 'line-dasharray': [3, 2] } },
       { id: 'paths', type: 'line' as const, source: 'basemap', 'source-layer': 'roads', minzoom: 14, filter: ['in', ['get', 'kind'], ['literal', ['path', 'other']]] as unknown[], paint: { 'line-color': '#cfc8b4', 'line-width': 1 } },
       road('minor_road', true, '#d9d2bf', [0.8, 3, 9]),
