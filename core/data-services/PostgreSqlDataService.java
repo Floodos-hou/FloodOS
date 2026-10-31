@@ -85,6 +85,16 @@ public final class PostgreSqlDataService {
         if (!isConnectionLive()) {
             return false;
         }
+        // If schema tables already exist (e.g. provisioned via infra/db/schema.sql), skip DDL execution
+        // to uphold Principle of Least Privilege (app user does not require or execute DDL).
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='fields' LIMIT 1")) {
+            if (rs.next()) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+
         String ddl = """
             CREATE TABLE IF NOT EXISTS organizations (
                 organization_id VARCHAR(64) PRIMARY KEY,
@@ -237,23 +247,6 @@ public final class PostgreSqlDataService {
                 record_hash VARCHAR(64) NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-
-            ALTER TABLE fields ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE fields FORCE ROW LEVEL SECURITY;
-            ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE machines FORCE ROW LEVEL SECURITY;
-            ALTER TABLE operators ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE operators FORCE ROW LEVEL SECURITY;
-            ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE service_requests FORCE ROW LEVEL SECURITY;
-            ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE assignments FORCE ROW LEVEL SECURITY;
-            ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE incidents FORCE ROW LEVEL SECURITY;
-            ALTER TABLE work_acceptances ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE work_acceptances FORCE ROW LEVEL SECURITY;
-            ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
              Statement stmt = conn.createStatement()) {
