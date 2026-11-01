@@ -18,14 +18,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Hot-path event publisher: streams domain events to the Redpanda (Kafka API) event bus through
- * its HTTP Proxy (Pandaproxy, {@code POST /topics/{topic}}), so the Java core stays dependency-free.
+ * Hot-path event publisher: streams domain events to the Apache Kafka event bus through the
+ * Kafka REST Proxy (Karapace, Confluent REST v2 API: {@code POST /topics/{topic}}), so the Java core stays dependency-free.
  *
  * <p>Publishing is asynchronous and never blocks a transactional request. Delivery is retried with
  * backoff; events that cannot be delivered are counted and logged (never silently dropped) and are
  * surfaced through {@link #status()} on {@code /api/v1/health}.
  *
- * <p>Configuration: {@code OPENAGRIOS_EVENT_BUS_URL} (e.g. {@code http://redpanda:8082}).
+ * <p>Configuration: {@code OPENAGRIOS_EVENT_BUS_URL} (e.g. {@code http://kafka-rest:8082}).
  * When unset the publisher is explicitly {@code DISABLED} (standalone/dev without the stack).
  */
 public final class EventBusPublisher {
@@ -91,7 +91,7 @@ public final class EventBusPublisher {
 
     public Map<String, Object> status() {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("mode", isEnabled() ? "REDPANDA_HTTP_PROXY" : "DISABLED");
+        m.put("mode", isEnabled() ? "KAFKA_REST_PROXY" : "DISABLED");
         m.put("endpoint", isEnabled() ? baseUrl : "");
         m.put("topics", List.of(TOPIC_AUDIT, TOPIC_TELEMETRY));
         m.put("published", published.get());
@@ -113,7 +113,7 @@ public final class EventBusPublisher {
                 List<Pending> batch = new ArrayList<>();
                 batch.add(first);
                 queue.drainTo(batch, MAX_BATCH - 1);
-                // Pandaproxy accepts one topic per request: group the batch by topic.
+                // The REST proxy accepts one topic per request: group the batch by topic.
                 Map<String, List<Pending>> byTopic = new LinkedHashMap<>();
                 for (Pending p : batch) {
                     byTopic.computeIfAbsent(p.topic(), t -> new ArrayList<>()).add(p);

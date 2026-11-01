@@ -128,7 +128,7 @@ services:
       KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
-      OPENAGRIOS_EVENT_BUS_URL: http://redpanda:8082
+      OPENAGRIOS_EVENT_BUS_URL: http://kafka-rest:8082
       OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
     ports:
       - "127.0.0.1:8000:8000"
@@ -141,8 +141,8 @@ services:
         condition: service_started
       flowable:
         condition: service_started
-      redpanda-init:
-        condition: service_completed_successfully
+      kafka-rest:
+        condition: service_healthy
 
   # 7. OPENAGRIOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
   web-app:
@@ -163,47 +163,66 @@ services:
       timeout: 5s
       retries: 5
 
-  # 8. EVENT BUS — HOT PATH (Redpanda, Kafka API + HTTP Proxy; image pinned. Licence: BSL 1.1, see THIRD_PARTY_NOTICES.md)
-  redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.1.7
-    container_name: openagrios-redpanda
-    command:
-      - redpanda
-      - start
-      - --mode=dev-container
-      - --smp=1
-      - --memory=512M
-      - --overprovisioned
-      - --kafka-addr=internal://0.0.0.0:9092
-      - --advertise-kafka-addr=internal://redpanda:9092
-      - --pandaproxy-addr=internal://0.0.0.0:8082
-      - --advertise-pandaproxy-addr=internal://redpanda:8082
-    ports:
-      - "127.0.0.1:${REDPANDA_KAFKA_HOST_PORT:-19092}:9092"
+  # 8. EVENT BUS — HOT PATH (Apache Kafka 3.7, KRaft single node, no ZooKeeper - Apache-2.0 License)
+  kafka:
+    image: apache/kafka:3.7.1
+    container_name: openagrios-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
-      - redpandadata:/var/lib/redpanda/data
+      - kafkadata:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 12
 
-  # 8b. Idempotent topic bootstrap (re-runs on every `up`; "already exists" is success)
-  redpanda-init:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.1.7
-    container_name: openagrios-redpanda-init
+  # 8b. Idempotent topic bootstrap (re-runs on every `up`; --if-not-exists makes it safe)
+  kafka-init:
+    image: apache/kafka:3.7.1
+    container_name: openagrios-kafka-init
     restart: "no"
     depends_on:
-      redpanda:
+      kafka:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         for t in openagrios.audit.v1 openagrios.telemetry.v1; do
-          out=$$(rpk topic create $$t -p 1 -r 1 -X brokers=redpanda:9092 2>&1)
-          echo "$$out"
-          echo "$$out" | grep -qiE 'OK|TOPIC_ALREADY_EXISTS|already exists' || exit 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists             --topic $$t --partitions 1 --replication-factor 1 || exit 1
         done
+
+  # 8c. Kafka REST Proxy (Karapace - Apache-2.0 License): HTTP produce/consume so the Java core needs no Kafka client
+  kafka-rest:
+    image: ghcr.io/aiven-open/karapace:4.1.0
+    container_name: openagrios-kafka-rest
+    entrypoint: ["/bin/sh", "-c", "/opt/karapace/start.sh rest"]
+    environment:
+      KARAPACE_BOOTSTRAP_URI: kafka:9092
+      KARAPACE_HOST: 0.0.0.0
+      KARAPACE_PORT: 8082
+      KARAPACE_ADMIN_METADATA_MAX_AGE: 0
+      KARAPACE_LOG_LEVEL: INFO
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/topics', timeout=3)\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   # 9. COLD TIER — consumes the bus, writes Parquet to S3, answers analytics with DuckDB (internal-only port)
   lake-archiver:
@@ -212,17 +231,17 @@ services:
     container_name: openagrios-lake-archiver
     restart: unless-stopped
     environment:
-      EVENT_BUS_URL: http://redpanda:8082
+      EVENT_BUS_URL: http://kafka-rest:8082
       LAKE_S3_ENDPOINT: object-storage:9000
       LAKE_BUCKET: ${LAKE_BUCKET:-openagrios-lake}
       PORT: 8090
     depends_on:
-      redpanda-init:
-        condition: service_completed_successfully
+      kafka-rest:
+        condition: service_healthy
       object-storage:
         condition: service_started
 
 volumes:
   pgdata:
   s3data:
-  redpandadata:
+  kafkadata:
