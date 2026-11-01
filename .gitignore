@@ -43,3 +43,10 @@ node_modules/
 dist/
 dist-ssr/
 .tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/

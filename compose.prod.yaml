@@ -68,6 +68,16 @@ services:
       - "${GATEWAY_HTTP_PORT:-9080}:9080"
       - "${GATEWAY_HTTPS_PORT:-9443}:9443"
 
+  redpanda:
+    restart: always
+    ports: !reset []
+
+  redpanda-init:
+    restart: "no"
+
+  lake-archiver:
+    restart: always
+
   core-api:
     restart: always
     environment:

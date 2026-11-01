@@ -128,6 +128,8 @@ services:
       KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
+      OPENAGRIOS_EVENT_BUS_URL: http://redpanda:8082
+      OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -139,6 +141,8 @@ services:
         condition: service_started
       flowable:
         condition: service_started
+      redpanda-init:
+        condition: service_completed_successfully
 
   # 7. OPENAGRIOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
   web-app:
@@ -159,6 +163,66 @@ services:
       timeout: 5s
       retries: 5
 
+  # 8. EVENT BUS — HOT PATH (Redpanda, Kafka API + HTTP Proxy; image pinned. Licence: BSL 1.1, see THIRD_PARTY_NOTICES.md)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.7
+    container_name: openagrios-redpanda
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+      - --pandaproxy-addr=internal://0.0.0.0:8082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082
+    ports:
+      - "127.0.0.1:${REDPANDA_KAFKA_HOST_PORT:-19092}:9092"
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # 8b. Idempotent topic bootstrap (re-runs on every `up`; "already exists" is success)
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.7
+    container_name: openagrios-redpanda-init
+    restart: "no"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for t in openagrios.audit.v1 openagrios.telemetry.v1; do
+          out=$$(rpk topic create $$t -p 1 -r 1 -X brokers=redpanda:9092 2>&1)
+          echo "$$out"
+          echo "$$out" | grep -qiE 'OK|TOPIC_ALREADY_EXISTS|already exists' || exit 1
+        done
+
+  # 9. COLD TIER — consumes the bus, writes Parquet to S3, answers analytics with DuckDB (internal-only port)
+  lake-archiver:
+    build:
+      context: ./services/lake-archiver
+    container_name: openagrios-lake-archiver
+    restart: unless-stopped
+    environment:
+      EVENT_BUS_URL: http://redpanda:8082
+      LAKE_S3_ENDPOINT: object-storage:9000
+      LAKE_BUCKET: ${LAKE_BUCKET:-openagrios-lake}
+      PORT: 8090
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+      object-storage:
+        condition: service_started
+
 volumes:
   pgdata:
   s3data:
+  redpandadata:
