@@ -83,6 +83,13 @@ public final class AgriOpsService {
         String password = String.valueOf(body.getOrDefault("password", "")).trim();
 
         KeycloakOidcEngine.AuthMode currentMode = KeycloakOidcEngine.getActiveAuthMode();
+        if ("true".equalsIgnoreCase(System.getenv("OPENAGRIOS_STRICT_RFC9700"))) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "ROPC_DEPRECATED_RFC9700");
+            err.put("status", 410);
+            err.put("message", "Resource Owner Password Credentials Grant is prohibited under RFC 9700 OAuth 2.0 Security BCP. Please authenticate via Authorization Code Flow with PKCE (/api/v1/auth/pkce/authorize-url).");
+            return new HttpResult(410, err);
+        }
 
         // --------------------------------------------------------------------
         // 1. KEYCLOAK PRODUCTION MODE: Must authenticate against real Keycloak OIDC
@@ -114,18 +121,26 @@ public final class AgriOpsService {
                 return new HttpResult(401, err);
             }
 
+            Object orgIdObj = decoded.get("organization_id");
+            if (orgIdObj == null || String.valueOf(orgIdObj).isBlank()) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", "MISSING_TENANT_CLAIM");
+                err.put("status", 401);
+                err.put("message", "JWT Token is missing mandatory 'organization_id' claim. Cross-tenant fallback is strictly prohibited.");
+                return new HttpResult(401, err);
+            }
+            String orgId = String.valueOf(orgIdObj).trim();
+
             String role = "FARMER";
             Object realmAccess = decoded.get("realm_access");
             if (realmAccess instanceof Map<?, ?> rm) {
                 Object rolesObj = rm.get("roles");
-                if (rolesObj instanceof List<?> roles && !roles.isEmpty()) {
-                    role = String.valueOf(roles.get(0));
+                if (rolesObj instanceof List<?> roles) {
+                    role = KeycloakOidcEngine.resolveOpenAgriOsRole(roles);
                 }
             }
             String userId = KeycloakOidcEngine.resolveDatabaseUserId(String.valueOf(decoded.getOrDefault("sub", username)), username);
-            String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
             UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
-
             Map<String, Object> after = new LinkedHashMap<>();
             after.put("username", liveUser.username());
             after.put("role", liveUser.role());
@@ -208,6 +223,9 @@ public final class AgriOpsService {
      */
     /**
      * Programmatically acquires an Authorization Code for PKCE flow (RFC 7636).
+     * NOTE: This endpoint serves as a Headless CI/CD & Automated Test Bridge. In human-facing
+     * web/mobile applications, RFC 9700 mandates browser redirection directly to Keycloak's
+     * {@code authorization_url} issued by {@link #generatePkceSession(Map)}.
      * In KEYCLOAK_PRODUCTION: completes Keycloak login flow and returns genuine Keycloak code.
      * In DEV_MOCK_STANDALONE: validates store credentials and issues mock code bound to code_challenge.
      */
@@ -323,20 +341,37 @@ public final class AgriOpsService {
                 ));
             }
 
+            Object orgIdObj = decoded.get("organization_id");
+            if (orgIdObj == null || String.valueOf(orgIdObj).isBlank()) {
+                return new HttpResult(401, Map.of(
+                        "error", "MISSING_TENANT_CLAIM",
+                        "status", 401,
+                        "message", "PKCE JWT Token is missing mandatory 'organization_id' claim. Cross-tenant fallback is strictly prohibited."
+                ));
+            }
+            String orgId = String.valueOf(orgIdObj).trim();
+
+            Object prefUserObj = decoded.get("preferred_username");
+            if (prefUserObj == null || String.valueOf(prefUserObj).isBlank()) {
+                return new HttpResult(401, Map.of(
+                        "error", "MISSING_USERNAME_CLAIM",
+                        "status", 401,
+                        "message", "PKCE JWT Token is missing mandatory 'preferred_username' claim."
+                ));
+            }
+            String username = String.valueOf(prefUserObj).trim();
+
             String role = "FARMER";
             Object realmAccess = decoded.get("realm_access");
             if (realmAccess instanceof Map<?, ?> rm) {
                 Object rolesObj = rm.get("roles");
-                if (rolesObj instanceof List<?> roles && !roles.isEmpty()) {
-                    role = String.valueOf(roles.get(0));
+                if (rolesObj instanceof List<?> roles) {
+                    role = KeycloakOidcEngine.resolveOpenAgriOsRole(roles);
                 }
             }
-            String username = String.valueOf(decoded.getOrDefault("preferred_username", "coord_htx01"));
             String sub = String.valueOf(decoded.getOrDefault("sub", username));
             String userId = KeycloakOidcEngine.resolveDatabaseUserId(sub, username);
-            String orgId = String.valueOf(decoded.getOrDefault("organization_id", "HTX_CANTHO_01"));
             UserAccount liveUser = new UserAccount(userId, username, "******", String.valueOf(decoded.getOrDefault("name", username)), username + "@openagrios.vn", orgId, role);
-
             Map<String, Object> after = new LinkedHashMap<>();
             after.put("username", liveUser.username());
             after.put("role", liveUser.role());
@@ -365,7 +400,7 @@ public final class AgriOpsService {
         }
 
         // 2. Mock Standalone Mode: verify cryptographically & state
-        if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier, state)) {
+        if (!KeycloakOidcEngine.verifyPkceCodeChallenge(code, codeVerifier, state, clientId, redirectUri)) {
             return new HttpResult(400, Map.of(
                     "error", "INVALID_GRANT",
                     "message", "PKCE code_verifier does not match code_challenge or anti-CSRF state token mismatch (RFC 7636 Section 4.6 & RFC 6749 Section 10.12)."
@@ -979,13 +1014,6 @@ public final class AgriOpsService {
         String ts = nowIso();
         String orgId = auth.organizationId();
 
-        DispatchAssignment oldAsg = store.assignments.get(oldAsgId);
-        if (oldAsg != null) {
-            oldAsg.status = "SUPERSEDED";
-            oldAsg.supersededByAssignmentId = newAsgId;
-            store.persistAssignment(oldAsg, auth.role(), auth.userId());
-        }
-
         DispatchAssignment newAsg = new DispatchAssignment(
                 newAsgId, orgId,
                 String.valueOf(chosen.get("for_request_id")),
@@ -998,6 +1026,13 @@ public final class AgriOpsService {
                 inc.correlationId, auth.userId(), ts
         );
         store.persistAssignment(newAsg, auth.role(), auth.userId());
+
+        DispatchAssignment oldAsg = store.assignments.get(oldAsgId);
+        if (oldAsg != null) {
+            oldAsg.status = "SUPERSEDED";
+            oldAsg.supersededByAssignmentId = newAsgId;
+            store.persistAssignment(oldAsg, auth.role(), auth.userId());
+        }
 
         ServiceRequest sr = store.serviceRequests.get(newAsg.requestId);
         if (sr != null) {
@@ -1168,7 +1203,7 @@ public final class AgriOpsService {
 
         WorkAcceptance acc = new WorkAcceptance(
                 accId, orgId, asgId, asg.requestId, areaHa,
-                s3Obj.objectKey(), "op_nam", auth.username(), "CONFIRMED",
+                s3Obj.objectKey(), "usr_op_nam", (auth.userId() != null && !auth.userId().isBlank()) ? auth.userId() : "usr_farmer_ba", "CONFIRMED",
                 notes, asg.correlationId, ts, ts
         );
         store.persistWorkAcceptance(acc, auth.role(), auth.userId());
