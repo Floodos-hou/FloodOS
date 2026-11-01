@@ -2,7 +2,7 @@
 # Copyright 2026 OpenAgriOS Contributors
 
 # ============================================================================
-# OPENAGRIOS - TẦNG 1 HEADLESS CORE PaaS STACK (100% PERMISSIVE OPEN SOURCE)
+# OPENAGRIOS - HEADLESS CORE PaaS & OPERATIONS PORTAL (100% PERMISSIVE OPEN SOURCE)
 # Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
 # Tất cả phiên bản image đều được pin cố định (không dùng :latest)
 # ============================================================================
@@ -44,11 +44,13 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+      KC_HOSTNAME_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
     ports:
       - "8080:8080"
     volumes:
       - ./infra/keycloak/openagrios-realm.json:/opt/keycloak/data/import/openagrios-realm.json:ro
+      - ./infra/keycloak/themes/openagrios:/opt/keycloak/themes/openagrios:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
       interval: 10s
@@ -100,6 +102,7 @@ services:
       - ./infra/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
     depends_on:
       - core-api
+      - web-app
 
   # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
   core-api:
@@ -111,6 +114,7 @@ services:
       PORT: 8000
       OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       KEYCLOAK_ISSUER: http://keycloak:8080/realms/openagrios
+      KEYCLOAK_PUBLIC_ISSUER: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/openagrios}
       S3_ENDPOINT: http://object-storage:9000
       FLOWABLE_REST_URL: http://flowable:8081/flowable-rest
       FLOWABLE_ENDPOINT: http://flowable:8081/flowable-rest
@@ -135,6 +139,25 @@ services:
         condition: service_started
       flowable:
         condition: service_started
+
+  # 7. OPENAGRIOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
+  web-app:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        # Demo character picker + storyline panel; compose.prod.yaml turns it off
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+    container_name: openagrios-web-app
+    environment:
+      VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:9080}
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:

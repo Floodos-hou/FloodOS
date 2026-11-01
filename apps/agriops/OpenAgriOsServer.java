@@ -130,7 +130,7 @@ import java.util.concurrent.Executors;
 
 
 
- * - Tầng 2 & 3 (`apps/agriops`): Phân hệ Điều phối Cơ giới hóa & Phục hồi Đứt gãy Nông nghiệp.
+ * - Domain & Experience Layer (`apps/agriops` & `apps/web`): Phân hệ Điều phối Cơ giới hóa & Phục hồi Đứt gãy Nông nghiệp.
 
 
 
@@ -452,6 +452,8 @@ public final class OpenAgriOsServer {
 
 
                 endpoints.put("dispatch_assignment", "POST /api/v1/assignments");
+                endpoints.put("update_assignment_status", "POST /api/v1/assignments/{id}/status");
+                endpoints.put("live_event_stream", "GET /api/v1/stream/events");
 
 
 
@@ -615,7 +617,11 @@ public final class OpenAgriOsServer {
                 Map<String, String> params = parseQueryParams(ex.getRequestURI().getRawQuery());
                 String stateParam = params.get("state");
                 String rUriParam = params.getOrDefault("redirect_uri", "http://localhost:8000/callback");
-                sendJson(ex, 200, KeycloakOidcEngine.generatePkceSession(rUriParam, stateParam), null);
+                try {
+                    sendJson(ex, 200, KeycloakOidcEngine.generatePkceSession(rUriParam, stateParam, params.get("code_challenge")), null);
+                } catch (IllegalArgumentException bad) {
+                    sendJson(ex, 400, Map.of("error", "INVALID_CODE_CHALLENGE", "message", bad.getMessage()), null);
+                }
 
                 return;
 
@@ -742,6 +748,11 @@ public final class OpenAgriOsServer {
 
 
 
+
+            if ("/api/v1/stream/events".equals(path)) {
+                handleSseStream(ex);
+                return;
+            }
 
             if ("/api/v1/auth/userinfo".equals(path)) {
 
@@ -983,6 +994,14 @@ public final class OpenAgriOsServer {
 
 
 
+
+            if (path.startsWith("/api/v1/assignments/") && path.endsWith("/status")) {
+                String[] segs = path.split("/");
+                String asgId = segs[4];
+                HttpResult res = service.updateAssignmentStatus(auth, asgId, body);
+                sendJson(ex, res.status(), res.body(), auth);
+                return;
+            }
 
             if ("/api/v1/assignments".equals(path)) {
 
@@ -1288,13 +1307,56 @@ public final class OpenAgriOsServer {
 
 
 
+
+
+        private void handleSseStream(HttpExchange ex) throws IOException {
+            String authHeader = ex.getRequestHeaders().getFirst("Authorization");
+            AuthContext auth = KeycloakOidcEngine.authenticateBearer(authHeader);
+            if (auth == null) {
+                sendUnauthorized(ex);
+                return;
+            }
+
+            ex.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+            ex.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
+            ex.getResponseHeaders().set("Connection", "keep-alive");
+            ex.sendResponseHeaders(200, 0);
+
+            try (OutputStream os = ex.getResponseBody()) {
+                Map<String, Object> hello = new java.util.LinkedHashMap<>();
+                hello.put("status", "STREAM_ONLINE");
+                hello.put("tenant", auth.organizationId());
+                hello.put("user", auth.username());
+                hello.put("ts", java.time.Instant.now().toString());
+                String initData = "event: connected\ndata: " + JsonCodec.toJson(hello) + "\n\n";
+                os.write(initData.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+
+                var recentLogs = service.getStore().auditLedger.listRecentByTenant(auth.organizationId(), 5);
+                if (!"COORDINATOR".equals(auth.role()) && !"PLATFORM_ADMIN".equals(auth.role())) {
+                    recentLogs.removeIf(record -> !auth.userId().equals(String.valueOf(record.get("actor_user_id"))));
+                }
+                String logsData = "event: audit_sync\ndata: " + JsonCodec.toJson(Map.of("recent_logs", recentLogs)) + "\n\n";
+                os.write(logsData.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+
+                for (int i = 0; i < 5; i++) {
+                    try {
+                        Thread.sleep(3000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    String ping = "event: heartbeat\ndata: " + JsonCodec.toJson(Map.of("ping", true, "tick", String.valueOf(service.getStore().simTime))) + "\n\n";
+                    os.write(ping.getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+            } catch (Exception ignored) {
+                // Client disconnected
+            }
+        }
+
     }
-
-
-
-
-
-
 
     public static File resolveProjectRoot() {
 
@@ -1368,11 +1430,7 @@ public final class OpenAgriOsServer {
 
 
 
-    }
-
-
 
 }
 
-
-
+}

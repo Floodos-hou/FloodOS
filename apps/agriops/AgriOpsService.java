@@ -315,6 +315,7 @@ public final class AgriOpsService {
         // 1. Production Mode: upstream Keycloak token endpoint
         if (currentMode == KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION) {
             String keycloakIssuer = System.getenv().getOrDefault("KEYCLOAK_ISSUER", KeycloakOidcEngine.DEFAULT_ISSUER);
+            String publicIssuer = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", KeycloakOidcEngine.DEFAULT_PUBLIC_ISSUER);
             KeycloakOidcEngine.KeycloakExchangeResult result = KeycloakOidcEngine.exchangeAuthorizationCodeWithPkceDetailed(
                     keycloakIssuer, clientId, clientSecret, code, codeVerifier, redirectUri
             );
@@ -333,7 +334,7 @@ public final class AgriOpsService {
             String token = String.valueOf(tokenPayload.get("access_token"));
             Map<String, Object> decoded;
             try {
-                decoded = KeycloakOidcEngine.verifyJwt(token, keycloakIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE);
+                decoded = KeycloakOidcEngine.verifyJwt(token, publicIssuer, KeycloakOidcEngine.DEFAULT_AUDIENCE);
             } catch (Exception ex) {
                 return new HttpResult(401, Map.of(
                         "error", "KEYCLOAK_INTROSPECTION_FAILED",
@@ -457,11 +458,41 @@ public final class AgriOpsService {
         Organization org = store.organizations.get(orgId);
         String orgName = org != null ? org.name() : orgId;
 
+        String myOpId = "";
+        for (OperatorProfile op : store.operators.values()) {
+            if (op.userId().equals(userId)) { myOpId = op.operatorId(); break; }
+        }
+        final String operatorIdForFilter = myOpId;
+        Set<String> operatorFieldIds = new HashSet<>();
+        Set<String> roleMachineIds = new HashSet<>();
+        if (!myOpId.isBlank()) {
+            for (DispatchAssignment a : store.assignments.values()) {
+                if (myOpId.equals(a.operatorId)) { operatorFieldIds.add(a.fieldId); roleMachineIds.add(a.machineId); }
+            }
+        }
+        if ("FARMER".equals(role)) {
+            for (DispatchAssignment a : store.assignments.values()) if (TenantRlsContext.isSameTenant(auth, a.organizationId)) {
+                FieldPlot assignedField = store.fields.get(a.fieldId);
+                if (assignedField != null && assignedField.ownerUserId.equals(userId)) roleMachineIds.add(a.machineId);
+            }
+        }
+        if ("MACHINE_OWNER".equals(role)) {
+            for (HarvesterMachine machine : store.machines.values()) {
+                if (TenantRlsContext.isSameTenant(auth, machine.organizationId) && machine.ownerUserId.equals(userId)) roleMachineIds.add(machine.machineId);
+            }
+        }
+        if ("REPAIR_TEAM".equals(role)) for (MachineIncident incident : store.incidents.values()) {
+            if (userId.equals(incident.assignedRepairUserId)) roleMachineIds.add(incident.machineId);
+        }
+
         // 1. Fields with Role-Based Fog of War
         List<Map<String, Object>> fieldList = new ArrayList<>();
         Set<String> myFieldIds = new HashSet<>();
         for (FieldPlot f : store.fields.values()) {
             if (!TenantRlsContext.isSameTenant(auth, f.organizationId)) continue;
+            if ("FARMER".equals(role) && !f.ownerUserId.equals(userId)) continue;
+            if ("OPERATOR".equals(role) && !operatorFieldIds.contains(f.fieldId)) continue;
+            if ("MACHINE_OWNER".equals(role) || "REPAIR_TEAM".equals(role)) continue;
             if (f.ownerUserId.equals(userId)) {
                 myFieldIds.add(f.fieldId);
             }
@@ -470,16 +501,13 @@ public final class AgriOpsService {
         }
 
         // 2. Machines with Role-Based Visibility
-        String myOpId = "";
-        for (OperatorProfile op : store.operators.values()) {
-            if (op.userId().equals(userId)) {
-                myOpId = op.operatorId();
-                break;
-            }
-        }
         List<Map<String, Object>> machineList = new ArrayList<>();
         for (HarvesterMachine m : store.machines.values()) {
             if (!TenantRlsContext.isSameTenant(auth, m.organizationId)) continue;
+            if ("MACHINE_OWNER".equals(role) && !m.ownerUserId.equals(userId)) continue;
+            if ("OPERATOR".equals(role) && !myOpId.equals(m.assignedOperatorId)) continue;
+            if ("FARMER".equals(role) && !roleMachineIds.contains(m.machineId)) continue;
+            if ("REPAIR_TEAM".equals(role) && !roleMachineIds.contains(m.machineId)) continue;
             String vis = "FULL";
             if ("MACHINE_OWNER".equals(role) && !m.ownerUserId.equals(userId)) {
                 vis = "FOG_OF_WAR";
@@ -492,7 +520,8 @@ public final class AgriOpsService {
         // 3. Operators
         List<Map<String, Object>> operatorList = new ArrayList<>();
         for (OperatorProfile op : store.operators.values()) {
-            if (TenantRlsContext.isSameTenant(auth, op.organizationId())) {
+            if (TenantRlsContext.isSameTenant(auth, op.organizationId())
+                    && ("COORDINATOR".equals(role) || "PLATFORM_ADMIN".equals(role) || op.userId().equals(userId))) {
                 operatorList.add(op.toMap());
             }
         }
@@ -502,6 +531,9 @@ public final class AgriOpsService {
         for (ServiceRequest sr : store.serviceRequests.values()) {
             if (!TenantRlsContext.isSameTenant(auth, sr.organizationId)) continue;
             if ("FARMER".equals(role) && !sr.requesterUserId.equals(userId)) continue;
+            if ("OPERATOR".equals(role) && store.assignments.values().stream().noneMatch(a -> a.requestId.equals(sr.requestId) && operatorIdForFilter.equals(a.operatorId))) continue;
+            if ("MACHINE_OWNER".equals(role) && store.assignments.values().stream().noneMatch(a -> a.requestId.equals(sr.requestId) && roleMachineIds.contains(a.machineId))) continue;
+            if ("REPAIR_TEAM".equals(role)) continue;
             requestList.add(sr.toMap());
         }
 
@@ -512,6 +544,9 @@ public final class AgriOpsService {
         for (DispatchAssignment a : sortedAsg) {
             if (!TenantRlsContext.isSameTenant(auth, a.organizationId)) continue;
             if ("FARMER".equals(role) && !myFieldIds.contains(a.fieldId)) continue;
+            if ("OPERATOR".equals(role) && !myOpId.equals(a.operatorId)) continue;
+            HarvesterMachine assignedMachine = store.machines.get(a.machineId);
+            if ("MACHINE_OWNER".equals(role) && (assignedMachine == null || !assignedMachine.ownerUserId.equals(userId))) continue;
             FieldPlot f = store.fields.get(a.fieldId);
             HarvesterMachine m = store.machines.get(a.machineId);
             OperatorProfile o = store.operators.get(a.operatorId);
@@ -524,6 +559,16 @@ public final class AgriOpsService {
         for (int i = allInc.size() - 1; i >= 0; i--) {
             MachineIncident inc = allInc.get(i);
             if (TenantRlsContext.isSameTenant(auth, inc.organizationId)) {
+                HarvesterMachine incidentMachine = store.machines.get(inc.machineId);
+                boolean visible = "COORDINATOR".equals(role) || "PLATFORM_ADMIN".equals(role)
+                        || ("FARMER".equals(role) && inc.impactedAssignmentIds.stream().anyMatch(id -> {
+                            DispatchAssignment assignment = store.assignments.get(id);
+                            return assignment != null && myFieldIds.contains(assignment.fieldId);
+                        }))
+                        || ("OPERATOR".equals(role) && myOpId.equals(incidentMachine == null ? "" : incidentMachine.assignedOperatorId))
+                        || ("MACHINE_OWNER".equals(role) && incidentMachine != null && incidentMachine.ownerUserId.equals(userId))
+                        || ("REPAIR_TEAM".equals(role) && userId.equals(inc.assignedRepairUserId));
+                if (!visible) continue;
                 incidentList.add(inc.toMap());
             }
         }
@@ -534,6 +579,11 @@ public final class AgriOpsService {
         for (int i = allAcc.size() - 1; i >= 0; i--) {
             WorkAcceptance acc = allAcc.get(i);
             if (TenantRlsContext.isSameTenant(auth, acc.organizationId())) {
+                DispatchAssignment acceptedAssignment = store.assignments.get(acc.assignmentId());
+                boolean visible = "COORDINATOR".equals(role) || "PLATFORM_ADMIN".equals(role)
+                        || ("FARMER".equals(role) && acceptedAssignment != null && myFieldIds.contains(acceptedAssignment.fieldId))
+                        || ("OPERATOR".equals(role) && userId.equals(acc.operatorSubmittedBy()));
+                if (!visible) continue;
                 acceptanceList.add(acc.toMap());
             }
         }
@@ -562,10 +612,30 @@ public final class AgriOpsService {
         res.put("assignments", assignmentList);
         res.put("incidents", incidentList);
         res.put("acceptances", acceptanceList);
-        res.put("bpmn_instances", store.bpmnEngine.listByTenant(orgId));
+        boolean coordinationView = "COORDINATOR".equals(role) || "PLATFORM_ADMIN".equals(role);
+        List<Map<String, Object>> processInstances = store.bpmnEngine.listByTenant(orgId);
+        if (!coordinationView) {
+            Set<String> relevantProcessKeys = new HashSet<>();
+            for (Map<String, Object> request : requestList) relevantProcessKeys.add(String.valueOf(request.get("request_id")));
+            for (DispatchAssignment assignment : sortedAsg) {
+                if ("OPERATOR".equals(role) && myOpId.equals(assignment.operatorId)) relevantProcessKeys.add(assignment.requestId);
+                if ("MACHINE_OWNER".equals(role) && roleMachineIds.contains(assignment.machineId)) relevantProcessKeys.add(assignment.requestId);
+                if ("FARMER".equals(role) && myFieldIds.contains(assignment.fieldId)) relevantProcessKeys.add(assignment.requestId);
+            }
+            for (MachineIncident incident : allInc) {
+                boolean relevant = ("REPAIR_TEAM".equals(role) && userId.equals(incident.assignedRepairUserId))
+                        || ("OPERATOR".equals(role) && userId.equals(incident.reportedByUserId))
+                        || ("MACHINE_OWNER".equals(role) && roleMachineIds.contains(incident.machineId));
+                if (relevant) { relevantProcessKeys.add(incident.incidentId); relevantProcessKeys.add(incident.repairTicketId); }
+            }
+            processInstances.removeIf(instance -> !relevantProcessKeys.contains(String.valueOf(instance.get("business_key"))));
+        }
+        res.put("bpmn_instances", processInstances);
         res.put("bpmn_definitions", store.bpmnEngine.getDefinitions());
-        res.put("minio_objects", store.s3Storage.listByTenant(orgId));
-        res.put("audit_logs", store.auditLedger.listRecentByTenant(orgId, 25));
+        res.put("minio_objects", coordinationView ? store.s3Storage.listByTenant(orgId) : List.of());
+        List<Map<String, Object>> recentAudit = store.auditLedger.listRecentByTenant(orgId, 25);
+        if (!coordinationView) recentAudit.removeIf(record -> !userId.equals(String.valueOf(record.get("actor_user_id"))));
+        res.put("audit_logs", recentAudit);
         res.put("audit_chain_proof", store.auditLedger.verifyChainIntegrity());
         return res;
     }
@@ -575,8 +645,14 @@ public final class AgriOpsService {
     // ------------------------------------------------------------------------
     public synchronized Map<String, Object> getDigitalTwinEntities(AuthContext auth) {
         List<Map<String, Object>> entities = new ArrayList<>();
+        String operatorId = store.operators.values().stream()
+                .filter(op -> op.userId().equals(auth.userId()))
+                .map(OperatorProfile::operatorId).findFirst().orElse("");
         for (HarvesterMachine m : store.machines.values()) {
             if (!TenantRlsContext.isSameTenant(auth, m.organizationId)) continue;
+            if ("FARMER".equals(auth.role()) || "REPAIR_TEAM".equals(auth.role())) continue;
+            if ("MACHINE_OWNER".equals(auth.role()) && !m.ownerUserId.equals(auth.userId())) continue;
+            if ("OPERATOR".equals(auth.role()) && !m.assignedOperatorId.equals(operatorId)) continue;
             Map<String, Map<String, Object>> props = new LinkedHashMap<>();
             props.put("organizationId", NgsiLdTwinMapper.toProperty(m.organizationId, null, null));
             props.put("name", NgsiLdTwinMapper.toProperty(m.name, null, null));
@@ -1116,24 +1192,169 @@ public final class AgriOpsService {
 
         String diagnosis = String.valueOf(body.getOrDefault("diagnosis", "Đã thay mới dây curoa buồng đập Bando & căn chỉnh cụm puly"));
         String oldStatus = inc.status;
-        inc.status = "UNDER_REPAIR";
+        // The repair crew can either log progress (UNDER_REPAIR) or declare the machine fixed (RESOLVED).
+        boolean resolved = Boolean.parseBoolean(String.valueOf(body.getOrDefault("is_resolved", false)));
+        inc.status = resolved ? "RESOLVED" : "UNDER_REPAIR";
         store.persistIncident(inc, auth.role(), auth.userId());
+
+        if (resolved) {
+            HarvesterMachine repaired = store.machines.get(inc.machineId);
+            if (repaired != null && "BREAKDOWN".equals(repaired.status)) {
+                repaired.status = "IDLE";
+                store.persistMachine(repaired, auth.role(), auth.userId());
+            }
+        }
 
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("repair_ticket_id", inc.repairTicketId);
-        after.put("status", "UNDER_REPAIR");
+        after.put("status", inc.status);
         after.put("diagnosis", diagnosis);
 
         var audit = store.auditLedger.appendRecord(
                 auth.organizationId(), inc.correlationId, "RepairTicket", inc.repairTicketId,
-                "REPAIR_TEAM_DIAGNOSIS_UPDATED", auth.username(), auth.role(),
+                resolved ? "COMPLETE_REPAIR_TICKET" : "REPAIR_TEAM_DIAGNOSIS_UPDATED", auth.username(), auth.role(),
                 Map.of("status", oldStatus), after, 200
         );
 
-        return new HttpResult(200, Map.of("ok", true, "audit", audit.toSummaryMap()));
+        return new HttpResult(200, Map.of("ok", true, "status", inc.status, "audit", audit.toSummaryMap()));
     }
 
     // ------------------------------------------------------------------------
+        // ------------------------------------------------------------------------
+    // 7.1. OPERATOR / COORDINATOR UPDATE ASSIGNMENT SHIFT STATUS
+    // ------------------------------------------------------------------------
+    public synchronized HttpResult updateAssignmentStatus(AuthContext auth, String asgId, Map<String, Object> body) {
+        String newStatus = String.valueOf(body.getOrDefault("status", "")).trim().toUpperCase(Locale.ROOT);
+        if (!List.of("IN_PROGRESS", "COMPLETED").contains(newStatus)) {
+            return new HttpResult(400, Map.of(
+                    "error", "INVALID_STATUS_TRANSITION",
+                    "message", "Trạng thái mới phải là 'IN_PROGRESS' (Bắt đầu ca) hoặc 'COMPLETED' (Hoàn thành ca)."
+            ));
+        }
+
+        DispatchAssignment asg = store.assignments.get(asgId);
+        if (asg == null || !TenantRlsContext.isSameTenant(auth, asg.organizationId)) {
+            return new HttpResult(404, Map.of("error", "ASSIGNMENT_NOT_FOUND", "message", "Không tìm thấy ca " + asgId));
+        }
+
+        // RBAC: OPERATOR only updates their assigned shift; COORDINATOR updates shifts within tenant
+        if ("OPERATOR".equals(auth.role())) {
+            OperatorProfile op = store.operators.get(asg.operatorId);
+            if (op == null || !op.userId().equals(auth.userId())) {
+                var audit = store.auditLedger.appendRecord(
+                        auth.organizationId(), asg.correlationId, "DispatchAssignment", asgId,
+                        "RBAC_BLOCKED_UNASSIGNED_OPERATOR", auth.username(), auth.role(),
+                        Map.of("target_assignment", asgId),
+                        Map.of("error", "Người vận hành không được phép cập nhật ca của người khác!"), 403
+                );
+                return new HttpResult(403, Map.of(
+                        "error", "FORBIDDEN",
+                        "message", "Bạn không phải là người vận hành được giao ca này (" + asg.operatorId + ").",
+                        "audit", audit.toSummaryMap()
+                ));
+            }
+        } else if (!"COORDINATOR".equals(auth.role()) && !"PLATFORM_ADMIN".equals(auth.role())) {
+            return new HttpResult(403, Map.of("error", "FORBIDDEN", "message", "Vai trò " + auth.role() + " không có quyền cập nhật tiến độ ca gặt."));
+        }
+
+        String oldStatus = asg.status;
+        String progressNote = String.valueOf(body.getOrDefault("note", "")).trim();
+        double progress = 50.0;
+        if (body.containsKey("progress_pct")) {
+            Object rawProgress = body.get("progress_pct");
+            if (!(rawProgress instanceof Number)) return new HttpResult(400, Map.of("error", "INVALID_PROGRESS"));
+            progress = ((Number) rawProgress).doubleValue();
+            if (!Double.isFinite(progress) || progress < 0 || progress > 100) {
+                return new HttpResult(400, Map.of("error", "INVALID_PROGRESS", "message", "progress_pct phải từ 0 đến 100."));
+            }
+        }
+        HarvesterMachine machine = store.machines.get(asg.machineId);
+        FieldPlot field = store.fields.get(asg.fieldId);
+        double currentProgress = field == null ? 0.0 : field.harvestProgressPct;
+        boolean validTransition = ("CONFIRMED".equals(oldStatus) && "IN_PROGRESS".equals(newStatus))
+                || ("IN_PROGRESS".equals(oldStatus) && ("COMPLETED".equals(newStatus) || "IN_PROGRESS".equals(newStatus)));
+        if (!validTransition) {
+            return new HttpResult(409, Map.of("error", "INVALID_STATUS_TRANSITION",
+                    "message", "Chỉ cho phép CONFIRMED → IN_PROGRESS → cập nhật tiến độ → COMPLETED.", "current_status", oldStatus));
+        }
+        if ("IN_PROGRESS".equals(oldStatus) && progress < currentProgress) {
+            return new HttpResult(409, Map.of("error", "PROGRESS_CANNOT_DECREASE",
+                    "message", "Tiến độ ghi nhận không thể thấp hơn lần cập nhật trước.", "current_progress_pct", currentProgress));
+        }
+        if ("IN_PROGRESS".equals(oldStatus) && "IN_PROGRESS".equals(newStatus) && progressNote.isEmpty()) {
+            return new HttpResult(400, Map.of("error", "PROGRESS_NOTE_REQUIRED",
+                    "message", "Cần ghi chú hiện trường cho lần cập nhật tiến độ."));
+        }
+        if ("COMPLETED".equals(newStatus) && progress < 100.0) {
+            return new HttpResult(400, Map.of("error", "COMPLETION_REQUIRES_FULL_PROGRESS",
+                    "message", "Chỉ có thể hoàn thành ca khi tiến độ đạt 100%.", "current_progress_pct", progress));
+        }
+        asg.status = newStatus;
+
+        String ts = nowIso();
+
+        if ("IN_PROGRESS".equals(newStatus)) {
+            if (machine != null) {
+                machine.status = "WORKING";
+                machine.telemetryUpdatedAt = ts;
+            }
+            if (field != null) {
+                field.harvestProgressPct = Math.max(field.harvestProgressPct, progress);
+                field.readinessStatus = "HARVESTING";
+            }
+        } else if ("COMPLETED".equals(newStatus)) {
+            if (machine != null) {
+                machine.status = "IDLE";
+                machine.telemetryUpdatedAt = ts;
+            }
+            if (field != null) {
+                field.harvestProgressPct = 100.0;
+                field.readinessStatus = "COMPLETED";
+            }
+            for (var inst : store.bpmnEngine.listByTenant(auth.organizationId())) {
+                if ("service_request_lifecycle".equals(inst.get("definition_key")) && asg.requestId.equals(inst.get("business_key"))) {
+                    store.bpmnEngine.advanceInstance(
+                            String.valueOf(inst.get("process_instance_id")),
+                            BpmnWorkflowEngine.makeStepHistory(
+                                    "taskOperatorExecute",
+                                    "Người vận hành " + auth.username() + " hoàn thành ca gặt " + asgId,
+                                    auth.username(), auth.role(), ts
+                            ),
+                            "taskFarmerAcceptance",
+                            "Nông hộ kiểm tra minh chứng & xác nhận nghiệm thu",
+                            "FARMER",
+                            ts
+                    );
+                    break;
+                }
+            }
+        }
+
+        store.persistAssignment(asg, auth.role(), auth.userId());
+        if (machine != null) store.persistMachine(machine, auth.role(), auth.userId());
+        if (field != null) store.persistField(field, auth.role(), auth.userId());
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("assignment_id", asgId);
+        after.put("status", newStatus);
+        after.put("progress_pct", progress);
+        after.put("machine_id", asg.machineId);
+        after.put("field_id", asg.fieldId);
+        if (!progressNote.isEmpty()) after.put("note", progressNote);
+
+        var audit = store.auditLedger.appendRecord(
+                auth.organizationId(), asg.correlationId, "DispatchAssignment", asgId,
+                "ASSIGNMENT_STATUS_UPDATED", auth.username(), auth.role(),
+                Map.of("status", oldStatus), after, 200
+        );
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("assignment", asg.toEnrichedMap(field, machine, store.operators.get(asg.operatorId)));
+        resp.put("audit", audit.toSummaryMap());
+        return new HttpResult(200, resp);
+    }
+
     // 9. CONFIRM ACCEPTANCE & SEAL LEDGER
     // ------------------------------------------------------------------------
     public synchronized HttpResult confirmAcceptance(AuthContext auth, Map<String, Object> body) {

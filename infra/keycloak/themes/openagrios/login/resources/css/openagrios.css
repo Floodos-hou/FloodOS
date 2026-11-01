@@ -1,0 +1,141 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 OpenAgriOS Contributors */
+/* "Đồng lúa & Phù sa" skin for the Keycloak login page, matching apps/web. */
+
+:root {
+  --oa-green-900: #1e3a17;
+  --oa-green-800: #264a1d;
+  --oa-green-700: #2f5c22;
+  --oa-green-600: #3a7228;
+  --oa-green-200: #bddcab;
+  --oa-gold-300: #f2cb52;
+  --oa-gold-200: #f9e08a;
+  --oa-cream: #f8f6ee;
+  --oa-ink: #1e1d16;
+  --oa-ink-soft: #57533f;
+}
+
+html, body, .login-pf body {
+  min-height: 100%;
+  margin: 0;
+  font-family: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  color: var(--oa-ink);
+  /* sky → paddy: leaf-green gradient with terraced hills drawn as an inline SVG */
+  background-color: var(--oa-green-800);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 300' preserveAspectRatio='none'%3E%3Ccircle cx='980' cy='70' r='46' fill='%23f2cb52'/%3E%3Ccircle cx='980' cy='70' r='74' fill='%23f2cb52' opacity='.18'/%3E%3Cpath d='M0 170 Q240 90 500 160 T1000 140 T1200 160 V300 H0Z' fill='%233a7228' opacity='.6'/%3E%3Cpath d='M0 215 Q280 160 580 205 T1200 195 V300 H0Z' fill='%234b8b34'/%3E%3Cpath d='M0 255 Q300 225 620 250 T1200 242 V300 H0Z' fill='%236ba84e'/%3E%3Cpath d='M0 285 Q320 268 640 282 T1200 278 V300 H0Z' fill='%2395c47b'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, var(--oa-green-900) 0%, var(--oa-green-700) 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: bottom center, center;
+  background-size: 100% 34vh, cover;
+  background-attachment: fixed;
+}
+
+/* Brand header */
+#kc-header, #kc-header-wrapper {
+  position: static !important;
+  transform: none !important;
+  padding: 36px 16px 8px !important;
+  text-align: center;
+}
+#kc-header-wrapper {
+  color: #fff !important;
+  font-size: 2rem !important;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: none !important;
+}
+#kc-header-wrapper::before {
+  content: "🌾 ";
+}
+#kc-header-wrapper::after {
+  content: "Cổng điều hành nông nghiệp";
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--oa-gold-200);
+  letter-spacing: 0.04em;
+}
+
+/* Card */
+.pf-v5-c-login {
+  background: transparent !important;
+  min-height: auto !important;
+}
+.pf-v5-c-login__container {
+  grid-template-columns: minmax(auto, 30rem) !important;
+  justify-content: center;
+  padding: 8px 16px 40vh;
+}
+.pf-v5-c-login__main {
+  background: #fff !important;
+  border-radius: 24px !important;
+  border: 0 !important;
+  border-top: 8px solid var(--oa-gold-300) !important;
+  box-shadow: 0 24px 60px rgba(15, 32, 12, 0.35) !important;
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header {
+  padding-top: 28px !important;
+}
+.pf-v5-c-login__main-header h1,
+.pf-v5-c-login__main-header .pf-v5-c-title {
+  color: var(--oa-ink) !important;
+  font-size: 1.6rem !important;
+  font-weight: 800 !important;
+  line-height: 1.25;
+}
+
+/* Form */
+.pf-v5-c-form__label-text,
+label, .pf-v5-c-check__label {
+  color: var(--oa-ink) !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+}
+.pf-v5-c-form-control, .pf-v5-c-form-control input, input[type="text"], input[type="password"] {
+  min-height: 3.4rem;
+  font-size: 1.15rem !important;
+  color: var(--oa-ink) !important;
+  background: #fff !important;
+  border-radius: 14px !important;
+  border: 2px solid #cbc3a7 !important;
+  --pf-v5-c-form-control--BorderColor: #cbc3a7;
+}
+.pf-v5-c-form-control:focus-within,
+.pf-v5-c-form-control input:focus {
+  border-color: var(--oa-green-600) !important;
+  box-shadow: 0 0 0 4px rgba(75, 139, 52, 0.25) !important;
+  outline: none;
+}
+.pf-v5-c-form-control::before, .pf-v5-c-form-control::after { display: none !important; }
+
+#kc-login, .pf-v5-c-button.pf-m-primary {
+  min-height: 3.6rem;
+  font-size: 1.2rem !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  background: var(--oa-green-700) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 16px rgba(47, 92, 34, 0.35);
+}
+#kc-login:hover, .pf-v5-c-button.pf-m-primary:hover {
+  background: var(--oa-green-600) !important;
+}
+.pf-v5-c-button.pf-m-control {
+  min-height: 3.4rem;
+  border-radius: 0 14px 14px 0 !important;
+  color: var(--oa-ink-soft) !important;
+}
+
+a, .pf-v5-c-login__main-footer-band a {
+  color: var(--oa-green-700) !important;
+  font-weight: 700;
+}
+.pf-v5-c-alert.pf-m-danger {
+  border-radius: 14px;
+  font-size: 1.05rem;
+}
+.pf-v5-c-login__main-footer-band { background: var(--oa-cream) !important; }

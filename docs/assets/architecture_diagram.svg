@@ -80,7 +80,7 @@
   <g transform="translate(40, 275)">
     <!-- TIER 2: AGRIOPS APPLICATION (apps/agriops) -->
     <rect width="1120" height="110" rx="10" fill="url(#tier2Grad)" stroke="#38BDF8" stroke-width="1.2"/>
-    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#38BDF8">TẦNG 2: DỊCH VỤ NGHIỆP VỤ NÔNG NGHIỆP SỐ (Tier-2 Domain App — apps/agriops)</text>
+    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#38BDF8">PHÂN HỆ NGHIỆP VỤ NÔNG NGHIỆP SỐ (AgriOps Domain Engine — apps/agriops)</text>
 
     <!-- App Box 1 -->
     <rect x="24" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>

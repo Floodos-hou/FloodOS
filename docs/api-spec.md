@@ -12,7 +12,7 @@ Tài liệu đặc tả toàn bộ các điểm cuối REST API của hệ thố
 | `GET` | `/openapi.json` | Public (Mọi người) | OpenAPI 3.0 JSON Specification | `200 OK` |
 | `GET` | `/api/v1/health` | Public (Mọi người) | Kiểm tra trạng thái sức khỏe các dịch vụ Core & BPMN | `200 OK` |
 | `GET` | `/api/v1/auth/accounts` | Public (Mọi người) | Danh sách tài khoản demo và vai trò Keycloak OIDC | `200 OK` |
-| `GET` | `/api/v1/auth/pkce/authorize-url` | Public (Mọi người) | Khởi tạo phiên PKCE OAuth2/OIDC, sinh `code_challenge` SHA-256 | `200 OK` |
+| `GET` | `/api/v1/auth/pkce/authorize-url` | Public (Mọi người) | Dựng URL xác thực PKCE; client truyền `code_challenge` (S256) và giữ `code_verifier` cục bộ | `200 OK` |
 | `POST` | `/api/v1/auth/pkce/token` | Public (Mọi người) | Trao đổi `code` và `code_verifier` lấy Access Token chuẩn RFC 7636 & RFC 9700 | `200 OK` / `400 Bad Request` |
 | `POST` | `/api/v1/auth/login` | Public (Mọi người) | Đăng nhập OIDC SSO, nhận JWT Bearer Token | `200 OK` / `401 Unauthorized` |
 | `GET` | `/api/v1/auth/userinfo` | Bearer Token | Lấy thông tin định danh người dùng từ Token | `200 OK` / `401 Unauthorized` |
@@ -20,6 +20,8 @@ Tài liệu đặc tả toàn bộ các điểm cuối REST API của hệ thố
 | `GET` | `/api/v1/digital-twin/entities`| Bearer Token | Xuất thực thể Bản sao số chuẩn ETSI NGSI-LD v1.6 | `200 OK` / `401 Unauthorized` |
 | `POST` | `/api/v1/requests` | `FARMER`, `COORDINATOR` | Tạo yêu cầu dịch vụ thu hoạch lúa chín | `201 Created` / `403 Forbidden` |
 | `POST` | `/api/v1/assignments` | `COORDINATOR` | Điều phối ghép cặp Máy - Thợ lái vào ca gặt | `201 Created` / `409 Conflict` / `403 Forbidden` |
+| `POST` | `/api/v1/assignments/{id}/status` | `OPERATOR`, `COORDINATOR` | Chuyển đổi trạng thái ca (`IN_PROGRESS` / `COMPLETED`), tiến độ % và đồng bộ BPMN | `200 OK` / `403 Forbidden` |
+| `GET` | `/api/v1/stream/events` | Bearer Token (Authorization header) | SSE snapshot kiểm toán ban đầu + heartbeat; Web UI hiện dùng `GET /api/v1/state` polling mỗi 20 giây | `200 OK (text/event-stream)` |
 | `POST` | `/api/v1/incidents` | `OPERATOR`, `COORDINATOR` | Báo cáo máy hỏng, tải ảnh S3 & tìm máy cứu viện | `201 Created` / `403 Forbidden` |
 | `POST` | `/api/v1/incidents/{id}/approve-replan` | `COORDINATOR` | Phê duyệt phương án máy cứu viện trên quy trình BPMN | `200 OK` / `422 Unprocessable` / `403 Forbidden` |
 | `POST` | `/api/v1/incidents/{id}/repair` | `REPAIR_TEAM`, `COORDINATOR` | Cập nhật tiến độ và nhật ký sửa chữa kỹ thuật | `200 OK` / `403 Forbidden` |

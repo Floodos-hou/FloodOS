@@ -50,7 +50,7 @@
 
     - *Chế độ Mặc định (DEV_MOCK_STANDALONE)*: Tự cấp phát và xác thực OIDC JWT với khóa ngẫu nhiên tạm thời (Ephemeral 256-bit Key) sinh động lúc khởi động. Từ chối tuyệt đối token RS256 giả mạo (HTTP 401).
 
-    - *Chế độ Sản xuất (KEYCLOAK_PRODUCTION)*: Kích hoạt khi cấu hình `OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION` (đã đặt mặc định trong `compose.yaml`), yêu cầu kết nối bắt buộc đến Keycloak OIDC 24.0 bên ngoài qua giao thức OIDC Password/Code Flow và xác thực Token Introspection RFC 7662. Tuyệt đối không tự ý fallback sang mock khi Keycloak gặp lỗi.
+    - *Chế độ Sản xuất (KEYCLOAK_PRODUCTION)*: Dùng OIDC Authorization Code + PKCE qua trang đăng nhập Keycloak; không nhận mật khẩu trong ứng dụng và không fallback sang mock. `KEYCLOAK_PUBLIC_URL` và `KEYCLOAK_PUBLIC_ISSUER` phải trỏ tới Keycloak HTTPS mà trình duyệt truy cập được; cập nhật redirect URI `https://<web-origin>/auth/callback` và Web Origin đúng miền triển khai trong client `agriops-web`.
 
   - ✅ **Bộ chuyển đổi Hạ tầng Kép (Dual-Mode Infrastructure Adapters)**:
 
@@ -140,7 +140,7 @@ Hệ thống được thiết kế theo triết lý **Hệ điều hành Chuyể
 
 openagrios/
 
-├── core/                         # [TẦNG 1] NỀN TẢNG LÕI DÙNG CHUNG (HEADLESS CORE PaaS)
+├── core/                         # NỀN TẢNG LÕI DÙNG CHUNG (HEADLESS CORE PaaS)
 
 │   ├── identity/                 # Keycloak OIDC (Live Keycloak & Embedded Dev Mock), JWT, RBAC
 
@@ -150,9 +150,15 @@ openagrios/
 
 │   └── data-services/            # Dịch vụ dữ liệu: RLS, S3, SHA-256 Audit, NGSI-LD Twin, Spatial & Conflict
 
-├── apps/                         # [TẦNG 3] ỨNG DỤNG NGHIỆP VỤ CẮM-VÀ-CHẠY (DOMAIN APPLICATIONS)
-
-│   └── agriops/                  # Ứng dụng Điều phối Cơ giới hóa & Phục hồi Đứt gãy Thu hoạch
+├── apps/
+│   ├── agriops/                  # AgriOps Core Engine: Nghiệp vụ Cơ giới hóa & Điều độ Cứu viện (Headless API)
+│   └── web/                      # Operations Portal: Giao diện Trải nghiệm & Điều hành Tác chiến H-P-D-I
+│       ├── src/components/auth/  # Đăng nhập OIDC Authorization Code + PKCE qua Keycloak
+│       ├── src/components/workspaces/ # [H] 5 Cockpit: FARMER, COORDINATOR, OPERATOR, MACHINE_OWNER, REPAIR_TEAM
+│       ├── src/components/process/    # [P] Trung tâm Chỉ huy Quy trình Chuẩn (Flowable BPMN 2.0)
+│       ├── src/components/map/        # [D] Bản đồ Tác chiến MapLibre GL JS (Sương mù RLS, Vectơ Điều động)
+│       ├── src/components/radar/      # [I] Radar Cứu viện Thông minh (Spatial Multi-Criteria, Bắt lỗi 409 GiST)
+│       └── src/components/common/     # Nhật ký kiểm toán đồng bộ định kỳ & Cây phả hệ dữ liệu SHA-256
 
 ├── infra/                        # HẠ TẦNG KHAI BÁO (IaC & Container Definitions)
 

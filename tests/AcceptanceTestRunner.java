@@ -329,6 +329,28 @@ public final class AcceptanceTestRunner {
             ));
             check(stateValidRes.status() == 200 && "csrf-valid-token-777".equals(stateValidRes.body().get("state")), "Valid PKCE state token exchange failed");
 
+            // 2.8.3b. Client-owned PKCE: the browser keeps the verifier; the server only ever sees the S256 challenge
+            String ownVerifier = KeycloakOidcEngine.generateCodeVerifier();
+            String ownChallenge = KeycloakOidcEngine.generateCodeChallenge(ownVerifier);
+            Map<String, Object> ownSession = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-own-challenge-1", ownChallenge);
+            check(!ownSession.containsKey("code_verifier"), "Server must never return a code_verifier when the client supplies its own code_challenge");
+            check(ownChallenge.equals(ownSession.get("code_challenge")), "Server must echo the client-owned code_challenge unchanged");
+            ApiRes ownExchange = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
+                    "code", String.valueOf(ownSession.get("code")),
+                    "code_verifier", ownVerifier,
+                    "state", "csrf-own-challenge-1",
+                    "client_id", "agriops-web",
+                    "redirect_uri", "http://localhost:8000/callback"
+            ));
+            check(ownExchange.status() == 200, "Client-owned PKCE verifier must exchange successfully");
+            boolean badChallengeRejected = false;
+            try {
+                KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "s", "not-a-valid-challenge");
+            } catch (IllegalArgumentException expected) {
+                badChallengeRejected = true;
+            }
+            check(badChallengeRejected, "Malformed code_challenge must be rejected");
+
             // 2.8.3. Verify PKCE rejects code_verifier with invalid length (< 43 characters, RFC 7636 Section 4.1)
             ApiRes pkceTooShortRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
                     "code", "test_auth_code_xyz",
@@ -401,7 +423,8 @@ public final class AcceptanceTestRunner {
 
             check(Set.copyOf(fullFields).equals(Set.of("F01", "F03", "F07")), "Farmer FULL visibility mismatch");
 
-            check(fogCount == 7, "Farmer masked field count mismatch");
+            check(fogCount == 0 && farmerFields.size() == 3,
+                    "Farmer response must omit, not merely mask, fields owned by other users");
 
 
 
@@ -493,7 +516,7 @@ public final class AcceptanceTestRunner {
                 System.out.println("[PASS] Production Storage Fail-Fast verified: blocked silent in-memory drift when PostgreSQL is unreachable.");
             }
 
-            System.out.println("[PASS] Multi-Tenant RLS & Field-Level Visibility verified: " + fullFields + " unmasked, 7 masked.");
+            System.out.println("[PASS] Multi-Tenant RLS & Owner-Level Field Isolation verified: Farmer sees only " + fullFields + ".");
 
 
 
@@ -595,6 +618,33 @@ public final class AcceptanceTestRunner {
 
             System.out.println("[PASS] BPMN Replan approved -> Shift ASG-102 superseded by " + resRep.body().get("new_assignment_id") + ".");
 
+            // 8.0. Repair ticket: progress keeps UNDER_REPAIR, declaring the machine fixed resolves the incident
+            ApiRes resRepairProgress = apiReq("POST", "/api/v1/incidents/" + incId + "/repair", tCoord, Map.of(
+                    "diagnosis", "Đang kiểm tra hệ thống làm mát", "is_resolved", false
+            ));
+            check(resRepairProgress.status() == 200 && "UNDER_REPAIR".equals(resRepairProgress.body().get("status")), "Repair progress must keep incident UNDER_REPAIR");
+            ApiRes resRepairFixed = apiReq("POST", "/api/v1/incidents/" + incId + "/repair", tCoord, Map.of(
+                    "diagnosis", "Đã thay két nước làm mát", "is_resolved", true
+            ));
+            check(resRepairFixed.status() == 200 && "RESOLVED".equals(resRepairFixed.body().get("status")), "is_resolved=true must resolve the incident");
+            System.out.println("[PASS] Repair ticket verified: progress -> UNDER_REPAIR, declared fixed -> RESOLVED.");
+
+            // 8.1. Operator & Coordinator Shift Status Progression & RBAC Guard
+            ApiRes resSkipStatus = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tCoord, Map.of(
+                    "status", "COMPLETED"
+            ));
+            check(resSkipStatus.status() == 409, "Assignment completion must require prior IN_PROGRESS state");
+            ApiRes resUnassignedOp = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tOp, Map.of(
+                    "status", "IN_PROGRESS", "progress_pct", 50.0
+            ));
+            check(resUnassignedOp.status() == 403, "Unassigned operator must be rejected with 403");
+
+            ApiRes resCoordStatus = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tCoord, Map.of(
+                    "status", "IN_PROGRESS", "progress_pct", 60.0
+            ));
+            check(resCoordStatus.status() == 200, "Coordinator shift status update failed");
+            System.out.println("[PASS] Operator & Coordinator Shift Status Transition verified (RBAC Guard enforced).");
+
 
 
             // 9. Work Acceptance & SHA-256 Lineage Chain Verification
@@ -617,7 +667,7 @@ public final class AcceptanceTestRunner {
 
             List<Map<String, Object>> steps = (List<Map<String, Object>>) resLin.body().get("lineage_steps");
 
-            check(resLin.status() == 200 && Boolean.TRUE.equals(proof.get("chain_valid")) && steps.size() == 5, "Lineage verification failed");
+            check(resLin.status() == 200 && Boolean.TRUE.equals(proof.get("chain_valid")) && steps.size() == 9, "Lineage verification failed (expected 9 steps: 7 original + 2 repair-ticket events)");
 
             System.out.println("[PASS] Immutable SHA-256 Audit Chain & Data Lineage verified (" + steps.size() + " linked records).");
 
