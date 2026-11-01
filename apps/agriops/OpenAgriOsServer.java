@@ -362,6 +362,8 @@ public final class OpenAgriOsServer {
 
 
 
+            } catch (BadRequestException e) {
+                sendJson(ex, 400, Map.of("error", "INVALID_JSON", "message", String.valueOf(e.getMessage())), null);
             } catch (Exception e) {
 
 
@@ -404,6 +406,11 @@ public final class OpenAgriOsServer {
         }
 
         private void handleGet(HttpExchange ex, String path) throws IOException {
+            if ("/api/v1/internal/fleet".equals(path)) {
+                if (!ingestTokenValid(ex)) return;
+                sendJson(ex, 200, service.listFleetForIngest(), null);
+                return;
+            }
 
 
 
@@ -890,6 +897,12 @@ public final class OpenAgriOsServer {
 
 
         private void handlePost(HttpExchange ex, String path) throws IOException {
+            if ("/api/v1/internal/telemetry".equals(path)) {
+                if (!ingestTokenValid(ex)) return;
+                HttpResult res = service.ingestTelemetry(readJsonBody(ex));
+                sendJson(ex, res.status(), res.body(), null);
+                return;
+            }
 
 
 
@@ -1242,6 +1255,34 @@ public final class OpenAgriOsServer {
 
 
 
+        /**
+         * Service-to-service guard for {@code /api/v1/internal/*}: shared secret in {@code X-Ingest-Token}.
+         * Fails closed (503) when {@code OPENAGRIOS_INGEST_TOKEN} is not configured; APISIX additionally
+         * blocks these paths at the edge so they are reachable only inside the container network.
+         */
+        private boolean ingestTokenValid(HttpExchange ex) throws IOException {
+            String expected = System.getenv("OPENAGRIOS_INGEST_TOKEN");
+            if (expected == null || expected.isBlank()) {
+                sendJson(ex, 503, Map.of("error", "INGEST_DISABLED",
+                        "message", "OPENAGRIOS_INGEST_TOKEN is not configured; telemetry ingestion is disabled."), null);
+                return false;
+            }
+            String given = ex.getRequestHeaders().getFirst("X-Ingest-Token");
+            boolean ok = given != null && java.security.MessageDigest.isEqual(
+                    given.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8));
+            if (!ok) {
+                sendJson(ex, 401, Map.of("error", "INVALID_INGEST_TOKEN", "message", "Missing or invalid X-Ingest-Token."), null);
+            }
+            return ok;
+        }
+
+        /** Client sent a request body that is not a single well-formed JSON object. */
+        private static final class BadRequestException extends RuntimeException {
+            BadRequestException(String message) {
+                super(message);
+            }
+        }
+
         private Map<String, Object> readJsonBody(HttpExchange ex) throws IOException {
 
 
@@ -1258,7 +1299,11 @@ public final class OpenAgriOsServer {
 
 
 
-                return JsonCodec.parseObject(new String(bytes, StandardCharsets.UTF_8));
+                try {
+                    return JsonCodec.parseObjectStrict(new String(bytes, StandardCharsets.UTF_8));
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException(e.getMessage());
+                }
 
 
 

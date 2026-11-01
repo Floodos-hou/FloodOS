@@ -30,7 +30,11 @@ public final class AnalyticsLakeClient {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 
     public AnalyticsLakeClient() {
-        String url = System.getenv("OPENAGRIOS_ANALYTICS_URL");
+        this(System.getenv("OPENAGRIOS_ANALYTICS_URL"));
+    }
+
+    /** Client bound to an explicit endpoint ({@code null}/blank = disabled). */
+    public AnalyticsLakeClient(String url) {
         this.baseUrl = (url == null || url.isBlank()) ? null : url.replaceAll("/+$", "");
     }
 

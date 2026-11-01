@@ -82,6 +82,12 @@ flowchart TD
   - **Lạnh**: `services/lake-archiver` đọc topic, gom lô và ghi Parquet (ZSTD, phân vùng `dt=YYYY-MM-DD`) vào bucket `openagrios-lake` trên SeaweedFS; DuckDB truy vấn trực tiếp các file này (khử trùng lặp theo `ledger_epoch` + `event_id` vì giao nhận at-least-once).
   - Truy cập qua `GET /api/v1/analytics/*` (chỉ điều phối viên/quản trị, cách ly theo `organization_id`). Chưa dùng Iceberg/Trino: đây là lựa chọn gọn cho quy mô MVP, không phải lớp lakehouse đầy đủ.
 
+- **Thu nhận dữ liệu cảm biến OT (MQTT → bản sao số):**
+  - Thiết bị phát MQTT lên `openagrios/<org>/machines/<id>/telemetry` (Eclipse Mosquitto, bắt buộc xác thực; ACL quyền tối thiểu: thiết bị chỉ được *publish*, `telemetry-ingestor` chỉ được *subscribe*; tài khoản và ACL được sinh lại từ biến môi trường mỗi lần khởi động).
+  - `telemetry-ingestor` kiểm tra schema/kiểu dữ liệu, đối chiếu `org`/`machine` trong topic với payload, rồi gọi endpoint nội bộ của core bằng bí mật dùng chung. Core kiểm tra miền giá trị và quyền sở hữu tenant, cập nhật bản sao số NGSI-LD, ghi PostgreSQL (giới hạn 10 giây/máy) và phát mỗi mẫu lên Kafka → Parquet.
+  - Telemetry **không bao giờ** đổi trạng thái do workflow quản (`status`, phân công). Endpoint `/api/v1/internal/*` bị APISIX trả 404 ở biên.
+  - **Trung thực về dữ liệu:** dự án không có phần cứng thật. Dịch vụ `device-simulator` (profile `demo`, tắt mặc định) phát dữ liệu GPS/nhiên liệu mô phỏng nhưng đi qua đúng giao thức MQTT có xác thực và đúng đường xử lý như thiết bị thật. Chỉ máy đang `WORKING` mới di chuyển. Khi nối thiết bị thật chỉ cần cấp tài khoản MQTT, không đổi mã nguồn của core.
+
 ### 2.2. Không gian Năng lực Số & Cổng Điều hành Tác chiến (Experience & Operations Portal — H-P-D-I)
 Ứng dụng web điều hành nghiệp vụ tập trung (`apps/web` - React 18, TypeScript, Tailwind CSS, MapLibre GL JS):
 - **[H] Human Role Workspaces:**

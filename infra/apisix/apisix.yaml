@@ -7,6 +7,19 @@
 # Điều phối lưu lượng: API Backend Core & Experience Web Portal
 # ============================================================================
 routes:
+  # 0. Internal service-to-service endpoints are NEVER reachable through the edge (Zero-Trust).
+  #    The telemetry ingestor talks to core-api directly on the container network with a shared secret.
+  - id: openagrios-block-internal-route
+    name: "Block /api/v1/internal/* at the edge"
+    priority: 100
+    uris:
+      - "/api/v1/internal/*"
+    plugins:
+      fault-injection:
+        abort:
+          http_status: 404
+          body: '{"error":"NOT_FOUND"}'
+
   # 1. Public Discovery, Health, and Login Route (No Token Required)
   - id: openagrios-public-discovery-route
     name: "OpenAgriOS Public Manifest & Login Route"

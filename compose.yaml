@@ -130,6 +130,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
       OPENAGRIOS_EVENT_BUS_URL: http://kafka-rest:8082
       OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
+      OPENAGRIOS_INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -241,7 +242,71 @@ services:
       object-storage:
         condition: service_started
 
+  # 10. OT TELEMETRY BROKER (Eclipse Mosquitto 2 - EPL-2.0 / EDL-1.0). Users + ACL are regenerated on every start.
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    container_name: openagrios-mosquitto
+    restart: unless-stopped
+    environment:
+      MQTT_DEVICE_USER: ${MQTT_DEVICE_USER:-device}
+      MQTT_DEVICE_PASSWORD: ${MQTT_DEVICE_PASSWORD:-device_dev_only}
+      MQTT_INGESTOR_USER: ${MQTT_INGESTOR_USER:-ingestor}
+      MQTT_INGESTOR_PASSWORD: ${MQTT_INGESTOR_PASSWORD:-ingestor_dev_only}
+    entrypoint: ["/bin/sh", "/mosquitto/src/entrypoint.sh"]
+    ports:
+      - "127.0.0.1:${MQTT_HOST_PORT:-18830}:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/src/mosquitto.conf:ro
+      - ./infra/mosquitto/entrypoint.sh:/mosquitto/src/entrypoint.sh:ro
+      - mqttdata:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 11. MQTT -> validate -> Core API internal endpoint (digital twin + Kafka telemetry topic)
+  telemetry-ingestor:
+    build:
+      context: ./services/telemetry
+    container_name: openagrios-telemetry-ingestor
+    restart: unless-stopped
+    command: ["python", "ingestor.py"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_USER: ${MQTT_INGESTOR_USER:-ingestor}
+      MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:-ingestor_dev_only}
+      CORE_URL: http://core-api:8000
+      INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      core-api:
+        condition: service_started
+
+  # 12. DEVICE SIMULATOR - demo only, no physical hardware. Enable with: docker compose --profile demo up -d
+  #     (kept off by default so deterministic tests are not perturbed by moving machines)
+  device-simulator:
+    profiles: ["demo"]
+    build:
+      context: ./services/telemetry
+    container_name: openagrios-device-simulator
+    restart: unless-stopped
+    command: ["python", "simulator.py"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_USER: ${MQTT_DEVICE_USER:-device}
+      MQTT_PASSWORD: ${MQTT_DEVICE_PASSWORD:-device_dev_only}
+      CORE_URL: http://core-api:8000
+      INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      core-api:
+        condition: service_started
+
 volumes:
   pgdata:
   s3data:
   kafkadata:
+  mqttdata:
