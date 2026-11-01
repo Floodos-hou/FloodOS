@@ -21,11 +21,22 @@ sync_on_startup() {
         sleep 1
     done
 
+    # 1. Synchronize application role credentials dynamically
     if [ -f /docker-entrypoint-initdb.d/01-init-db.sh ]; then
         if output=$(/bin/sh /docker-entrypoint-initdb.d/01-init-db.sh 2>&1); then
             echo ">>> [OpenAgriOS DB] Application role credentials automatically synchronized with current environment."
         else
             echo "!!! [OpenAgriOS DB ERROR] Failed to synchronize application role credentials:" >&2
+            echo "$output" >&2
+        fi
+    fi
+
+    # 2. Synchronize database schema and RLS policies idempotently
+    if [ -f /docker-entrypoint-initdb.d/02-schema.sql ]; then
+        if output=$(psql -v ON_ERROR_STOP=1 -h localhost -U "$user" -d "$db" -f /docker-entrypoint-initdb.d/02-schema.sql 2>&1); then
+            echo ">>> [OpenAgriOS DB] Database schema and RLS policies successfully synchronized."
+        else
+            echo "!!! [OpenAgriOS DB ERROR] Failed to synchronize database schema and policies:" >&2
             echo "$output" >&2
         fi
     fi
