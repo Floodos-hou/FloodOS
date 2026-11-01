@@ -941,7 +941,7 @@ public final class AgriOpsService {
             int moveMins = Math.max(8, (int) (distKm * 7));
             List<String> explanations = List.of(
                     "Trạng thái sẵn sàng: " + m.name + " và lái máy " + op.fullName() + " hoàn toàn rảnh trong khung " + winStr + ".",
-                    "Khoảng cách không gian (PostGIS ST_Distance): Cách " + field.name + " " + distKm + " km (thời gian cơ động ~" + moveMins + " phút).",
+                    "Khoảng cách không gian (Haversine Geodesic Engine): Cách " + field.name + " " + distKm + " km (thời gian cơ động ~" + moveMins + " phút).",
                     "Năng lực thiết bị: Công suất " + m.capacityHaPerHr + " ha/giờ, dự kiến hoàn thành " + field.areaHa + " ha trong " + estHours + " giờ.",
                     "Kỹ năng vận hành: " + op.fullName() + " đạt " + op.rating() + "/5.0 sao, có chứng chỉ " + op.skills() + "."
             );
