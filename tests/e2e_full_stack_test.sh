@@ -356,8 +356,8 @@ else
     exit 1
 fi
 
-# Assertion 11: hot -> cold data pipeline (Core API -> Redpanda -> Parquet on S3 -> DuckDB analytics)
-echo "Verifying hot/cold data pipeline (Redpanda -> Parquet on SeaweedFS S3 -> DuckDB)..."
+# Assertion 11: hot -> cold data pipeline (Core API -> Kafka -> Parquet on S3 -> DuckDB analytics)
+echo "Verifying hot/cold data pipeline (Kafka -> Parquet on SeaweedFS S3 -> DuckDB)..."
 BUS_PUBLISHED=0
 for i in {1..20}; do
     BUS_PUBLISHED=$(curl -s http://localhost:8000/api/v1/health | python3 -c "import sys,json; print(json.load(sys.stdin)['core_services']['event_bus']['published'])" 2>/dev/null || echo 0)
@@ -365,10 +365,10 @@ for i in {1..20}; do
     sleep 2
 done
 if [ "${BUS_PUBLISHED:-0}" -le 0 ]; then
-    echo "[FAIL] Assertion 11: Core API published no events to the Redpanda event bus."
+    echo "[FAIL] Assertion 11: Core API published no events to the Kafka event bus."
     exit 1
 fi
-echo "    [OK] Core API published $BUS_PUBLISHED audit event(s) to Redpanda."
+echo "    [OK] Core API published $BUS_PUBLISHED audit event(s) to Kafka."
 
 LAKE_EVENTS=0
 for i in {1..30}; do
@@ -407,7 +407,7 @@ if curl -s -m 3 -o /dev/null http://localhost:8090/health 2>/dev/null; then
     echo "[FAIL] Assertion 11: lake-archiver port 8090 is exposed on the host (Zero-Trust violation)."
     exit 1
 fi
-echo "[PASS] Assertion 11: Hot/cold pipeline verified (events -> Redpanda -> Parquet in S3 -> DuckDB query; gateway-protected, archiver not host-exposed)."
+echo "[PASS] Assertion 11: Hot/cold pipeline verified (events -> Kafka -> Parquet in S3 -> DuckDB query; gateway-protected, archiver not host-exposed)."
 
 # Assertion 9: Experience & Operations Web Portal (web-app via APISIX)
 echo "Checking Operations Web App through APISIX Gateway (:9080)..."

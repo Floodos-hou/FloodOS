@@ -10,12 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Hot/Cold Data Pipeline (feat/hot-cold-data-pipeline)
-- **Hot path**: `ImmutableAuditLedger` publishes every audit event to Redpanda topic `openagrios.audit.v1` through the new asynchronous `EventBusPublisher` (Pandaproxy HTTP, bounded queue, retry with backoff, drop/fail counters exposed on `/api/v1/health`). The core stays free of extra Java dependencies.
+- **Hot path**: `ImmutableAuditLedger` publishes every audit event to Apache Kafka topic `openagrios.audit.v1` through the new asynchronous `EventBusPublisher` (Kafka REST Proxy / Karapace over HTTP, bounded queue, retry with backoff, drop/fail counters exposed on `/api/v1/health`). The core stays free of extra Java dependencies.
 - **Cold path**: new `services/lake-archiver` consumes the topics (at-least-once, offsets committed only after the file is written) and writes Hive-partitioned ZSTD Parquet to `s3://openagrios-lake/` on SeaweedFS.
 - **Analytics**: DuckDB queries over Parquet exposed as `GET /api/v1/analytics/{summary|actions-by-day|machine-utilization}`, restricted to `COORDINATOR`/`PLATFORM_ADMIN`, scoped by the token's `organization_id`; the archiver port is never published to the host.
-- **Infra**: `redpanda`, idempotent `redpanda-init` (topic bootstrap on every start) and `lake-archiver` services in `compose.yaml`; `compose.prod.yaml` closes Redpanda host ports and sets `restart: always`.
+- **Infra**: `kafka` (KRaft, Apache-2.0), idempotent `kafka-init` (topic bootstrap on every start), `kafka-rest` (Karapace, Apache-2.0) and `lake-archiver` services in `compose.yaml`; no broker port is published to the host and `compose.prod.yaml` sets `restart: always`.
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
-- **Licensing note**: Redpanda Community is BSL 1.1 (documented in `THIRD_PARTY_NOTICES.md`).
+- **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
 ---
 
