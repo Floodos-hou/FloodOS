@@ -1493,4 +1493,90 @@ public final class AgriOpsService {
         res.put("tick_count", store.tickCount);
         return res;
     }
+
+    // ------------------------------------------------------------------------
+    // OT TELEMETRY INGESTION (MQTT -> telemetry-ingestor -> internal endpoint)
+    // ------------------------------------------------------------------------
+    private static final long TELEMETRY_PERSIST_INTERVAL_MS = 10_000L;
+    private final Map<String, Long> lastTelemetryPersistMs = new HashMap<>();
+
+    /**
+     * Applies one validated OT sample (position / fuel) from a machine to its digital twin and streams it to the
+     * cold tier. Workflow-owned fields (status, assignments) are never changed by telemetry. Postgres writes are
+     * throttled per machine; the in-memory twin and the event stream receive every sample.
+     */
+    public synchronized HttpResult ingestTelemetry(Map<String, Object> body) {
+        String machineId = String.valueOf(body.getOrDefault("machine_id", ""));
+        HarvesterMachine m = store.machines.get(machineId);
+        if (m == null) {
+            return new HttpResult(404, Map.of("error", "MACHINE_NOT_FOUND", "message", "Unknown machine_id " + machineId));
+        }
+        String org = String.valueOf(body.getOrDefault("organization_id", ""));
+        if (!m.organizationId.equals(org)) {
+            return new HttpResult(409, Map.of("error", "TENANT_MISMATCH",
+                    "message", "Telemetry organization does not own machine " + machineId));
+        }
+        double lat, lon, fuel, speed;
+        Instant sampleTs;
+        try {
+            lat = ((Number) body.get("lat")).doubleValue();
+            lon = ((Number) body.get("lon")).doubleValue();
+            fuel = ((Number) body.get("fuel_pct")).doubleValue();
+            speed = body.get("speed_kmh") == null ? 0.0 : ((Number) body.get("speed_kmh")).doubleValue();
+            sampleTs = Instant.parse(String.valueOf(body.get("ts")));
+        } catch (RuntimeException e) {
+            return new HttpResult(400, Map.of("error", "INVALID_TELEMETRY",
+                    "message", "Required numeric lat, lon, fuel_pct and ISO-8601 ts"));
+        }
+        if (Double.isNaN(lat) || Double.isNaN(lon) || Double.isNaN(fuel) || Double.isNaN(speed)
+                || lat < -90 || lat > 90 || lon < -180 || lon > 180 || fuel < 0 || fuel > 100 || speed < 0 || speed > 80) {
+            return new HttpResult(400, Map.of("error", "TELEMETRY_OUT_OF_RANGE",
+                    "message", "lat[-90,90] lon[-180,180] fuel_pct[0,100] speed_kmh[0,80]"));
+        }
+
+        m.currentLat = lat;
+        m.currentLng = lon;
+        m.fuelPct = fuel;
+        m.telemetryUpdatedAt = sampleTs.toString();
+
+        long now = System.currentTimeMillis();
+        Long last = lastTelemetryPersistMs.get(machineId);
+        if (last == null || now - last >= TELEMETRY_PERSIST_INTERVAL_MS) {
+            try {
+                store.persistMachine(m, "COORDINATOR");
+                lastTelemetryPersistMs.put(machineId, now);
+            } catch (IllegalStateException e) {
+                return new HttpResult(503, Map.of("error", "STORAGE_UNAVAILABLE", "message", e.getMessage()));
+            }
+        }
+
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("machine_id", machineId);
+        event.put("organization_id", m.organizationId);
+        event.put("ts", sampleTs.toString());
+        event.put("lat", lat);
+        event.put("lon", lon);
+        event.put("speed_kmh", speed);
+        event.put("fuel_pct", fuel);
+        event.put("status", m.status);
+        event.put("source", String.valueOf(body.getOrDefault("source", "mqtt")));
+        store.eventBus.publish(EventBusPublisher.TOPIC_TELEMETRY, m.organizationId, event);
+        return new HttpResult(200, Map.of("ok", true, "machine_id", machineId));
+    }
+
+    /** Machine roster for device simulators / ingestors (internal endpoint only). */
+    public synchronized Map<String, Object> listFleetForIngest() {
+        List<Map<String, Object>> fleet = new ArrayList<>();
+        for (HarvesterMachine m : store.machines.values()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("machine_id", m.machineId);
+            row.put("organization_id", m.organizationId);
+            row.put("status", m.status);
+            row.put("lat", m.currentLat);
+            row.put("lon", m.currentLng);
+            row.put("fuel_pct", m.fuelPct);
+            fleet.add(row);
+        }
+        return Map.of("machines", fleet);
+    }
 }

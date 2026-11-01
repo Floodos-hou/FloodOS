@@ -29,6 +29,8 @@ Tài liệu đặc tả toàn bộ các điểm cuối REST API của hệ thố
 | `GET` | `/api/v1/audit/verify` | Bearer Token | Kiểm chứng toán học tính toàn vẹn của Sổ cái SHA-256 | `200 OK` / `401 Unauthorized` |
 | `GET` | `/api/v1/audit/lineage/{corr_id}` | Bearer Token | Truy vết phả hệ dữ liệu xuyên suốt các giao dịch | `200 OK` / `401 Unauthorized` |
 | `GET` | `/api/v1/analytics/{summary\|actions-by-day\|machine-utilization}` | Bearer Token (`COORDINATOR` / `PLATFORM_ADMIN`) | Truy vấn phân tích trên kho lạnh Parquet bằng DuckDB, tự động giới hạn theo `organization_id` của token | `200 OK` / `401` / `403` / `503` (kho lạnh chưa sẵn sàng) |
+| `POST` | `/api/v1/internal/telemetry` | `X-Ingest-Token` (nội bộ, **bị APISIX chặn 404 ở biên**) | Nhận 1 mẫu cảm biến OT đã được `telemetry-ingestor` xác thực: cập nhật bản sao số, phát lên Kafka `openagrios.telemetry.v1` | `200` / `400` (sai kiểu/ngoài miền giá trị) / `401` / `404` (máy lạ) / `409` (sai tenant) / `503` (chưa cấu hình token) |
+| `GET` | `/api/v1/internal/fleet` | `X-Ingest-Token` (nội bộ, bị chặn ở biên) | Danh sách máy cho bộ mô phỏng thiết bị | `200` / `401` / `503` |
 | `POST` | `/api/v1/sim/tick` | Bearer Token | Bước thời gian mô phỏng (tiến 30 phút) | `200 OK` / `401 Unauthorized` |
 | `POST` | `/api/v1/sim/reset` | Bearer Token | Khôi phục trạng thái dữ liệu mẫu mặc định | `200 OK` / `401 Unauthorized` |
 

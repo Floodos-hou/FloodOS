@@ -36,11 +36,14 @@ public final class EventBusPublisher {
     private static final String CONTENT_TYPE = "application/vnd.kafka.json.v2+json";
     private static final int QUEUE_CAPACITY = 10_000;
     private static final int MAX_BATCH = 100;
-    private static final int MAX_ATTEMPTS = 5;
+    private static final int DEFAULT_MAX_ATTEMPTS = 5;
+    private static final long DEFAULT_BACKOFF_MS = 500;
 
     private record Pending(String topic, String key, Map<String, Object> value) {}
 
     private final String baseUrl;
+    private final int maxAttempts;
+    private final long initialBackoffMs;
     private final HttpClient http;
     private final LinkedBlockingQueue<Pending> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
     private final AtomicLong published = new AtomicLong();
@@ -49,8 +52,10 @@ public final class EventBusPublisher {
     private volatile String lastError = "";
     private volatile String lastSuccessAt = "";
 
-    private EventBusPublisher(String baseUrl) {
+    private EventBusPublisher(String baseUrl, int maxAttempts, long initialBackoffMs) {
         this.baseUrl = baseUrl;
+        this.maxAttempts = maxAttempts;
+        this.initialBackoffMs = initialBackoffMs;
         if (baseUrl == null) {
             this.http = null;
             return;
@@ -64,14 +69,19 @@ public final class EventBusPublisher {
     public static EventBusPublisher fromEnvironment() {
         String url = System.getenv("OPENAGRIOS_EVENT_BUS_URL");
         if (url == null || url.isBlank()) {
-            return new EventBusPublisher(null);
+            return disabled();
         }
-        return new EventBusPublisher(url.replaceAll("/+$", ""));
+        return new EventBusPublisher(url.replaceAll("/+$", ""), DEFAULT_MAX_ATTEMPTS, DEFAULT_BACKOFF_MS);
+    }
+
+    /** Publisher bound to an explicit endpoint with tunable retry policy (tests, embedding). */
+    public static EventBusPublisher forUrl(String baseUrl, int maxAttempts, long initialBackoffMs) {
+        return new EventBusPublisher(baseUrl.replaceAll("/+$", ""), maxAttempts, initialBackoffMs);
     }
 
     /** Explicitly disabled publisher (unit/in-process tests). */
     public static EventBusPublisher disabled() {
-        return new EventBusPublisher(null);
+        return new EventBusPublisher(null, DEFAULT_MAX_ATTEMPTS, DEFAULT_BACKOFF_MS);
     }
 
     public boolean isEnabled() {
@@ -141,8 +151,8 @@ public final class EventBusPublisher {
         }
         body.append("]}");
 
-        long backoffMs = 500;
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        long backoffMs = initialBackoffMs;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/topics/" + topic))
                         .timeout(Duration.ofSeconds(5))
@@ -163,7 +173,7 @@ public final class EventBusPublisher {
             } catch (Exception e) {
                 lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
             }
-            if (attempt < MAX_ATTEMPTS) {
+            if (attempt < maxAttempts) {
                 try {
                     Thread.sleep(backoffMs);
                 } catch (InterruptedException ie) {

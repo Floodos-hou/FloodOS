@@ -409,6 +409,115 @@ if curl -s -m 3 -o /dev/null http://localhost:8090/health 2>/dev/null; then
 fi
 echo "[PASS] Assertion 11: Hot/cold pipeline verified (events -> Kafka -> Parquet in S3 -> DuckDB query; gateway-protected, archiver not host-exposed)."
 
+# Assertion 12: OT telemetry ingestion (MQTT device -> Mosquitto ACL -> ingestor -> Core digital twin -> Kafka -> Parquet)
+echo "Verifying OT telemetry ingestion over MQTT..."
+MQTT_DEV_USER="${MQTT_DEVICE_USER:-device}"
+MQTT_DEV_PASS="${MQTT_DEVICE_PASSWORD:-device_dev_only}"
+twin_probe() {
+    curl -s http://localhost:9080/api/v1/digital-twin/entities -H "Authorization: Bearer $ACCESS_TOKEN" | python3 -c "
+import sys, json
+e = json.load(sys.stdin)['entities'][0]
+lng, lat = e['location']['value']['coordinates']
+print(e['id'].rsplit(':', 1)[1], e['organizationId']['value'], lat, lng, e['fuelLevel']['value'])" 2>/dev/null
+}
+read -r TW_MID TW_ORG TW_LAT TW_LNG TW_FUEL <<< "$(twin_probe)"
+if [ -z "${TW_MID:-}" ]; then
+    echo "[FAIL] Assertion 12: could not read a machine from the digital twin."
+    exit 1
+fi
+mqtt_publish() { # topic payload [user] [pass]
+    docker compose -f compose.yaml exec -T mosquitto mosquitto_pub -h 127.0.0.1 -q 1 \
+        -u "${3:-$MQTT_DEV_USER}" -P "${4:-$MQTT_DEV_PASS}" -t "$1" -m "$2"
+}
+twin_lat() { twin_probe | awk '{print $3}'; }
+
+# (a) Anonymous / wrong-credential clients must be refused by the broker.
+if docker compose -f compose.yaml exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t "openagrios/$TW_ORG/machines/$TW_MID/telemetry" -m '{}' >/dev/null 2>&1; then
+    echo "[FAIL] Assertion 12: Mosquitto accepted an anonymous publish."
+    exit 1
+fi
+if mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" '{}' device wrong-password >/dev/null 2>&1; then
+    echo "[FAIL] Assertion 12: Mosquitto accepted a publish with a wrong password."
+    exit 1
+fi
+echo "    [OK] Broker refuses anonymous and wrong-password clients."
+
+# (b) A genuine sample from an authenticated device moves the digital twin.
+NEW_LAT=$(python3 -c "print(round($TW_LAT + 0.0010, 6))")
+NEW_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" \
+    "{\"ts\":\"$NEW_TS\",\"lat\":$NEW_LAT,\"lon\":$TW_LNG,\"fuel_pct\":61.5,\"speed_kmh\":6.2}"
+SEEN_LAT=""
+for i in {1..15}; do
+    SEEN_LAT=$(twin_lat)
+    if [ "$SEEN_LAT" = "$NEW_LAT" ]; then break; fi
+    sleep 2
+done
+if [ "$SEEN_LAT" != "$NEW_LAT" ]; then
+    echo "[FAIL] Assertion 12: digital twin of $TW_MID did not follow MQTT telemetry (expected lat $NEW_LAT, got '$SEEN_LAT')."
+    docker compose -f compose.yaml logs --tail 20 telemetry-ingestor || true
+    exit 1
+fi
+echo "    [OK] Telemetry for $TW_MID reached the digital twin (lat $TW_LAT -> $NEW_LAT)."
+
+# (c) Out-of-range and cross-tenant samples must be rejected and must not alter the twin.
+mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" "{\"ts\":\"$NEW_TS\",\"lat\":999,\"lon\":$TW_LNG,\"fuel_pct\":50}"
+mqtt_publish "openagrios/HTX_SOCTRANG_02/machines/$TW_MID/telemetry" "{\"ts\":\"$NEW_TS\",\"lat\":10.0,\"lon\":105.0,\"fuel_pct\":50}"
+mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" "not-json"
+REJECTED=0
+for i in {1..10}; do
+    METRICS=$(docker compose -f compose.yaml exec -T telemetry-ingestor python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8091/metrics').read().decode())" 2>/dev/null || true)
+    BY_CORE=$(echo "$METRICS" | awk '/^openagrios_telemetry_rejected_by_core_total /{print $2}')
+    INVALID=$(echo "$METRICS" | awk '/^openagrios_telemetry_rejected_invalid_total /{print $2}')
+    REJECTED=$(( ${BY_CORE:-0} + ${INVALID:-0} ))
+    if [ "${BY_CORE:-0}" -ge 2 ] && [ "${INVALID:-0}" -ge 1 ]; then break; fi
+    sleep 2
+done
+if [ "${BY_CORE:-0}" -lt 2 ] || [ "${INVALID:-0}" -lt 1 ]; then
+    echo "[FAIL] Assertion 12: expected >=2 core rejections and >=1 invalid payload, got by_core=${BY_CORE:-0} invalid=${INVALID:-0}."
+    exit 1
+fi
+if [ "$(twin_lat)" != "$NEW_LAT" ]; then
+    echo "[FAIL] Assertion 12: a rejected sample changed the digital twin."
+    exit 1
+fi
+echo "    [OK] Out-of-range, cross-tenant and malformed samples rejected (by_core=$BY_CORE, invalid=$INVALID); twin unchanged."
+
+# (d) The internal endpoint is sealed at the edge and requires the shared secret inside the network.
+EDGE_HTTP=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:9080/api/v1/internal/telemetry -H 'Content-Type: application/json' -d '{}')
+DIRECT_HTTP=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/api/v1/internal/telemetry -H 'Content-Type: application/json' -H 'X-Ingest-Token: wrong' -d '{}')
+if [ "$EDGE_HTTP" != "404" ] || [ "$DIRECT_HTTP" != "401" ]; then
+    echo "[FAIL] Assertion 12: internal endpoint exposure wrong (edge=$EDGE_HTTP expected 404, direct-bad-token=$DIRECT_HTTP expected 401)."
+    exit 1
+fi
+echo "    [OK] /api/v1/internal/* returns 404 at the gateway and 401 without the ingest token."
+
+# (e) The same samples are queryable from the cold Parquet lake via DuckDB.
+LAKE_SAMPLES=0
+for i in {1..30}; do
+    LAKE_SAMPLES=$(curl -s http://localhost:9080/api/v1/analytics/machine-utilization -H "Authorization: Bearer $ACCESS_TOKEN" | python3 -c "
+import sys, json
+rows = json.load(sys.stdin).get('rows', [])
+print(sum(r['samples'] for r in rows if r['machine_id'] == '$TW_MID'))" 2>/dev/null || echo 0)
+    if [ "${LAKE_SAMPLES:-0}" -ge 1 ]; then break; fi
+    sleep 3
+done
+if [ "${LAKE_SAMPLES:-0}" -lt 1 ]; then
+    echo "[FAIL] Assertion 12: telemetry for $TW_MID never reached the Parquet lake."
+    exit 1
+fi
+echo "    [OK] DuckDB machine-utilization sees $LAKE_SAMPLES telemetry sample(s) for $TW_MID in the lake."
+
+# Restore the original position/fuel (waiting out the core's 10 s Postgres write throttle) so later runs start clean.
+sleep 11
+mqtt_publish "openagrios/$TW_ORG/machines/$TW_MID/telemetry" \
+    "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"lat\":$TW_LAT,\"lon\":$TW_LNG,\"fuel_pct\":$TW_FUEL,\"speed_kmh\":0}"
+for i in {1..15}; do
+    if [ "$(twin_lat)" = "$TW_LAT" ]; then break; fi
+    sleep 2
+done
+echo "[PASS] Assertion 12: OT telemetry verified (authenticated MQTT -> ingestor validation -> digital twin -> Kafka -> Parquet/DuckDB; rejects bad/cross-tenant data; internal endpoint sealed)."
+
 # Assertion 9: Experience & Operations Web Portal (web-app via APISIX)
 echo "Checking Operations Web App through APISIX Gateway (:9080)..."
 WEB_HTML=$(curl -s http://localhost:9080/ || true)

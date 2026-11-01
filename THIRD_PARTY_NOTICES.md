@@ -19,6 +19,8 @@ This document lists the third-party open-source components, libraries, and runti
 | **FIWARE NGSI-LD** | ETSI ISG CIM / FIWARE Foundation | Smart Data Models & Digital Twin Entity Representation | **Apache-2.0** | Yes |
 | **Apache Kafka** | Apache Software Foundation 3.7 (KRaft) | Event bus cho luồng dữ liệu nóng | **Apache-2.0** | Yes |
 | **Karapace** | Aiven 4.1 | Kafka REST Proxy (HTTP produce/consume cho lõi Java) | **Apache-2.0** | Yes |
+| **Eclipse Mosquitto** | Eclipse Foundation 2.0 | MQTT broker cho dữ liệu cảm biến OT | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
+| **Eclipse Paho (Python)** | Eclipse Foundation 2.1 | MQTT client của `telemetry-ingestor` và `device-simulator` | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
 | **DuckDB** | DuckDB Foundation 1.1 | Truy vấn phân tích trên Parquet (kho lạnh) | **MIT** | Yes |
 | **Python** | PSF 3.12 (image `python:3.12-slim`) | Runtime của dịch vụ `lake-archiver` | **PSF-2.0** | Yes |
 
