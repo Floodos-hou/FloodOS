@@ -20,7 +20,7 @@ cleanup() {
     echo "--- KEYCLOAK LOGS ---"
     docker compose -f compose.yaml logs --tail 30 keycloak || true
     echo "============================================================================"
-    if [ "$CI" = "true" ] || [ "$PURGE_VOLUMES" = "true" ]; then
+    if [ "${CI:-false}" = "true" ] || [ "${PURGE_VOLUMES:-false}" = "true" ]; then
         echo "Tearing down Docker Compose containers and purging volumes (CI/purge mode)..."
         docker compose -f compose.yaml down -v --remove-orphans || true
     else
@@ -189,8 +189,25 @@ SOCTRANG_SEES=$(docker compose -f compose.yaml exec -T postgres psql -U openagri
 " | grep -o '[0-9]\+' | tail -n 1)
 echo "Soc Trang Coordinator visible requests: $SOCTRANG_SEES"
 
-if [ "$FARMER_BA_SEES" -gt 0 ] && [ "$FARMER_NAM_SEES" -eq 0 ] && [ "$SOCTRANG_SEES" -eq 0 ]; then
-    echo "[PASS] Assertion 7: Live Multi-Tenant & Multi-User RLS verified on PostgreSQL (app.current_user_id & app.current_org_id isolation enforced)."
+FARMER_BA_FIELDS=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "
+    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
+    SET LOCAL app.current_user_role = 'FARMER';
+    SET LOCAL app.current_user_id = 'usr_farmer_ba';
+    SELECT string_agg(field_id, ',' ORDER BY field_id) FROM fields;
+" | tail -n 1 | xargs)
+FARMER_TAM_FIELDS=$(docker compose -f compose.yaml exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "
+    SET LOCAL app.current_org_id = 'HTX_CANTHO_01';
+    SET LOCAL app.current_user_role = 'FARMER';
+    SET LOCAL app.current_user_id = 'usr_farmer_tam';
+    SELECT string_agg(field_id, ',' ORDER BY field_id) FROM fields;
+" | tail -n 1 | xargs)
+echo "Farmer Ba visible fields: $FARMER_BA_FIELDS"
+echo "Farmer Tam visible fields: $FARMER_TAM_FIELDS"
+
+if [ "$FARMER_BA_SEES" -gt 0 ] && [ "$FARMER_NAM_SEES" -eq 0 ] && [ "$SOCTRANG_SEES" -eq 0 ] \
+    && [ "$FARMER_BA_FIELDS" = "F01,F03,F07" ] \
+    && [ "$FARMER_TAM_FIELDS" = "F02,F04,F05,F06,F08,F09,F10" ]; then
+    echo "[PASS] Assertion 7: Live tenant and user RLS verified for service requests and field ownership."
 else
     echo "[FAIL] Assertion 7: RLS isolation leak detected."
     exit 1

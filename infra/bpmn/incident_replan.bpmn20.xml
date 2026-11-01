@@ -11,7 +11,7 @@
     <sequenceFlow id="incFlow1" sourceRef="startIncident" targetRef="serviceImpactAnalysis"/>
 
     <serviceTask id="serviceImpactAnalysis"
-                 name="Tự động khoanh vùng ca đứt gãy &amp; Tính điểm máy cứu viện (Rule Engine + PostGIS)"
+                 name="Tự động khoanh vùng ca đứt gãy &amp; Tính điểm máy cứu viện (Haversine + đa tiêu chí trong Java)"
                  flowable:expression="${execution.setVariable(&apos;impactEvaluated&apos;, true)}"/>
     <sequenceFlow id="incFlow2" sourceRef="serviceImpactAnalysis" targetRef="parallelSplit"/>
 
