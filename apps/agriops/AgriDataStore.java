@@ -10,6 +10,8 @@ package org.openagrios.apps.agriops;
 
 import org.openagrios.apps.agriops.AgriModels.*;
 
+import org.openagrios.core.dataservices.AnalyticsLakeClient;
+import org.openagrios.core.dataservices.EventBusPublisher;
 import org.openagrios.core.dataservices.ImmutableAuditLedger;
 import org.openagrios.core.dataservices.PostgreSqlDataService;
 
@@ -75,6 +77,8 @@ public final class AgriDataStore {
 
     public final BpmnWorkflowEngine bpmnEngine;
     public final PostgreSqlDataService postgreSqlDataService;
+    public final EventBusPublisher eventBus = EventBusPublisher.fromEnvironment();
+    public final AnalyticsLakeClient analyticsLake = new AnalyticsLakeClient();
 
 
 
@@ -93,6 +97,7 @@ public final class AgriDataStore {
         this.bpmnEngine = bpmnEngine;
         this.postgreSqlDataService = new PostgreSqlDataService();
         this.auditLedger.setPostgreSqlDataService(this.postgreSqlDataService);
+        this.auditLedger.setEventBus(this.eventBus);
         if (this.postgreSqlDataService.isConfigured() && this.postgreSqlDataService.isConnectionLive()) {
             this.postgreSqlDataService.initSchema();
             if (this.postgreSqlDataService.hasExistingData()) {

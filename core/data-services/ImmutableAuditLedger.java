@@ -78,6 +78,13 @@ public final class ImmutableAuditLedger {
 
     private final List<AuditRecord> ledger = new ArrayList<>();
     private PostgreSqlDataService postgreSqlDataService;
+    private EventBusPublisher eventBus = EventBusPublisher.disabled();
+    /** Distinguishes event-id sequences across simulator resets so the cold lake can de-duplicate safely. */
+    private String ledgerEpoch = UUID.randomUUID().toString();
+
+    public void setEventBus(EventBusPublisher eventBus) {
+        this.eventBus = eventBus != null ? eventBus : EventBusPublisher.disabled();
+    }
 
     public void setPostgreSqlDataService(PostgreSqlDataService postgreSqlDataService) {
         this.postgreSqlDataService = postgreSqlDataService;
@@ -85,6 +92,7 @@ public final class ImmutableAuditLedger {
 
     public synchronized void clear() {
         ledger.clear();
+        ledgerEpoch = UUID.randomUUID().toString();
     }
 
     public synchronized void rehydrateLedger(List<AuditRecord> records) {
@@ -152,6 +160,13 @@ public final class ImmutableAuditLedger {
                 prevHash, recordHash, ts
         );
         ledger.add(rec);
+
+        if (eventBus.isEnabled()) {
+            Map<String, Object> event = rec.toFullMap();
+            event.put("event_type", "audit.v1");
+            event.put("ledger_epoch", ledgerEpoch);
+            eventBus.publish(EventBusPublisher.TOPIC_AUDIT, organizationId, event);
+        }
 
         if (postgreSqlDataService != null && postgreSqlDataService.isConnectionLive()) {
             postgreSqlDataService.syncAuditRecord(
