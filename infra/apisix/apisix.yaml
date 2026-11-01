@@ -58,7 +58,7 @@ routes:
         key: remote_addr
       openid-connect:
         client_id: "agriops-gateway"
-        client_secret: "agriops-gateway-secret-2026"
+        client_secret: "${{KEYCLOAK_INTROSPECTION_CLIENT_SECRET:=agriops-gateway-secret-2026}}"
         discovery: "http://keycloak:8080/realms/openagrios/.well-known/openid-configuration"
         bearer_only: true
         realm: "openagrios"
