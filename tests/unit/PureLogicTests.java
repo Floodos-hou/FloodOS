@@ -9,10 +9,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.openagrios.apps.floodops.RescueScoring;
 import org.openagrios.core.dataservices.JsonCodec;
 import org.openagrios.core.dataservices.NgsiLdTwinMapper;
 import org.openagrios.core.dataservices.ScheduleConflictEngine;
-import org.openagrios.core.dataservices.ScheduleConflictEngine.SchedulableAssignment;
+import org.openagrios.core.dataservices.ScheduleConflictEngine.Booking;
 import org.openagrios.core.dataservices.SpatialMatchingEngine;
 import org.openagrios.core.dataservices.TenantRlsContext;
 import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
@@ -26,6 +28,7 @@ final class PureLogicTests {
         json();
         scheduleConflicts();
         spatial();
+        rescueScoring();
         ngsiLd();
         tenant();
     }
@@ -134,72 +137,76 @@ final class PureLogicTests {
     }
 
     // ------------------------------------------------------------------ ScheduleConflictEngine
-    private record Asg(String id, String org, String field, String machine, String operator,
-                       String start, String end, String status) implements SchedulableAssignment {
-        public String assignmentId() { return id; }
+    private record Slot(String id, String org, String resource, String holder,
+                        String start, String end, String status) implements Booking {
+        public String bookingId() { return id; }
         public String organizationId() { return org; }
-        public String fieldId() { return field; }
-        public String machineId() { return machine; }
-        public String operatorId() { return operator; }
+        public String resourceId() { return resource; }
+        public String holderId() { return holder; }
         public String startTime() { return start; }
         public String endTime() { return end; }
-        public Map<String, Object> toConflictSummaryMap() { return Map.of("assignment_id", id); }
+        public Map<String, Object> toConflictSummaryMap() { return Map.of("booking_id", id); }
     }
 
-    private static Asg asg(String id, String org, String machine, String op, String s, String e, String status) {
-        return new Asg(id, org, "F01", machine, op, s, e, status);
+    private static final Set<String> ACTIVE = Set.of("CONFIRMED", "IN_PROGRESS");
+    private static final Set<String> UNAVAILABLE = Set.of("BREAKDOWN", "MAINTENANCE");
+
+    private static Slot slot(String id, String org, String resource, String holder, String s, String e, String status) {
+        return new Slot(id, org, resource, holder, s, e, status);
     }
 
-    private static Map<String, Object> check(String machine, String status, boolean exists, String op,
-                                             String s, String e, String ignore, List<Asg> existing) {
-        return ScheduleConflictEngine.checkConflict("ORG", machine, status, exists, op, s, e, ignore, existing);
+    private static Map<String, Object> check(String resource, String status, boolean exists, String holder,
+                                             String s, String e, String ignore, List<Slot> existing) {
+        return ScheduleConflictEngine.checkConflict("ORG", resource, status, exists, UNAVAILABLE, holder, s, e, ignore, ACTIVE, existing);
     }
 
     private static void scheduleConflicts() {
-        suite("ScheduleConflictEngine");
+        suite("ScheduleConflictEngine (domain-neutral bookings)");
         final String T8 = "2026-11-20T08:00:00Z", T10 = "2026-11-20T10:00:00Z",
                 T12 = "2026-11-20T12:00:00Z", T14 = "2026-11-20T14:00:00Z";
-        List<Asg> base = List.of(asg("A1", "ORG", "M01", "OP-01", T10, T12, "CONFIRMED"));
+        List<Slot> base = List.of(slot("A1", "ORG", "V01", "T-01", T10, T12, "CONFIRMED"));
 
-        test("unknown machine -> MACHINE_NOT_FOUND", () ->
-                equal("MACHINE_NOT_FOUND", check("M99", "MISSING", false, "OP-01", T8, T10, null, base).get("code"), "code"));
-        test("BREAKDOWN and MAINTENANCE machines are unavailable", () -> {
-            equal("MACHINE_UNAVAILABLE", check("M01", "BREAKDOWN", true, "OP-09", T8, T10, null, List.of()).get("code"), "breakdown");
-            equal("MACHINE_UNAVAILABLE", check("M01", "MAINTENANCE", true, "OP-09", T8, T10, null, List.of()).get("code"), "maintenance");
+        test("unknown resource -> RESOURCE_NOT_FOUND", () ->
+                equal("RESOURCE_NOT_FOUND", check("V99", "MISSING", false, "T-01", T8, T10, null, base).get("code"), "code"));
+        test("BREAKDOWN and MAINTENANCE resources are unavailable and the status is reported", () -> {
+            Map<String, Object> r = check("V01", "BREAKDOWN", true, "T-09", T8, T10, null, List.of());
+            equal("RESOURCE_UNAVAILABLE", r.get("code"), "breakdown");
+            equal("BREAKDOWN", r.get("resource_status"), "status echoed");
+            equal("RESOURCE_UNAVAILABLE", check("V01", "MAINTENANCE", true, "T-09", T8, T10, null, List.of()).get("code"), "maintenance");
         });
-        test("overlapping window on the same machine conflicts", () -> {
-            Map<String, Object> r = check("M01", "IDLE", true, "OP-09", T8, "2026-11-20T11:00:00Z", null, base);
-            equal("MACHINE_TIME_OVERLAP", r.get("code"), "code");
-            equal(Map.of("assignment_id", "A1"), r.get("conflicting_assignment"), "reports the blocking assignment");
+        test("overlapping window on the same resource conflicts and names the blocking booking", () -> {
+            Map<String, Object> r = check("V01", "IDLE", true, "T-09", T8, "2026-11-20T11:00:00Z", null, base);
+            equal("RESOURCE_TIME_OVERLAP", r.get("code"), "code");
+            equal(Map.of("booking_id", "A1"), r.get("conflicting_booking"), "reports the blocking booking");
         });
         test("window fully containing / contained by an existing one conflicts", () -> {
-            equal("MACHINE_TIME_OVERLAP", check("M01", "IDLE", true, "OP-09", T8, T14, null, base).get("code"), "contains");
-            equal("MACHINE_TIME_OVERLAP", check("M01", "IDLE", true, "OP-09", "2026-11-20T10:30:00Z", "2026-11-20T11:30:00Z", null, base).get("code"), "contained");
+            equal("RESOURCE_TIME_OVERLAP", check("V01", "IDLE", true, "T-09", T8, T14, null, base).get("code"), "contains");
+            equal("RESOURCE_TIME_OVERLAP", check("V01", "IDLE", true, "T-09", "2026-11-20T10:30:00Z", "2026-11-20T11:30:00Z", null, base).get("code"), "contained");
         });
         test("back-to-back windows touching at an endpoint do NOT conflict (half-open ranges)", () -> {
-            isNull(check("M01", "IDLE", true, "OP-09", T8, T10, null, base), "ends exactly when the other starts");
-            isNull(check("M01", "IDLE", true, "OP-09", T12, T14, null, base), "starts exactly when the other ends");
+            isNull(check("V01", "IDLE", true, "T-09", T8, T10, null, base), "ends exactly when the other starts");
+            isNull(check("V01", "IDLE", true, "T-09", T12, T14, null, base), "starts exactly when the other ends");
         });
-        test("same operator on a different machine at the same time -> OPERATOR_TIME_OVERLAP", () ->
-                equal("OPERATOR_TIME_OVERLAP", check("M02", "IDLE", true, "OP-01", T10, T12, null, base).get("code"), "code"));
-        test("machine conflict takes precedence over operator conflict", () ->
-                equal("MACHINE_TIME_OVERLAP", check("M01", "IDLE", true, "OP-01", T10, T12, null, base).get("code"), "precedence"));
-        test("other tenants' assignments never block", () -> {
-            List<Asg> other = List.of(asg("X1", "OTHER_ORG", "M01", "OP-01", T10, T12, "CONFIRMED"));
-            isNull(check("M01", "IDLE", true, "OP-01", T10, T12, null, other), "cross-tenant isolation");
+        test("same holder on a different resource at the same time -> HOLDER_TIME_OVERLAP", () ->
+                equal("HOLDER_TIME_OVERLAP", check("V02", "IDLE", true, "T-01", T10, T12, null, base).get("code"), "code"));
+        test("resource conflict takes precedence over holder conflict", () ->
+                equal("RESOURCE_TIME_OVERLAP", check("V01", "IDLE", true, "T-01", T10, T12, null, base).get("code"), "precedence"));
+        test("other tenants' bookings never block", () -> {
+            List<Slot> other = List.of(slot("X1", "OTHER_ORG", "V01", "T-01", T10, T12, "CONFIRMED"));
+            isNull(check("V01", "IDLE", true, "T-01", T10, T12, null, other), "cross-tenant isolation");
         });
-        test("only CONFIRMED / IN_PROGRESS assignments block", () -> {
-            for (String st : new String[]{"COMPLETED", "SUPERSEDED", "CANCELLED", "PENDING"}) {
-                List<Asg> l = List.of(asg("S", "ORG", "M01", "OP-01", T10, T12, st));
-                isNull(check("M01", "IDLE", true, "OP-01", T10, T12, null, l), "status " + st + " must not block");
+        test("only the statuses the caller declares as active block", () -> {
+            for (String st : new String[]{"COMPLETED", "SUPERSEDED", "CANCELLED", "IMPACTED", "PENDING"}) {
+                List<Slot> l = List.of(slot("S", "ORG", "V01", "T-01", T10, T12, st));
+                isNull(check("V01", "IDLE", true, "T-01", T10, T12, null, l), "status " + st + " must not block");
             }
-            List<Asg> ip = List.of(asg("S", "ORG", "M01", "OP-01", T10, T12, "IN_PROGRESS"));
-            equal("MACHINE_TIME_OVERLAP", check("M01", "IDLE", true, "OP-09", T10, T12, null, ip).get("code"), "IN_PROGRESS blocks");
+            List<Slot> ip = List.of(slot("S", "ORG", "V01", "T-01", T10, T12, "IN_PROGRESS"));
+            equal("RESOURCE_TIME_OVERLAP", check("V01", "IDLE", true, "T-09", T10, T12, null, ip).get("code"), "IN_PROGRESS blocks");
         });
-        test("ignoreAssignmentId lets a re-plan replace its own slot", () ->
-                isNull(check("M01", "IDLE", true, "OP-01", T10, T12, "A1", base), "ignored id"));
+        test("ignoreBookingId lets a re-plan replace its own slot", () ->
+                isNull(check("V01", "IDLE", true, "T-01", T10, T12, "A1", base), "ignored id"));
         test("empty schedule never conflicts", () ->
-                isNull(check("M01", "IDLE", true, "OP-01", T10, T12, null, new ArrayList<>()), "no assignments"));
+                isNull(check("V01", "IDLE", true, "T-01", T10, T12, null, new ArrayList<>()), "no bookings"));
     }
 
     // ------------------------------------------------------------------ SpatialMatchingEngine
@@ -260,28 +267,45 @@ final class PureLogicTests {
             equal(0.0, SpatialMatchingEngine.ringAreaHa(null), "null");
             equal(0.0, SpatialMatchingEngine.ringAreaHa(List.of()), "empty");
         });
-        test("score reproduces the documented rescue example (M02: 1.37 km, 0.72 ha/h, rating 4.95 -> 93.8)", () ->
-                equal(93.8, SpatialMatchingEngine.computeMultiCriteriaScore(1.37, 0.72, 4.95), "golden score"));
-        test("score decreases monotonically with distance and floors the distance term at 10 km", () -> {
-            double near = SpatialMatchingEngine.computeMultiCriteriaScore(1, 0.7, 4.5);
-            double far = SpatialMatchingEngine.computeMultiCriteriaScore(8, 0.7, 4.5);
-            double veryFar = SpatialMatchingEngine.computeMultiCriteriaScore(50, 0.7, 4.5);
-            double at10 = SpatialMatchingEngine.computeMultiCriteriaScore(10, 0.7, 4.5);
+    }
+
+    // ------------------------------------------------------------------ RescueScoring (application level)
+    private static void rescueScoring() {
+        suite("RescueScoring (Hanoi FloodOps ranking)");
+        test("a perfect candidate reaches 100 points", () ->
+                equal(100.0, RescueScoring.score(0, 1.0, 1.0, 5.0), "ceiling"));
+        test("distance is straight-line, decreases the score and reaches zero at the ranked limit", () -> {
+            double near = RescueScoring.score(1, 1.0, 1.0, 4.5);
+            double far = RescueScoring.score(8, 1.0, 1.0, 4.5);
+            double atLimit = RescueScoring.score(RescueScoring.MAX_RANKED_DISTANCE_KM, 1.0, 1.0, 4.5);
+            double beyond = RescueScoring.score(80, 1.0, 1.0, 4.5);
             isTrue(near > far, "closer scores higher");
-            equal(at10, veryFar, "distance term is clamped at 0 beyond 10 km");
+            equal(atLimit, beyond, "the distance term floors at zero beyond the limit");
+            near(40.0, RescueScoring.score(0, 1.0, 1.0, 4.5) - atLimit, 0.11, "distance span is 40 points");
         });
-        test("capacity contribution is capped at 25 points", () -> {
-            double a = SpatialMatchingEngine.computeMultiCriteriaScore(0, 0.78125, 5);
-            double b = SpatialMatchingEngine.computeMultiCriteriaScore(0, 5.0, 5);
-            equal(a, b, "capacity beyond 0.78125 ha/h adds nothing");
+        test("team rating contributes up to 15 points", () -> {
+            near(15.0, RescueScoring.score(0, 1, 1, 5) - RescueScoring.score(0, 1, 1, 0), 0.11, "rating span");
         });
-        test("operator rating scales linearly up to 15 points", () -> {
-            double r0 = SpatialMatchingEngine.computeMultiCriteriaScore(0, 0.5, 0);
-            double r5 = SpatialMatchingEngine.computeMultiCriteriaScore(0, 0.5, 5);
-            near(15.0, r5 - r0, 0.11, "rating span");
+        test("suitability and capacity fit are clamped to [0,1]", () -> {
+            equal(RescueScoring.score(0, 1.0, 1.0, 5), RescueScoring.score(0, 9.0, 9.0, 5), "upper clamp");
+            equal(RescueScoring.score(0, 0.0, 0.0, 5), RescueScoring.score(0, -3.0, -3.0, 5), "lower clamp");
         });
-        test("perfect candidate reaches the 100-point ceiling", () ->
-                equal(100.0, SpatialMatchingEngine.computeMultiCriteriaScore(0, 1.0, 5), "ceiling"));
+        test("vehicle suitability by need: designed, usable, unfit", () -> {
+            equal(1.0, RescueScoring.suitability("RESCUE_BOAT", "EVACUATION"), "boat evacuates");
+            equal(0.5, RescueScoring.suitability("HIGH_CLEARANCE_TRUCK", "EVACUATION"), "truck can evacuate");
+            equal(0.0, RescueScoring.suitability("MOBILE_PUMP", "EVACUATION"), "a pump cannot evacuate");
+            equal(1.0, RescueScoring.suitability("MOBILE_PUMP", "PUMPING"), "pump pumps");
+            equal(0.0, RescueScoring.suitability("RESCUE_BOAT", "PUMPING"), "a boat cannot pump");
+            equal(1.0, RescueScoring.suitability("HIGH_CLEARANCE_TRUCK", "MEDICAL"), "truck for medical");
+            equal(0.0, RescueScoring.suitability("RESCUE_BOAT", "UNKNOWN_NEED"), "unknown need offers nothing");
+        });
+        test("capacity fit: persons are compared with people affected, pumps with a stated m3/h per cm heuristic", () -> {
+            equal(1.0, RescueScoring.capacityFit("PERSONS", 10, 6, 60), "enough seats");
+            equal(0.5, RescueScoring.capacityFit("PERSONS", 5, 10, 60), "half of the people fit");
+            equal(1.0, RescueScoring.capacityFit("PERSONS", 5, 0, 60), "no people stated");
+            equal(1.0, RescueScoring.capacityFit("M3_PER_HOUR", 1200, 0, 60), "1200 m3/h covers 60 cm (600 m3/h target)");
+            near(0.5, RescueScoring.capacityFit("M3_PER_HOUR", 300, 0, 60), 1e-9, "300 of 600");
+        });
     }
 
     // ------------------------------------------------------------------ NgsiLdTwinMapper
@@ -299,35 +323,34 @@ final class PureLogicTests {
         test("entity has urn id, core @context, properties and a GeoJSON Point in [lng, lat]", () -> {
             Map<String, Map<String, Object>> props = new LinkedHashMap<>();
             props.put("status", NgsiLdTwinMapper.toProperty("IDLE", null, null));
-            Map<String, Object> e = NgsiLdTwinMapper.toNgsiLdEntity("HarvesterMachine", "M02", props, 105.5715, 10.068);
-            equal("urn:ngsi-ld:HarvesterMachine:M02", e.get("id"), "id");
-            equal("HarvesterMachine", e.get("type"), "type");
+            Map<String, Object> e = NgsiLdTwinMapper.toNgsiLdEntity("RescueVehicle", "V02", props, 105.8800, 20.9640);
+            equal("urn:ngsi-ld:RescueVehicle:V02", e.get("id"), "id");
+            equal("RescueVehicle", e.get("type"), "type");
             contains(String.valueOf(e.get("@context")), "ngsi-ld-core-context", "context");
             notNull(e.get("status"), "property merged at top level");
             Map<?, ?> loc = (Map<?, ?>) e.get("location");
             equal("GeoProperty", loc.get("type"), "GeoProperty");
             Map<?, ?> point = (Map<?, ?>) loc.get("value");
             equal("Point", point.get("type"), "Point");
-            equal(List.of(105.5715, 10.068), point.get("coordinates"), "[lng, lat] order");
+            equal(List.of(105.88, 20.964), point.get("coordinates"), "[lng, lat] order");
         });
     }
 
     // ------------------------------------------------------------------ TenantRlsContext
     private static void tenant() {
         suite("TenantRlsContext");
-        AuthContext farmerBa = new AuthContext("usr_farmer_ba", "farmer_ba", "HTX_CANTHO_01", "FARMER");
-        AuthContext coordinator = new AuthContext("usr_coord_01", "coord_htx01", "HTX_CANTHO_01", "COORDINATOR");
-        AuthContext repair = new AuthContext("usr_repair", "repair_01", "HTX_CANTHO_01", "REPAIR_TEAM");
+        AuthContext reporter = new AuthContext("usr_reporter_lan", "reporter_lan", "ORG_HN_PILOT_01", "REPORTER");
+        AuthContext coordinator = new AuthContext("usr_dispatcher_hoa", "dispatcher_hoa", "ORG_HN_PILOT_01", "DISPATCHER");
 
         test("RLS SQL sets all three session variables", () -> {
-            String sql = TenantRlsContext.buildPostgresRlsPolicySql("HTX_CANTHO_01", "FARMER", "usr_farmer_ba");
-            contains(sql, "app.current_org_id = 'HTX_CANTHO_01'", "org");
-            contains(sql, "app.current_user_role = 'FARMER'", "role");
-            contains(sql, "app.current_user_id = 'usr_farmer_ba'", "user");
+            String sql = TenantRlsContext.buildPostgresRlsPolicySql("ORG_HN_PILOT_01", "REPORTER", "usr_reporter_lan");
+            contains(sql, "app.current_org_id = 'ORG_HN_PILOT_01'", "org");
+            contains(sql, "app.current_user_role = 'REPORTER'", "role");
+            contains(sql, "app.current_user_id = 'usr_reporter_lan'", "user");
         });
         test("single quotes are doubled so a hostile identity cannot break out of the literal", () -> {
-            String sql = TenantRlsContext.buildPostgresRlsPolicySql("x'; DROP TABLE fields; --", "r", "u");
-            contains(sql, "'x''; DROP TABLE fields; --'", "quote doubled inside the literal");
+            String sql = TenantRlsContext.buildPostgresRlsPolicySql("x'; DROP TABLE flood_reports; --", "r", "u");
+            contains(sql, "'x''; DROP TABLE flood_reports; --'", "quote doubled inside the literal");
             isFalse(sql.contains("x'; DROP"), "no unescaped quote followed by a statement");
         });
         test("null identities become empty strings (deny-by-default) instead of throwing", () -> {
@@ -337,17 +360,13 @@ final class PureLogicTests {
         test("applyPostgresRlsSession tolerates a missing connection", () ->
                 TenantRlsContext.applyPostgresRlsSession(null, "o", "r", "u"));
         test("isSameTenant is strict equality and null-safe", () -> {
-            isTrue(TenantRlsContext.isSameTenant(coordinator, "HTX_CANTHO_01"), "same org");
-            isFalse(TenantRlsContext.isSameTenant(coordinator, "HTX_SOCTRANG_02"), "other org");
-            isFalse(TenantRlsContext.isSameTenant(coordinator, "htx_cantho_01"), "case sensitive");
-            isFalse(TenantRlsContext.isSameTenant(null, "HTX_CANTHO_01"), "null auth");
+            isTrue(TenantRlsContext.isSameTenant(coordinator, "ORG_HN_PILOT_01"), "same org");
+            isFalse(TenantRlsContext.isSameTenant(coordinator, "ORG_HN_PILOT_02"), "other org");
+            isFalse(TenantRlsContext.isSameTenant(coordinator, "org_hn_pilot_01"), "case sensitive");
+            isFalse(TenantRlsContext.isSameTenant(null, "ORG_HN_PILOT_01"), "null auth");
             isFalse(TenantRlsContext.isSameTenant(coordinator, null), "null resource org");
         });
-        test("field visibility: owner and coordinator see everything, others are fogged", () -> {
-            equal("FULL", TenantRlsContext.resolveFieldVisibility(farmerBa, "usr_farmer_ba"), "own field");
-            equal("FOG_OF_WAR", TenantRlsContext.resolveFieldVisibility(farmerBa, "usr_farmer_tam"), "neighbour's field");
-            equal("FULL", TenantRlsContext.resolveFieldVisibility(coordinator, "usr_farmer_tam"), "coordinator");
-            equal("FOG_OF_WAR", TenantRlsContext.resolveFieldVisibility(repair, "usr_repair"), "repair team never sees fields");
-        });
+        test("the platform role used for seeding and rehydration is PLATFORM_ADMIN", () ->
+                equal("PLATFORM_ADMIN", TenantRlsContext.PLATFORM_ROLE, "constant"));
     }
 }

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 OpenAgriOS Contributors
 """
-OpenAgriOS Tier-3 domain module: rice supply-chain TRACEABILITY.
+OpenDXOS Tier-3 domain module: flood-response CASE TRACEABILITY.
 
 A pluggable application on top of the Tier-1 platform. It never touches the core or its database: it only reads
 the cold lake (Parquet on S3, fed by the Tier-1 event bus) and answers a public question, "what happened to this
-harvest lot, and can I trust that record?"
+flood case, and can I trust that record?"
 
 Trust model: the core chains every business event with SHA-256 (prev_hash | seq | ... | before | after). The core
 also streams the exact hashed bytes into the lake, so THIS service recomputes every hash on its own and checks that
@@ -41,23 +41,23 @@ GENESIS_HASH = "0" * 64
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,64}$")
 
 ROLE_LABELS = {
-    "FARMER": "Nông hộ", "COORDINATOR": "Điều phối viên HTX", "OPERATOR": "Thợ lái máy",
-    "REPAIR_TEAM": "Đội sửa chữa", "MACHINE_OWNER": "Chủ máy", "PLATFORM_ADMIN": "Quản trị nền tảng",
+    "REPORTER": "Người báo tin", "DISPATCHER": "Điều phối viên", "FIELD_TEAM": "Đội hiện trường",
+    "RESOURCE_MANAGER": "Quản lý nguồn lực", "PLATFORM_ADMIN": "Quản trị nền tảng",
 }
 
 # action code -> (icon, public label)
 ACTION_LABELS = {
-    "CREATE_SERVICE_REQUEST": ("📝", "Nông hộ gửi yêu cầu thu hoạch"),
-    "CONFIRM_INITIAL_SCHEDULE": ("🚜", "Xếp máy gặt và thợ lái cho ca thu hoạch"),
-    "CONFIRM_SCHEDULE_ASSIGNMENT": ("🚜", "Xếp máy gặt và thợ lái cho ca thu hoạch"),
-    "DISPATCH_MACHINE_ASSIGNMENT": ("🚜", "Điều phối viên xếp máy gặt cho ca thu hoạch"),
-    "REPORT_MACHINE_INCIDENT": ("⚠️", "Máy gặt gặp sự cố giữa vụ"),
-    "REPORT_BREAKDOWN_AND_IMPACT_SCAN": ("⚠️", "Máy gặt gặp sự cố, hệ thống rà soát các ca bị ảnh hưởng"),
-    "APPROVE_BPMN_RESCUE_REPLAN": ("🆘", "Duyệt phương án máy thay thế"),
-    "APPROVE_BPMN_RESCUE_REPLACEMENT": ("🆘", "Ca thu hoạch được xếp lại cho máy thay thế"),
-    "REPAIR_TEAM_DIAGNOSIS_UPDATED": ("🛠️", "Đội kỹ thuật chẩn đoán máy hỏng"),
-    "COMPLETE_REPAIR_TICKET": ("✅", "Máy hỏng đã được sửa xong"),
-    "CONFIRM_ACCEPTANCE_AND_SEAL_LEDGER": ("🌾", "Nông hộ nghiệm thu và niêm phong sổ cái"),
+    "CREATE_FLOOD_REPORT": ("📝", "Người báo tin gửi tin báo ngập"),
+    "VERIFY_FLOOD_REPORT": ("🔎", "Điều phối viên xác minh tin báo và xếp mức ưu tiên"),
+    "REJECT_FLOOD_REPORT": ("🚫", "Điều phối viên từ chối tin báo"),
+    "CONFIRM_DISPATCH_ORDER": ("🚤", "Điều phối viên xếp đội và phương tiện cho vụ việc"),
+    "ORDER_STATUS_UPDATED": ("📍", "Đội hiện trường cập nhật tiến độ xử lý"),
+    "REPORT_VEHICLE_INCIDENT_AND_IMPACT_SCAN": ("⚠️", "Phương tiện gặp sự cố, hệ thống rà soát các lệnh bị ảnh hưởng"),
+    "APPROVE_REPLAN_REPLACEMENT": ("🆘", "Vụ việc được xếp lại cho phương tiện và đội thay thế"),
+    "UPDATE_REPAIR_TICKET": ("🛠️", "Quản lý nguồn lực cập nhật phiếu sửa chữa"),
+    "CLOSE_REPAIR_TICKET": ("✅", "Phương tiện hỏng đã được sửa xong"),
+    "DISPUTE_RESOLUTION": ("↩️", "Kết quả xử lý bị phản đối, vụ việc quay lại điều phối"),
+    "CONFIRM_RESOLUTION_AND_SEAL_LEDGER": ("🌊", "Vụ việc được xác nhận xử lý xong và niêm phong sổ cái"),
 }
 
 AUDIT_GLOB = "audit/*/*.parquet"
@@ -102,7 +102,7 @@ def epoch_continuity(epoch_rows):
 
 
 def verify(rows, epoch_rows):
-    """Independent verification of the records of one lot against the whole ledger epoch they belong to."""
+    """Independent verification of the records of one case against the whole ledger epoch they belong to."""
     checked = matched = unverifiable = 0
     mismatches = []
     for r in rows:
@@ -166,8 +166,8 @@ def _rows(cur):
     return out
 
 
-def load_lot(corr_id):
-    """Returns (lot_rows, epoch_rows) for the newest ledger epoch that contains this correlation id, or None."""
+def load_case(corr_id):
+    """Returns (case_rows, epoch_rows) for the newest ledger epoch that contains this correlation id, or None."""
     con = root.cursor()
     if LAKE_ROOT.startswith("s3://"):
         configure_s3(con)
@@ -179,12 +179,12 @@ def load_lot(corr_id):
         if not newest:
             return None
         epoch = newest[0]
-        lot = _rows(con.execute(
+        case = _rows(con.execute(
             f"SELECT {COLUMNS} FROM {src} WHERE correlation_id = ? AND ledger_epoch = ? {DEDUPE} ORDER BY seq_no",
             [corr_id, epoch]))
         whole = _rows(con.execute(
             f"SELECT {COLUMNS} FROM {src} WHERE ledger_epoch = ? {DEDUPE} ORDER BY seq_no", [epoch]))
-        return lot, whole
+        return case, whole
     except duckdb.IOException as e:
         if "No files found" in str(e) or "no files" in str(e).lower():
             return None  # lake still empty
@@ -196,10 +196,10 @@ def humanize(action):
     return action.replace("_", " ").strip().capitalize()
 
 
-def build_trace(corr_id, lot, epoch_rows):
-    verification = verify(lot, epoch_rows)
+def build_trace(corr_id, case, epoch_rows):
+    verification = verify(case, epoch_rows)
     steps = []
-    for r in lot:
+    for r in case:
         icon, label = ACTION_LABELS.get(r["action"], ("🔹", humanize(r["action"])))
         if str(r["action"]).startswith("CONFLICT_BLOCKED_"):
             icon, label = "⛔", "Hệ thống chặn một lịch xếp trùng giờ"
@@ -216,7 +216,7 @@ def build_trace(corr_id, lot, epoch_rows):
         })
     return {
         "trace_id": corr_id,
-        "organization": lot[0]["organization_id"] if lot else None,
+        "organization": case[0]["organization_id"] if case else None,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "verification": verification,
         "summary": {
@@ -280,13 +280,13 @@ li{{position:relative;padding-left:56px;margin-bottom:14px;opacity:0;transform:t
 .disc,footer{{font-size:.78rem;color:#64748b}}footer{{margin:28px 0 40px;text-align:center}}
 @keyframes in{{to{{opacity:1;transform:none}}}}@media (prefers-reduced-motion:reduce){{li{{animation:none;opacity:1;transform:none}}}}
 </style></head><body>
-<header><div class="wrap"><h1>🌾 Truy xuất nguồn gốc lúa gạo</h1><p>OpenAgriOS · Tầng 3 · Mã lô <b>{e(trace["trace_id"])}</b></p></div></header>
+<header><div class="wrap"><h1>🌊 Truy xuất vụ việc ứng phó ngập lụt</h1><p>OpenDXOS · Tầng 3 · Mã vụ việc <b>{e(trace["trace_id"])}</b></p></div></header>
 <main class="wrap"><div class="top">
 <section class="panel"><span class="badge">{e(badge)}</span><p>{e(explain)}</p>
 <div class="kv"><b>{v["records_match"]}/{v["records_checked"]}</b> bản ghi khớp mã băm · chuỗi sổ cái <b>{v["epoch_blocks"]}</b> khối {"liền mạch" if v["epoch_continuous"] else "BỊ ĐỨT"}<br>
 Đơn vị: <b>{e(str(trace["organization"] or "—"))}</b> · {trace["summary"]["steps"]} bước · từ {e(str(trace["summary"]["first_event"] or "—"))}</div></section>
 <div class="panel qr" aria-label="Mã QR của trang này" style="flex:0 0 190px;display:grid;place-items:center">{qr_svg(trace["trace_id"], inline=True)}</div></div>
-<h2>Hành trình của lô thu hoạch</h2><ol>{"".join(items) or "<li style='--i:0'><div class='card'>Chưa có bước nào.</div></li>"}</ol>
+<h2>Hành trình của vụ việc</h2><ol>{"".join(items) or "<li style='--i:0'><div class='card'>Chưa có bước nào.</div></li>"}</ol>
 {disclaimer}
 <footer>Trang công khai chỉ hiển thị vai trò và mã sự kiện, không hiển thị danh tính cá nhân.<br>Chuỗi băm SHA-256 được dịch vụ truy xuất tự tính lại độc lập từ kho dữ liệu lạnh, không dựa vào lời khẳng định của lõi.</footer>
 </main></body></html>"""
@@ -325,7 +325,7 @@ class Handler(BaseHTTPRequestHandler):
             bump("bad_request")
             return self._json(400, {"error": "invalid_trace_id", "message": "Trace id must be 3-64 chars of A-Z a-z 0-9 _ -"})
         try:
-            loaded = load_lot(corr_id)
+            loaded = load_case(corr_id)
         except Exception as ex:  # lake unreachable etc.: never leak internals
             print(f"[TRACE] lake error: {type(ex).__name__}: {ex}", flush=True)
             return self._json(503, {"error": "lake_unavailable"})
@@ -333,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             bump("not_found")
             if suffix == ".json":
                 return self._json(404, {"error": "trace_not_found", "trace_id": corr_id})
-            return self._send(404, "<h1>Không tìm thấy lô truy xuất này</h1>", "text/html; charset=utf-8")
+            return self._send(404, "<h1>Không tìm thấy vụ việc truy xuất này</h1>", "text/html; charset=utf-8")
         trace = build_trace(corr_id, *loaded)
         bump({"VERIFIED": "verified", "PARTIAL": "partial"}.get(trace["verification"]["status"], "failed"))
         if suffix == ".json":

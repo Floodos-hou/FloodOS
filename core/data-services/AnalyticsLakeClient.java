@@ -23,8 +23,10 @@ import java.util.Set;
  */
 public final class AnalyticsLakeClient {
 
-    /** Whitelist of analytical queries exposed through {@code /api/v1/analytics/{name}}. */
-    public static final Set<String> QUERIES = Set.of("summary", "actions-by-day", "machine-utilization");
+    /** Queries every deployment has (audit-based). An application adds its own with {@link #registerQueries}. */
+    public static final Set<String> PLATFORM_QUERIES = Set.of("summary", "actions-by-day");
+
+    private final java.util.Set<String> allowed = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private final String baseUrl;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
@@ -38,6 +40,19 @@ public final class AnalyticsLakeClient {
         this.baseUrl = (url == null || url.isBlank()) ? null : url.replaceAll("/+$", "");
     }
 
+    {
+        allowed.addAll(PLATFORM_QUERIES);
+    }
+
+    /** The application declares which additional query names the lake archiver serves; nothing else is forwarded. */
+    public void registerQueries(java.util.Collection<String> names) {
+        allowed.addAll(names);
+    }
+
+    public boolean isAllowed(String name) {
+        return allowed.contains(name);
+    }
+
     public boolean isConfigured() {
         return baseUrl != null;
     }
@@ -48,7 +63,7 @@ public final class AnalyticsLakeClient {
 
     /** Returns {@code [httpStatus, body]}; status 503 when the cold tier is not configured or unreachable. */
     public Result query(String name, String orgId) {
-        if (!QUERIES.contains(name)) {
+        if (!allowed.contains(name)) {
             return new Result(404, error("unknown_query", "Unknown analytics query: " + name));
         }
         if (baseUrl == null) {

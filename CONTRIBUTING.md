@@ -18,7 +18,7 @@ OpenAgriOS follows the **DX-OS Open-Core Modular Architecture**:
   - `api-gateway/`: Edge routing, zero-trust policies, and rate limits.
   - `workflow/`: BPMN 2.0 execution and state machines.
   - `data-services/`: Persistence, audit logging, digital twin mappings, and spatial algorithms.
-- **`apps/`**: Domain-specific vertical applications (e.g. `apps/agriops` for agricultural mechanization).
+- **`apps/`**: Domain-specific vertical applications (e.g. `apps/floodops` for flood-response coordination). The core in `core/` must stay free of any business domain: a unit test fails if domain words appear there.
 - **`infra/`**: Declarative Infrastructure-as-Code (PostgreSQL, Keycloak, APISIX, Flowable).
 - **`docs/`**: Technical documentation, architecture diagrams, and API specifications.
 - **`tests/`**: Integration tests, Postman collections, and acceptance test runners.

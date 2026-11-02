@@ -14,13 +14,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import ingestor  # noqa: E402
 import simulator  # noqa: E402
 
-TOPIC = "openagrios/HTX_CANTHO_01/machines/M01/telemetry"
+TOPIC = "openagrios/ORG_HN_PILOT_01/vehicles/V01/telemetry"
+GAUGE_TOPIC = "openagrios/ORG_HN_PILOT_01/gauges/G01/telemetry"
 
 
 def good(**over):
-    base = {"ts": "2026-11-20T10:00:00Z", "lat": 10.0645, "lon": 105.5586, "fuel_pct": 78.5, "speed_kmh": 6.0}
+    base = {"ts": "2026-11-20T10:00:00Z", "lat": 20.9668, "lon": 105.8718, "fuel_pct": 78.5, "speed_kmh": 6.0,
+            "source": "SIMULATOR"}
     base.update(over)
-    return json.dumps(base).encode()
+    return json.dumps({k: v for k, v in base.items() if v is not DROP}).encode()
+
+
+DROP = object()
+
+
+def good_gauge(**over):
+    base = {"ts": "2026-11-20T10:00:00Z", "level_cm": 62.5, "source": "SIMULATOR"}
+    base.update(over)
+    return json.dumps({k: v for k, v in base.items() if v is not DROP}).encode()
 
 
 class FakeCore:
@@ -65,37 +76,61 @@ def reset_stats():
 
 
 class ValidationTests(unittest.TestCase):
-    def test_valid_message_is_normalised_with_tenant_and_machine_taken_from_the_topic(self):
+    def test_valid_message_is_normalised_with_tenant_and_asset_taken_from_the_topic(self):
         payload, reason = ingestor.validate(TOPIC, good())
         self.assertIsNone(reason)
-        self.assertEqual("HTX_CANTHO_01", payload["organization_id"])
-        self.assertEqual("M01", payload["machine_id"])
-        self.assertEqual("mqtt", payload["source"])
+        self.assertEqual("ORG_HN_PILOT_01", payload["organization_id"])
+        self.assertEqual("V01", payload["asset_id"])
+        self.assertEqual("vehicle", payload["asset_kind"])
+        self.assertEqual("SIMULATOR", payload["source"])
         self.assertEqual(78.5, payload["fuel_pct"])
 
+    def test_a_message_must_declare_where_it_comes_from(self):
+        for bad in (DROP, "", "mqtt", "simulator", "OFFICIAL", None, 1):
+            payload, reason = ingestor.validate(TOPIC, good(source=bad))
+            self.assertIsNone(payload, f"source={bad!r} must be refused")
+            self.assertIn("source", reason)
+        for ok in ("SIMULATOR", "DEVICE"):
+            self.assertIsNone(ingestor.validate(TOPIC, good(source=ok))[1])
+
+    def test_gauge_message_is_validated_with_its_own_fields(self):
+        payload, reason = ingestor.validate(GAUGE_TOPIC, good_gauge())
+        self.assertIsNone(reason)
+        self.assertEqual("gauge", payload["asset_kind"])
+        self.assertEqual("G01", payload["asset_id"])
+        self.assertEqual(62.5, payload["level_cm"])
+        self.assertNotIn("lat", payload)
+        for bad in (None, "62", True, [1]):
+            _, reason = ingestor.validate(GAUGE_TOPIC, good_gauge(level_cm=bad))
+            self.assertIn("level_cm", reason, f"level_cm={bad!r}")
+        self.assertIn("level_cm", ingestor.validate(GAUGE_TOPIC, good_gauge(level_cm=DROP))[1])
+        self.assertIn("source", ingestor.validate(GAUGE_TOPIC, good_gauge(source=DROP))[1])
+
     def test_speed_is_optional_and_defaults_to_zero(self):
-        raw = json.dumps({"ts": "2026-11-20T10:00:00Z", "lat": 1, "lon": 2, "fuel_pct": 3}).encode()
+        raw = json.dumps({"ts": "2026-11-20T10:00:00Z", "lat": 1, "lon": 2, "fuel_pct": 3, "source": "SIMULATOR"}).encode()
         payload, reason = ingestor.validate(TOPIC, raw)
         self.assertIsNone(reason)
         self.assertEqual(0.0, payload["speed_kmh"])
 
     def test_missing_timestamp_is_filled_with_server_time(self):
-        raw = json.dumps({"lat": 1, "lon": 2, "fuel_pct": 3}).encode()
+        raw = json.dumps({"lat": 1, "lon": 2, "fuel_pct": 3, "source": "SIMULATOR"}).encode()
         payload, _ = ingestor.validate(TOPIC, raw)
         self.assertRegex(payload["ts"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
     def test_topics_that_do_not_match_the_scheme_are_rejected(self):
         bad_topics = [
-            "other/HTX/machines/M01/telemetry",
-            "openagrios/HTX/machines/M01/telemetry/extra",
-            "openagrios/HTX/machines/M01/status",
-            "openagrios//machines/M01/telemetry",
-            "openagrios/HTX/machines//telemetry",
-            "openagrios/../machines/M01/telemetry",
-            "openagrios/HTX CANTHO/machines/M01/telemetry",
-            "openagrios/HTX/machines/M01;DROP/telemetry",
-            "openagrios/#/machines/M01/telemetry",
-            "openagrios/+/machines/M01/telemetry",
+            "other/HTX/vehicles/V01/telemetry",
+            "openagrios/HTX/vehicles/V01/telemetry/extra",
+            "openagrios/HTX/vehicles/V01/status",
+            "openagrios//vehicles/V01/telemetry",
+            "openagrios/HTX/vehicles//telemetry",
+            "openagrios/../vehicles/V01/telemetry",
+            "openagrios/HTX ORG/vehicles/V01/telemetry",
+            "openagrios/HTX/vehicles/V01;DROP/telemetry",
+            "openagrios/#/vehicles/V01/telemetry",
+            "openagrios/+/vehicles/V01/telemetry",
+            "openagrios/HTX/machines/M01/telemetry",   # the former per-machine topic family no longer exists
+            "openagrios/HTX/sensors/S01/telemetry",
         ]
         for t in bad_topics:
             payload, reason = ingestor.validate(t, good())
@@ -113,12 +148,12 @@ class ValidationTests(unittest.TestCase):
         self.assertIn("must be a JSON object", ingestor.validate(TOPIC, b"[1,2,3]")[1])
         self.assertIn("must be a JSON object", ingestor.validate(TOPIC, b'"text"')[1])
 
-    def test_payload_cannot_claim_a_different_tenant_or_machine_than_its_topic(self):
-        _, reason = ingestor.validate(TOPIC, good(organization_id="HTX_SOCTRANG_02"))
+    def test_payload_cannot_claim_a_different_tenant_or_asset_than_its_topic(self):
+        _, reason = ingestor.validate(TOPIC, good(organization_id="ORG_HN_PILOT_02"))
         self.assertIn("organization_id", reason)
-        _, reason = ingestor.validate(TOPIC, good(machine_id="M99"))
-        self.assertIn("machine_id", reason)
-        payload, reason = ingestor.validate(TOPIC, good(organization_id="HTX_CANTHO_01", machine_id="M01"))
+        _, reason = ingestor.validate(TOPIC, good(asset_id="V99"))
+        self.assertIn("asset_id", reason)
+        payload, reason = ingestor.validate(TOPIC, good(organization_id="ORG_HN_PILOT_01", asset_id="V01"))
         self.assertIsNone(reason, "matching claims are fine")
 
     def test_required_numeric_fields_must_be_finite_numbers(self):
@@ -127,7 +162,7 @@ class ValidationTests(unittest.TestCase):
                 _, reason = ingestor.validate(TOPIC, good(**{field: bad}))
                 self.assertIn(field, reason, f"{field}={bad!r}")
         for lit in (b"NaN", b"Infinity", b"-Infinity"):
-            raw = b'{"lat": ' + lit + b', "lon": 1, "fuel_pct": 2}'
+            raw = b'{"source": "SIMULATOR", "lat": ' + lit + b', "lon": 1, "fuel_pct": 2}'
             self.assertIn("lat", ingestor.validate(TOPIC, raw)[1], lit)
 
     def test_missing_required_field_is_rejected(self):
@@ -172,8 +207,10 @@ class ForwardingTests(unittest.TestCase):
         self.assertEqual("/api/v1/internal/telemetry", req["path"])
         self.assertEqual("secret-token", req["token"])
         body = json.loads(req["body"])
-        self.assertEqual("M01", body["machine_id"])
-        self.assertEqual("HTX_CANTHO_01", body["organization_id"])
+        self.assertEqual("V01", body["asset_id"])
+        self.assertEqual("vehicle", body["asset_kind"])
+        self.assertEqual("SIMULATOR", body["source"])
+        self.assertEqual("ORG_HN_PILOT_01", body["organization_id"])
 
     def test_invalid_messages_never_reach_the_core(self):
         ingestor.on_message(None, None, self.message(payload=b"not-json"))
@@ -274,47 +311,71 @@ class SimulatorTests(unittest.TestCase):
         cantho = simulator.metres_between(10, 105, 10, 105.001)
         self.assertLess(cantho, equator)
 
-    def test_fleet_roster_is_fetched_with_the_ingest_token(self):
+    def test_asset_roster_is_fetched_with_the_ingest_token(self):
         core = FakeCore()
-        core.response = json.dumps({"machines": [{"machine_id": "M01", "organization_id": "O", "status": "IDLE",
-                                                   "lat": 1.0, "lon": 2.0, "fuel_pct": 50.0}]}).encode()
+        core.response = json.dumps({"assets": [{"asset_kind": "vehicle", "asset_id": "V01", "organization_id": "O",
+                                                 "status": "IDLE", "lat": 1.0, "lon": 2.0, "fuel_pct": 50.0}]}).encode()
         old = (simulator.CORE_URL, simulator.INGEST_TOKEN)
         simulator.CORE_URL, simulator.INGEST_TOKEN = core.url, "tok"
         try:
-            fleet = simulator.fetch_fleet()
+            assets = simulator.fetch_assets()
         finally:
             simulator.CORE_URL, simulator.INGEST_TOKEN = old
             core.close()
-        self.assertEqual("M01", fleet[0]["machine_id"])
+        self.assertEqual("V01", assets[0]["asset_id"])
         self.assertEqual("tok", core.requests[0]["token"])
-        self.assertEqual("/api/v1/internal/fleet", core.requests[0]["path"])
+        self.assertEqual("/api/v1/internal/assets", core.requests[0]["path"])
 
-    def test_advance_moves_along_the_heading_at_the_expected_distance(self):
-        m = {"lat": 10.0, "lon": 105.0, "heading": 0.0, "fuel_pct": 50.0}
-        speed = simulator.advance(m, interval_s=2, timelapse=1, turn_deg=0)
-        self.assertEqual(simulator.WORKING_SPEED_KMH, speed)
-        # 6 km/h for 2 s = 3.33 m due north
-        self.assertAlmostEqual(3.33, simulator.metres_between(10.0, 105.0, m["lat"], m["lon"]), delta=0.05)
-        self.assertAlmostEqual(105.0, m["lon"], places=9)
-        self.assertLess(m["fuel_pct"], 50.0)
+    def test_every_simulated_message_declares_its_source(self):
+        self.assertEqual("SIMULATOR", simulator.SOURCE)
+
+    def test_vehicle_moves_in_a_straight_line_toward_its_target(self):
+        v = {"lat": 20.9668, "lon": 105.8718, "fuel_pct": 50.0, "target_lat": 20.9768, "target_lon": 105.8718}
+        speed = simulator.advance_vehicle(v, interval_s=2, timelapse=1)
+        self.assertEqual(simulator.TRAVEL_SPEED_KMH, speed)
+        # 12 km/h for 2 s = 6.67 m due north, longitude unchanged
+        self.assertAlmostEqual(6.67, simulator.metres_between(20.9668, 105.8718, v["lat"], v["lon"]), delta=0.1)
+        self.assertAlmostEqual(105.8718, v["lon"], places=9)
+        self.assertLess(v["fuel_pct"], 50.0)
+
+    def test_vehicle_without_a_target_does_not_move(self):
+        v = {"lat": 20.9668, "lon": 105.8718, "fuel_pct": 50.0, "target_lat": None, "target_lon": None}
+        self.assertEqual(0.0, simulator.advance_vehicle(v, 2, 12))
+        self.assertEqual((20.9668, 105.8718, 50.0), (v["lat"], v["lon"], v["fuel_pct"]))
+
+    def test_vehicle_stops_inside_the_arrival_radius_and_never_overshoots(self):
+        near = {"lat": 20.9668, "lon": 105.8718, "fuel_pct": 50.0, "target_lat": 20.96683, "target_lon": 105.8718}
+        self.assertEqual(0.0, simulator.advance_vehicle(near, 2, 1), "already within 30 m")
+        v = {"lat": 20.9668, "lon": 105.8718, "fuel_pct": 50.0, "target_lat": 20.9672, "target_lon": 105.8718}
+        for _ in range(500):
+            simulator.advance_vehicle(v, 2, 12)
+        self.assertLessEqual(simulator.metres_between(v["lat"], v["lon"], 20.9672, 105.8718), simulator.ARRIVAL_RADIUS_M)
+        self.assertLessEqual(v["lat"], 20.9672 + 1e-9, "never passes the target")
 
     def test_timelapse_multiplies_distance_but_caps_the_reported_speed(self):
-        slow = {"lat": 10.0, "lon": 105.0, "heading": 90.0, "fuel_pct": 50.0}
-        fast = dict(slow)
-        simulator.advance(slow, 2, 1, 0)
-        reported = simulator.advance(fast, 2, 12, 0)
-        d_slow = simulator.metres_between(10.0, 105.0, slow["lat"], slow["lon"])
-        d_fast = simulator.metres_between(10.0, 105.0, fast["lat"], fast["lon"])
-        self.assertAlmostEqual(12.0, d_fast / d_slow, delta=0.05)
-        self.assertEqual(72.0, reported)
-        self.assertEqual(simulator.MAX_REPORTED_SPEED_KMH, simulator.advance(dict(slow), 2, 50, 0),
+        base = {"lat": 20.9, "lon": 105.8, "fuel_pct": 50.0, "target_lat": 21.5, "target_lon": 105.8}
+        slow, fast = dict(base), dict(base)
+        simulator.advance_vehicle(slow, 2, 1)
+        reported = simulator.advance_vehicle(fast, 2, 5)
+        d_slow = simulator.metres_between(20.9, 105.8, slow["lat"], slow["lon"])
+        d_fast = simulator.metres_between(20.9, 105.8, fast["lat"], fast["lon"])
+        self.assertAlmostEqual(5.0, d_fast / d_slow, delta=0.05)
+        self.assertEqual(60.0, reported)
+        self.assertEqual(simulator.MAX_REPORTED_SPEED_KMH, simulator.advance_vehicle(dict(base), 2, 50),
                          "the core rejects speeds above 80 km/h, so the report is capped")
 
     def test_fuel_never_drops_below_the_floor(self):
-        m = {"lat": 10.0, "lon": 105.0, "heading": 0.0, "fuel_pct": 5.01}
+        v = {"lat": 20.9, "lon": 105.8, "fuel_pct": 5.01, "target_lat": 21.5, "target_lon": 105.8}
         for _ in range(10):
-            simulator.advance(m, 2, 1, 0)
-        self.assertEqual(5.0, m["fuel_pct"])
+            simulator.advance_vehicle(v, 2, 1)
+        self.assertEqual(5.0, v["fuel_pct"])
+
+    def test_gauge_level_stays_inside_its_bounds(self):
+        g = {"level_cm": 60.0, "warn_level_cm": 80.0, "critical_level_cm": 120.0}
+        for _ in range(5000):
+            simulator.advance_gauge(g, 12)
+            self.assertGreaterEqual(g["level_cm"], 0.0)
+            self.assertLessEqual(g["level_cm"], 120.0 * 1.3 + 1e-9)
 
     def test_simulator_fails_fast_without_credentials(self):
         saved = (simulator.INGEST_TOKEN, simulator.MQTT_USER, simulator.MQTT_PASSWORD)

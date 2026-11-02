@@ -2,7 +2,7 @@
 # Copyright 2026 OpenAgriOS Contributors
 
 # ============================================================================
-# OPENAGRIOS - HEADLESS CORE PaaS & OPERATIONS PORTAL (100% PERMISSIVE OPEN SOURCE)
+# OPENDXOS - HEADLESS CORE PaaS + Hanoi FloodOps (100% PERMISSIVE OPEN SOURCE)
 # Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
 # Tất cả phiên bản image đều được pin cố định (không dùng :latest)
 # ============================================================================
@@ -133,6 +133,8 @@ services:
       OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
       CLAMAV_HOST: clamav
       OPENAGRIOS_INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+      # POST /api/v1/sim/reset (PLATFORM_ADMIN only) wipes the demo data: allowed in development, closed in production.
+      OPENDXOS_ALLOW_DEMO_RESET: ${OPENDXOS_ALLOW_DEMO_RESET:-true}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -289,7 +291,7 @@ services:
         condition: service_started
 
   # 12. DEVICE SIMULATOR - demo only, no physical hardware. Enable with: docker compose --profile demo up -d
-  #     (kept off by default so deterministic tests are not perturbed by moving machines)
+  #     (kept off by default so deterministic tests are not perturbed by moving vehicles)
   device-simulator:
     profiles: ["demo"]
     build:
@@ -303,7 +305,7 @@ services:
       MQTT_PASSWORD: ${MQTT_DEVICE_PASSWORD:-device_dev_only}
       CORE_URL: http://core-api:8000
       INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
-      # Demo time-lapse (1 = real speed): makes harvesters visibly move on the map
+      # Demo time-lapse (1 = real speed): makes the SIMULATED rescue vehicles visibly move on the map
       SIM_TIMELAPSE: ${SIM_TIMELAPSE:-12}
     depends_on:
       mosquitto:
@@ -311,7 +313,7 @@ services:
       core-api:
         condition: service_started
 
-  # 13. TIER-3 DOMAIN MODULE: rice traceability. Read-only on the cold lake; independently re-verifies the SHA-256 chain.
+  # 13. TIER-3 DOMAIN MODULE: flood-case traceability. Read-only on the cold lake; independently re-verifies the SHA-256 chain.
   traceability:
     build:
       context: ./apps/traceability

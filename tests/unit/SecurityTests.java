@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.openagrios.core.dataservices.ImmutableAuditLedger;
 import org.openagrios.core.dataservices.ImmutableAuditLedger.AuditRecord;
+import org.openagrios.apps.floodops.FloodRoles;
 import org.openagrios.core.gateway.ZeroTrustGateway;
 import org.openagrios.core.identity.KeycloakOidcEngine;
 import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
@@ -38,7 +39,7 @@ final class SecurityTests {
     }
 
     private static AuditRecord append(ImmutableAuditLedger l, String org, String corr, String action) {
-        return l.appendRecord(org, corr, "ServiceRequest", "REQ-1", action, "alice", "COORDINATOR",
+        return l.appendRecord(org, corr, "FloodReport", "FR-1", action, "alice", "DISPATCHER",
                 Map.of("s", "before"), Map.of("s", "after"), 200);
     }
 
@@ -51,10 +52,10 @@ final class SecurityTests {
         });
         test("hash formula matches the golden vector shared with the independent Python verifier", () -> {
             // services/traceability/tests/test_traceability.py asserts the very same raw string and digest
-            String raw = String.join("|", ImmutableAuditLedger.GENESIS_HASH, "1", "EVT-2026-0001", "HTX_CANTHO_01",
-                    "CORR-GOLDEN-F03", "ServiceRequest", "REQ-03", "CREATE_SERVICE_REQUEST", "usr_farmer_ba", "FARMER",
+            String raw = String.join("|", ImmutableAuditLedger.GENESIS_HASH, "1", "EVT-2026-0001", "ORG_HN_PILOT_01",
+                    "CORR-FR-0001", "FloodReport", "FR-0001", "CREATE_FLOOD_REPORT", "usr_reporter_lan", "REPORTER",
                     "2026-11-20T09:15:00Z", "{\"status\":\"NEW\"}", "{\"a\":1,\"b\":\"x\"}");
-            equal("c1f69f41b8d35d0e68a8e616f9ab5bd4b903fb9f1b2630607724a84c2d0337c4", ImmutableAuditLedger.sha256Hex(raw), "golden digest");
+            equal("80fe676988d4dea1be4b550eef897a5bb4770d10f26dd56c6bd9a9fc57b45ab3", ImmutableAuditLedger.sha256Hex(raw), "golden digest");
         });
         test("empty ledger verifies and reports the genesis hash", () -> {
             Map<String, Object> proof = new ImmutableAuditLedger().verifyChainIntegrity();
@@ -213,31 +214,31 @@ final class SecurityTests {
     // ------------------------------------------------------------------ ZeroTrustGateway
     private static void zeroTrustGateway() {
         suite("ZeroTrustGateway");
-        AuthContext farmer = new AuthContext("usr_farmer_ba", "farmer_ba", "HTX_CANTHO_01", "FARMER");
-        AuthContext coord = new AuthContext("usr_coord_01", "coord_htx01", "HTX_CANTHO_01", "COORDINATOR");
+        AuthContext reporter = new AuthContext("usr_reporter_lan", "reporter_lan", "ORG_HN_PILOT_01", "REPORTER");
+        AuthContext coord = new AuthContext("usr_dispatcher_hoa", "dispatcher_hoa", "ORG_HN_PILOT_01", "DISPATCHER");
 
         test("an allowed role passes and leaves no audit trace", () -> {
             ImmutableAuditLedger l = new ImmutableAuditLedger();
-            isNull(ZeroTrustGateway.enforceRbacPolicy(l, coord, List.of("COORDINATOR"), "DISPATCH", "Assignment", "M01"), "allowed");
+            isNull(ZeroTrustGateway.enforceRbacPolicy(l, coord, List.of("DISPATCHER"), "DISPATCH", "DispatchOrder", "V01"), "allowed");
             equal(0, l.verifyChainIntegrity().get("total_blocks"), "nothing appended");
         });
         test("a forbidden role gets a 403 body and an immutable audit record", () -> {
             ImmutableAuditLedger l = new ImmutableAuditLedger();
-            Map<String, Object> err = ZeroTrustGateway.enforceRbacPolicy(l, farmer, List.of("COORDINATOR"), "DISPATCH", "Assignment", "M01");
+            Map<String, Object> err = ZeroTrustGateway.enforceRbacPolicy(l, reporter, List.of("DISPATCHER"), "DISPATCH", "DispatchOrder", "V01");
             notNull(err, "blocked");
             equal("RBAC_FORBIDDEN", err.get("error"), "error code");
             equal(403, err.get("status"), "status");
-            contains(String.valueOf(err.get("message")), "COORDINATOR", "names the required role");
+            contains(String.valueOf(err.get("message")), "DISPATCHER", "names the required role");
             Map<?, ?> audit = (Map<?, ?>) err.get("audit_event");
             equal("RBAC_BLOCKED_DISPATCH", audit.get("action"), "audit action");
             equal(403, audit.get("gateway_status"), "audit status");
-            equal("HTX_CANTHO_01", audit.get("organization_id"), "audit is tenant scoped");
+            equal("ORG_HN_PILOT_01", audit.get("organization_id"), "audit is tenant scoped");
             equal(1, l.verifyChainIntegrity().get("total_blocks"), "exactly one record");
         });
         test("every role outside the allow-list is blocked, matching is exact", () -> {
-            for (String role : new String[]{"FARMER", "OPERATOR", "REPAIR_TEAM", "MACHINE_OWNER", "coordinator", ""}) {
+            for (String role : new String[]{"REPORTER", "FIELD_TEAM", "RESOURCE_MANAGER", "PLATFORM_ADMIN", "dispatcher", ""}) {
                 AuthContext a = new AuthContext("u", "u", "O", role);
-                notNull(ZeroTrustGateway.enforceRbacPolicy(new ImmutableAuditLedger(), a, List.of("COORDINATOR"), "X", "E", "1"),
+                notNull(ZeroTrustGateway.enforceRbacPolicy(new ImmutableAuditLedger(), a, List.of("DISPATCHER"), "X", "E", "1"),
                         "role '" + role + "' must be blocked");
             }
         });
@@ -245,8 +246,8 @@ final class SecurityTests {
             Map<String, String> anon = ZeroTrustGateway.buildZeroTrustHeaders(null);
             isFalse(anon.containsKey("X-User-Id") || anon.containsKey("X-Org-Id") || anon.containsKey("X-User-Roles"), "no identity headers");
             Map<String, String> authed = ZeroTrustGateway.buildZeroTrustHeaders(coord);
-            equal("HTX_CANTHO_01", authed.get("X-Org-Id"), "org");
-            equal("COORDINATOR", authed.get("X-User-Roles"), "role");
+            equal("ORG_HN_PILOT_01", authed.get("X-Org-Id"), "org");
+            equal("DISPATCHER", authed.get("X-User-Roles"), "role");
             notNull(authed.get("X-Gateway"), "gateway marker");
         });
     }
@@ -258,16 +259,17 @@ final class SecurityTests {
 
     private static void jwt() {
         suite("JWT validation (DEV_MOCK_STANDALONE)");
+        FloodRoles.register();
         KeycloakOidcEngine.setAuthModeForTesting(AuthMode.DEV_MOCK_STANDALONE);
-        UserAccount user = new UserAccount("usr_coord_01", "coord_htx01", "pw", "Chị Lan", "lan@x.vn", "HTX_CANTHO_01", "COORDINATOR");
+        UserAccount user = new UserAccount("usr_dispatcher_hoa", "dispatcher_hoa", "pw", "Chị Hoa", "hoa@x.vn", "ORG_HN_PILOT_01", "DISPATCHER");
         String good = KeycloakOidcEngine.issueJwt(user);
 
         test("a freshly issued token authenticates with the right identity", () -> {
             AuthContext a = KeycloakOidcEngine.authenticateBearer("Bearer " + good);
             notNull(a, "accepted");
-            equal("HTX_CANTHO_01", a.organizationId(), "org claim");
-            equal("COORDINATOR", a.role(), "role claim");
-            equal("coord_htx01", a.username(), "username");
+            equal("ORG_HN_PILOT_01", a.organizationId(), "org claim");
+            equal("DISPATCHER", a.role(), "role claim");
+            equal("dispatcher_hoa", a.username(), "username");
         });
         test("missing, empty and non-Bearer authorization headers are rejected", () -> {
             isNull(KeycloakOidcEngine.authenticateBearer(null), "null header");
@@ -291,7 +293,7 @@ final class SecurityTests {
         test("privilege escalation by editing the payload is rejected (role swap keeps the old signature)", () -> {
             String[] p = good.split("\\.");
             String payload = new String(Base64.getUrlDecoder().decode(p[1]), StandardCharsets.UTF_8);
-            String escalated = b64(payload.replace("COORDINATOR", "PLATFORM_ADMIN"));
+            String escalated = b64(payload.replace("DISPATCHER", "PLATFORM_ADMIN"));
             isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + p[0] + "." + escalated + "." + p[2]), "payload tamper");
         });
         test("alg=none tokens are rejected", () -> {
@@ -301,7 +303,7 @@ final class SecurityTests {
             isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + header + "." + p[1] + "." + p[2]), "none header with a signature");
         });
         test("a forged RS256 token is rejected", () ->
-                isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + KeycloakOidcEngine.createForgedRs256Token("usr_coord_01", "COORDINATOR", "HTX_CANTHO_01")), "forged RS256"));
+                isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + KeycloakOidcEngine.createForgedRs256Token("usr_dispatcher_hoa", "DISPATCHER", "ORG_HN_PILOT_01")), "forged RS256"));
         test("an expired token is rejected", () ->
                 isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + KeycloakOidcEngine.createExpiredToken(user)), "expired"));
         test("a token minted for another audience is rejected", () ->
@@ -356,26 +358,51 @@ final class SecurityTests {
 
     // ------------------------------------------------------------------ roles
     private static void roleResolution() {
-        suite("Keycloak realm role resolution");
-        test("empty or missing roles fall back to the least-privileged business role", () -> {
-            equal("FARMER", KeycloakOidcEngine.resolveOpenAgriOsRole(null), "null");
-            equal("FARMER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of()), "empty");
+        suite("Keycloak realm role resolution (roles are registered by the application, no default role)");
+        FloodRoles.register();
+        test("empty or missing roles resolve to NO role instead of a default", () -> {
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(null), "null");
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of()), "empty");
         });
         test("Keycloak system roles are ignored", () -> {
-            equal("FARMER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access", "uma_authorization")), "system only");
-            equal("COORDINATOR", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("offline_access", "COORDINATOR")), "business role wins");
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access", "uma_authorization")), "system only");
+            equal("DISPATCHER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("offline_access", "DISPATCHER")), "business role wins");
         });
-        test("highest-priority business role wins and matching is case-insensitive", () -> {
-            equal("PLATFORM_ADMIN", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("FARMER", "PLATFORM_ADMIN", "COORDINATOR")), "hierarchy");
-            equal("COORDINATOR", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("farmer", " coordinator ")), "normalised");
+        test("highest-priority role wins and matching is case-insensitive", () -> {
+            equal("PLATFORM_ADMIN", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("REPORTER", "PLATFORM_ADMIN", "DISPATCHER")), "hierarchy");
+            equal("DISPATCHER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("reporter", " dispatcher ")), "normalised");
+            equal("FIELD_TEAM", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("REPORTER", "FIELD_TEAM")), "field team outranks reporter");
         });
-        test("MACHINE_OWNER (outside the hierarchy list) is still resolved", () ->
-                equal("MACHINE_OWNER", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "MACHINE_OWNER")), "owner role"));
+        test("a role that the application did not register is NOT resolved (old AgriOps roles are refused)", () -> {
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "FARMER")), "FARMER");
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("COORDINATOR", "MACHINE_OWNER", "OPERATOR", "REPAIR_TEAM")), "former roles");
+        });
         test("null entries inside the role list do not crash", () -> {
             List<Object> roles = new ArrayList<>();
             roles.add(null);
-            roles.add("OPERATOR");
-            equal("OPERATOR", KeycloakOidcEngine.resolveOpenAgriOsRole(roles), "null tolerated");
+            roles.add("FIELD_TEAM");
+            equal("FIELD_TEAM", KeycloakOidcEngine.resolveOpenAgriOsRole(roles), "null tolerated");
+        });
+        test("the registry always keeps PLATFORM_ADMIN first and the core alone knows no business role", () -> {
+            KeycloakOidcEngine.configureRoleHierarchy(List.of("alpha", "BETA"));
+            equal(List.of("PLATFORM_ADMIN", "ALPHA", "BETA"), KeycloakOidcEngine.roleHierarchy(), "registered");
+            isNull(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("DISPATCHER")), "not registered now");
+            equal("ALPHA", KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("alpha")), "registered role");
+            FloodRoles.register();
+        });
+        test("a token without a tenant claim or without a registered role never authenticates", () -> {
+            KeycloakOidcEngine.setAuthModeForTesting(AuthMode.DEV_MOCK_STANDALONE);
+            UserAccount noRole = new UserAccount("usr_x", "x", "pw", "X", "x@x.vn", "ORG_HN_PILOT_01", "FARMER");
+            isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + KeycloakOidcEngine.issueJwt(noRole)), "unregistered role");
+            UserAccount noOrg = new UserAccount("usr_y", "y", "pw", "Y", "y@x.vn", "", "DISPATCHER");
+            isNull(KeycloakOidcEngine.authenticateBearer("Bearer " + KeycloakOidcEngine.issueJwt(noOrg)), "empty organization");
+            KeycloakOidcEngine.resetAuthModeForTesting();
+        });
+        test("database user ids are usr_<username>; a token with no usable identity gets none", () -> {
+            equal("usr_dispatcher_hoa", KeycloakOidcEngine.resolveDatabaseUserId("0f3c-uuid", "dispatcher_hoa"), "derived from username");
+            equal("usr_reporter_lan", KeycloakOidcEngine.resolveDatabaseUserId("usr_reporter_lan", "whatever"), "kept when already an id");
+            isNull(KeycloakOidcEngine.resolveDatabaseUserId("uuid-only", null), "no username");
+            isNull(KeycloakOidcEngine.resolveDatabaseUserId(null, "  "), "blank username");
         });
     }
 }

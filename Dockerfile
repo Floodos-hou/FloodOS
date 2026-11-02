@@ -14,4 +14,4 @@ RUN mkdir -p target/classes lib && \
     javac -encoding UTF-8 -d target/classes @sources.txt
 
 EXPOSE 8000
-CMD ["java", "-Dfile.encoding=UTF-8", "-cp", "lib/*:target/classes", "org.openagrios.apps.agriops.OpenAgriOsServer"]
+CMD ["java", "-Dfile.encoding=UTF-8", "-cp", "lib/*:target/classes", "org.openagrios.apps.floodops.FloodOpsServer"]
