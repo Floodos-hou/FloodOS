@@ -404,7 +404,7 @@ public final class AgriDataStore {
 
                 id, orgId, ownerId, ownerName, name, hamlet, crop, areaHa, status, prog, wStart, wEnd,
 
-                lat, lng, SpatialMatchingEngine.makeGeoJsonPolygon(lat, lng, 0.0028, 0.0036)
+                lat, lng, SpatialMatchingEngine.polygonForArea(lat, lng, areaHa)
 
         ));
 
@@ -713,7 +713,7 @@ public final class AgriDataStore {
                     break;
                 }
             }
-            List<List<List<Double>>> poly = SpatialMatchingEngine.makeGeoJsonPolygon(lat, lng, 0.0028, 0.0036);
+            List<List<List<Double>>> poly = SpatialMatchingEngine.polygonForArea(lat, lng, area);
             fields.put(fId, new FieldPlot(fId, orgId, ownerId, ownerName, name, hamlet, crop, area, status, prog, wStart, wEnd, lat, lng, poly));
         }
 
