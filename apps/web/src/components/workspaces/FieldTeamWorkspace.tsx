@@ -250,7 +250,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                 {targetReport?.address_hint || `Khu vực ngập [${(targetReport?.latitude ?? targetReport?.lat ?? 0).toFixed(4)}, ${(targetReport?.longitude ?? targetReport?.lng ?? 0).toFixed(4)}]`}
               </div>
               <div className="text-xs text-slate-600 space-y-1">
-                <div>Nhu cầu: <strong className="text-slate-900">{targetReport ? needType[targetReport.need_type] : 'Cứu trợ khẩn cấp'}</strong></div>
+                <div>Nhu cầu: <strong className="text-slate-900">{targetReport ? needType(targetReport.need_type).text : 'Cứu trợ khẩn cấp'}</strong></div>
                 <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport ? reportDepthCm(targetReport) : 0} cm</strong></div>
                 <div>Số người cần cứu: <strong className="text-slate-900">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
                 <div>Người liên hệ: <strong className="text-slate-900">{targetReport?.reporter_name} ({targetReport?.reporter_phone})</strong></div>
@@ -274,7 +274,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                   Phương tiện điều phối
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded font-bold bg-blue-100 text-blue-800">
-                  {assignedVehicle ? vehicleType[assignedVehicle.vehicle_type] : 'Xuồng cứu nạn'}
+                  {assignedVehicle ? vehicleType(assignedVehicle.vehicle_type) : 'Xuồng cứu nạn'}
                 </span>
               </div>
               <div className="text-sm font-bold text-slate-800">
@@ -428,7 +428,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                 className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
               >
                 <div>
-                  <span className="font-bold text-slate-800">{incidentType[inc.incident_type] || inc.incident_type}: </span>
+                  <span className="font-bold text-slate-800">{incidentType(inc.incident_type) || inc.incident_type}: </span>
                   <span className="text-slate-600">{inc.description}</span>
                   <div className="text-[11px] text-slate-400 mt-0.5">
                     Phương tiện: {inc.vehicle_id} • Thời gian: {new Date(inc.reported_at || inc.created_at).toLocaleTimeString('vi-VN')}

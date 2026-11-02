@@ -203,13 +203,13 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                           : 'bg-rose-100 text-rose-800'
                       }`}
                     >
-                      {vehicleStatus[v.status] || v.status}
+                      {vehicleStatus(v.status).text}
                     </span>
                   </div>
 
                   <h3 className="font-bold text-slate-900 text-base mb-1">{v.vehicle_name}</h3>
                   <div className="text-xs text-slate-500 mb-4">
-                    Loại: <strong>{vehicleType[v.vehicle_type] || v.vehicle_type}</strong>
+                    Loại: <strong>{vehicleType(v.vehicle_type) || v.vehicle_type}</strong>
                   </div>
 
                   <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
@@ -268,7 +268,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
-                      {isFull ? 'GẦN KÍN CHỖ' : shelterStatus[s.status] || s.status}
+                      {isFull ? 'GẦN KÍN CHỖ' : shelterStatus(s.status).text || s.status}
                     </span>
                   </div>
 
@@ -358,7 +358,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                             : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {gaugeAlertState[g.alert_state] || g.alert_state}
+                        {gaugeAlertState(g.alert_state).text}
                       </span>
                     </div>
 

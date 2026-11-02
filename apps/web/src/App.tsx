@@ -535,6 +535,7 @@ export const App: React.FC = () => {
                 vehicles={state.vehicles || []}
                 incidents={state.incidents || []}
                 zones={state.zones || []}
+                mapElement={mapEl}
                 onVerifyReport={handleVerifyReport}
                 onDispatchOrder={handleDispatchOrder}
                 onApproveReplan={handleApproveReplan}
