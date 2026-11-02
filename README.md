@@ -152,6 +152,7 @@ openagrios/
 
 ├── apps/
 │   ├── agriops/                  # AgriOps Core Engine: Nghiệp vụ Cơ giới hóa & Điều độ Cứu viện (Headless API)
+│   ├── twin3d/                   # Tầng 2 (ứng dụng 2): Bản đồ thu hoạch phẳng (MapLibre) + xem 3D (three.js) khi bấm vào máy/ruộng, phục vụ tại /twin/
 │   └── web/                      # Operations Portal: Giao diện Trải nghiệm & Điều hành Tác chiến H-P-D-I
 │       ├── src/components/auth/  # Đăng nhập OIDC Authorization Code + PKCE qua Keycloak
 │       ├── src/components/workspaces/ # [H] 5 Cockpit: FARMER, COORDINATOR, OPERATOR, MACHINE_OWNER, REPAIR_TEAM
@@ -416,9 +417,9 @@ SKIP_PYTHON=1 bash tests/run_unit_tests.sh   # chỉ phần Java, không cần D
 
 | Tầng | Số ca | Phạm vi |
 |---|---|---|
-| Java — [`tests/unit/`](tests/unit/) | 150 |
+| Java — [`tests/unit/`](tests/unit/) | 155 |
 | Web — [`apps/web/tests/`](apps/web/tests/fleetInsights.test.ts) (`npm test`) | 13 | Hướng chạy của máy (la bàn, bù góc xoay bản đồ, chống xoay do nhiễu GPS), KPI (bỏ ruộng bị Fog of War), phát hiện sự kiện từ thay đổi trạng thái | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
-| Game — [`apps/farm/tests/`](apps/farm/tests/) (`npm test`) | 41 | Bố cục thế giới (khoảng cách tối thiểu, không chồng ruộng, hướng bắc-nam), nén khoảng cách máy ở xa, giai đoạn cây trồng, ngày/đêm, nhiệm vụ suy ra từ trạng thái quy trình thật, camera chừa chỗ cho HUD |
+| Bản đồ & 3D — [`apps/twin3d/tests/`](apps/twin3d/tests/) (`npm test`) | 33 | Hình học trên mặt phẳng tiếp tuyến theo mét, cắt đa giác để tô đúng tỉ lệ diện tích đã gặt (kể cả thửa chữ L), hướng la bàn sang góc quay 3D, phép chiếu tile Web-Mercator và ngân sách ô, mặt trời/bầu trời, bộ làm mượt vị trí máy và suy ra hướng từ chuyển động, trạng thái cây trồng, các bước theo dõi tiến trình từ trạng thái quy trình thật, sắp xếp thẻ, màu ruộng |
 | Python — [`services/lake-archiver/tests/`](services/lake-archiver/tests/) | 42 | **DuckDB + Parquet thật** trên thư mục tạm: khử trùng lặp, epoch, cách ly tenant, tham số hóa SQL, Haversine, *offset chỉ commit sau khi ghi xong*, sự kiện hỏng không làm kẹt lô |
 | Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 29 |
 | Python — [`apps/traceability/tests/`](apps/traceability/tests/test_traceability.py) (Tầng 3) | 34 | Công thức băm (vector vàng chung với Java), phát hiện sửa/xóa/đảo bản ghi, chọn epoch mới nhất, che danh tính, chống XSS, kiểm tra mã lô | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
@@ -444,24 +445,40 @@ docker compose --profile demo up -d --build     # profile `demo` bật thêm thi
 
 Lưu ý trung thực: (1) thiết bị là **mô phỏng**, chạy time-lapse ×12 (`SIM_TIMELAPSE`) để chuyển động thấy được ở mức zoom 14; (2) nền bản đồ lấy tile OpenStreetMap nên cần Internet, mất mạng thì vẫn có nền xanh mặc định và dữ liệu trực tiếp vẫn cập nhật; (3) vùng “Hải Hậu (dữ liệu mẫu)” là dữ liệu cố định trong giao diện, không phải dữ liệu thật; (4) nông hộ và đội sửa chữa không thấy đội máy (Fog of War).
 
-### 8.0d. Tầng 2 (ứng dụng thứ hai) — Nông Trại Số
+### 8.0d. Tầng 2 (ứng dụng thứ hai) — Bản đồ thu hoạch có xem 3D
 
 ```bash
-docker compose --profile demo up -d --build      # rồi mở  http://localhost:9080/farm/
+docker compose --profile demo up -d --build      # rồi mở  http://localhost:9080/twin/
 ```
 
-Chọn nhân vật **Bác Ba** (nông hộ) để vào nông trại của bác: ruộng lúa lay động theo gió, máy gặt chạy theo vị trí thật, lúa vàng chuyển thành rạ theo tiến độ gặt, khói và tia lửa khi máy hỏng, đường cứu viện nhấp nháy, pháo giấy khi gặt xong, ban ngày/ban đêm có đèn pha, đom đóm, tiếng động cơ (âm thanh tổng hợp, mặc định tắt). Chọn **Chị Lan** (điều phối viên) để thấy cả 10 thửa và bấm **⚡ Sự kiện bất ngờ: máy hỏng**: kịch bản gọi API thật (báo sự cố → đề xuất máy thay → duyệt → máy thay tới ruộng).
+Đăng nhập bằng tài khoản thật qua biểu mẫu (không có nút chuyển vai nhanh; muốn xem vai khác thì đăng xuất và đăng nhập lại, ví dụ `coord_htx01` thấy toàn HTX, `farmer_ba` chỉ thấy thửa của hộ). Màn hình chính là **bản đồ phẳng** như ứng dụng theo dõi giao hàng: máy gặt là các marker chạy trực tiếp, ruộng tô màu theo giai đoạn lúa, bên trái là danh sách thẻ. **Bấm vào một máy hoặc ruộng** thì hiện thẻ chi tiết kèm nút **Xem 3D** để mở cảnh 3D của đúng đối tượng đó.
 
-| Yếu tố "game" | Dữ liệu thật phía sau |
+![Bản đồ phẳng](docs/assets/screenshots/twin-01-ban-do-phang.png)
+![Chọn một máy gặt](docs/assets/screenshots/twin-02-chon-may-gat.png)
+![Xem 3D máy gặt](docs/assets/screenshots/twin-03-xem-3d-may-gat.png)
+![Xem 3D thửa ruộng](docs/assets/screenshots/twin-04-xem-3d-thua-ruong.png)
+
+| Thứ nhìn thấy | Dữ liệu thật phía sau |
 |---|---|
-| Ruộng, giai đoạn lúa, thanh tiến độ | `fields`: `readiness_status`, `harvest_progress_pct` |
-| Máy gặt, hướng chạy, nhiên liệu, khói khi hỏng | `machines` (vị trí từ telemetry MQTT qua bản sao số) |
-| Nhiệm vụ ("Gọi máy gặt", "Xác nhận & chấm sao") | trạng thái yêu cầu dịch vụ (`service_requests`) và ca (`assignments`) |
-| Thông báo trượt vào | thay đổi trạng thái máy/nhiệm vụ giữa hai lần đọc |
-| Nút gọi máy / chấm sao | `POST /api/v1/requests`, `POST /api/v1/acceptances` (đúng RBAC, RLS và sổ cái của Tầng 1) |
-| Giờ trong ngày | đồng hồ mô phỏng; chế độ "ngày đêm tự chạy" và "ban đêm" chỉ để trang trí |
+| Ranh giới thửa ruộng, phần đã gặt (rạ) và còn đứng chia **đúng tỉ lệ diện tích** | `fields.polygon`, `harvest_progress_pct`, `readiness_status` |
+| Marker máy gặt chạy mượt, xoay theo hướng chạy, viền màu theo trạng thái | `machines.current_lat/lng`, `status` (telemetry MQTT qua bản sao số) |
+| Thanh tiến trình kiểu theo dõi đơn: Đã xếp ca, Đang gặt, Hoàn thành; yêu cầu: Đã gửi, Đã xếp máy, Đang gặt, Chờ nghiệm thu, Hoàn thành; đỏ khi có sự cố | `assignments.status`, `service_requests.status` |
+| Danh sách theo vai (máy gặt / ruộng / yêu cầu), máy cần chú ý xếp trước | Phản hồi `/api/v1/state` đã lọc RLS của Tầng 1 |
+| Thanh sự kiện | Thay đổi trạng thái máy giữa hai lần đọc |
+| Cảnh 3D: máy gặt, ruộng nổi khối, bóng đổ, đèn pha khi trời tối | Cùng dữ liệu trên; ánh sáng theo đồng hồ mô phỏng của nền tảng |
 
-Trung thực: hình ảnh do mã tự vẽ trên canvas (không dùng bộ ảnh ngoài); cây cối, mây, cối xay, đom đóm là trang trí; thiết bị trong bản demo là mô phỏng; chưa kiểm thử trên điện thoại thật (mới thử bằng Chrome không giao diện); nông hộ chỉ thấy thửa của mình vì RLS của Tầng 1. Mã dùng chung với cổng điều hành (`apps/web`) ở khách API, đăng nhập và các hàm thuần, nên hai ứng dụng cùng chạy trên một lõi.
+Mọi thao tác nghiệp vụ (tạo yêu cầu, xếp ca, báo sự cố, duyệt cứu viện, nghiệm thu) làm ở cổng điều hành `apps/web`; ứng dụng này chỉ đọc và hiển thị, nên không có nút "demo nhanh" nào.
+
+**Nền bản đồ.** Cả bản đồ phẳng và mặt đất 3D dùng tile OpenStreetMap do EOX phục vụ (cần Internet). Ở cảnh 3D, mặt đất ghép từ ba lớp tile (cả vùng, quanh cụm ruộng, quanh đối tượng đang xem), mỗi lớp có ngân sách ô riêng. Nếu tải được dưới một nửa số ô, cảnh 3D tự chuyển sang nền ngoại tuyến tự dựng và ghi rõ đó không phải bản đồ thật; ranh giới ruộng và vị trí máy vẫn là dữ liệu thật. Có thể đổi nguồn tile (ví dụ ảnh vệ tinh mà bên triển khai có giấy phép) bằng `VITE_BASEMAP_URL`, `VITE_BASEMAP_MAXZ`, `VITE_BASEMAP_ATTRIBUTION` lúc build cảnh 3D.
+
+**Trung thực:**
+- Thiết bị trong bản demo là **mô phỏng**, chạy tua nhanh nên máy di chuyển nhanh hơn máy thật.
+- Nền tảng **không báo hướng máy**: hướng được **suy ra** từ chuyển động giữa hai lần định vị (dịch chuyển dưới 1 m coi là nhiễu). Khi đứng yên, máy quay theo cạnh dài của thửa đang được giao.
+- Mô hình máy gặt 3D dựng từ khối hình học đúng kích thước (khoảng 8 m), là hình minh họa chứ không phải mô hình của hãng.
+- Tile OSM ở mức gần rất ít chi tiết vùng nông thôn và bị phóng to nên mờ; cảnh 3D không phải ảnh chụp thửa. Chưa kiểm chứng chế độ ngoại tuyến tại địa điểm chung kết (mới thử bằng cách chặn máy chủ tile).
+- Thửa của hộ khác bị ẩn theo RLS (phản hồi không có tọa độ) nên **không được vẽ**; màn hình chỉ ghi số thửa bị ẩn.
+- Dữ liệu mẫu cũ có đa giác lớn gấp ~20 lần diện tích khai báo; đã sửa ở `SpatialMatchingEngine.polygonForArea` kèm kiểm thử (mỗi thửa khớp diện tích khai báo trong ±2%, các thửa không chồng nhau). Panel ruộng hiển thị cả hai diện tích để bất nhất lộ ra thay vì bị che.
+- Chưa kiểm thử trên điện thoại thật (mới thử bằng Chrome với WebGL chạy bằng phần mềm).
 
 ### 8.0c. Tầng 3 — Truy xuất nguồn gốc lúa gạo
 

@@ -30,6 +30,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The demo device simulator (profile "demo") keeps moving machines; the telemetry assertions need a quiet twin
+docker compose -f compose.yaml --profile demo rm -sf device-simulator >/dev/null 2>&1 || true
 echo "[1/5] Building and starting all containers in detached mode..."
 docker compose -f compose.yaml up -d --build
 
@@ -135,6 +137,17 @@ else
     echo "[FAIL] Assertion 3: openagrios_app role permissions mismatch."
     exit 1
 fi
+
+# The gateway starts after its upstreams (core API, operations portal, 3D twin) are healthy: give it time to load its routes
+echo "Waiting for the APISIX gateway to serve the health route..."
+for i in {1..45}; do
+    if curl -s -f -m 5 http://localhost:9080/api/v1/health >/dev/null 2>&1; then
+        echo " -> APISIX gateway is routing!"
+        break
+    fi
+    echo " ... waiting for APISIX ($i/45)"
+    sleep 2
+done
 
 # Assertion 4: APISIX Gateway reverse proxy route
 GW_HEALTH=$(curl -s -f http://localhost:9080/api/v1/health)
@@ -775,34 +788,40 @@ docker compose -f compose.yaml start clamav >/dev/null 2>&1
 api POST /sim/reset '{}' >/dev/null
 echo "[PASS] Assertion 16: Malware gate verified (EICAR -> 422 + audit + nothing stored; clean -> 201; ClamAV down -> 503 fail-closed)."
 
-# Assertion 17: Tier-2 app #2 ("Nông Trại Số") is served by the gateway next to the operations portal
-echo "Verifying the farm game (Tier-2 app #2)..."
-FARM_HTML=$(curl -s -m 20 http://localhost:9080/farm/ || true)
-if ! echo "$FARM_HTML" | grep -q "Nông Trại Số" || ! echo "$FARM_HTML" | grep -q 'id="root"'; then
-    echo "[FAIL] Assertion 17: /farm/ did not return the farm game page."
+# Assertion 17: Tier-2 app #2 (3D digital twin) is served by the gateway next to the operations portal
+echo "Verifying the 3D digital twin (Tier-2 app #2)..."
+TWIN_HTML=$(curl -s -m 20 http://localhost:9080/twin/ || true)
+if ! echo "$TWIN_HTML" | grep -q "Bản sao số 3D" || ! echo "$TWIN_HTML" | grep -q 'id="root"'; then
+    echo "[FAIL] Assertion 17: /twin/ did not return the digital twin page."
     exit 1
 fi
-FARM_JS=$(echo "$FARM_HTML" | grep -oE '/farm/assets/[^"]+\.js' | head -1 || true)
-FARM_JS_CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}|%{content_type}' "http://localhost:9080$FARM_JS" || true)
-if [ -z "$FARM_JS" ] || [ "${FARM_JS_CODE%%|*}" != "200" ] || ! echo "$FARM_JS_CODE" | grep -qi javascript; then
-    echo "[FAIL] Assertion 17: the game bundle '$FARM_JS' is not served as JavaScript ($FARM_JS_CODE)."
+TWIN_JS=$(echo "$TWIN_HTML" | grep -oE '/twin/assets/[^"]+\.js' | head -1 || true)
+TWIN_JS_CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}|%{content_type}' "http://localhost:9080$TWIN_JS" || true)
+if [ -z "$TWIN_JS" ] || [ "${TWIN_JS_CODE%%|*}" != "200" ] || ! echo "$TWIN_JS_CODE" | grep -qi javascript; then
+    echo "[FAIL] Assertion 17: the twin bundle '$TWIN_JS' is not served as JavaScript ($TWIN_JS_CODE)."
     exit 1
 fi
-if ! curl -s -m 20 http://localhost:9080/farm/some/deep/link | grep -q "Nông Trại Số"; then
-    echo "[FAIL] Assertion 17: SPA fallback under /farm/ is broken."
+if ! curl -s -m 20 http://localhost:9080/twin/some/deep/link | grep -q "Bản sao số 3D"; then
+    echo "[FAIL] Assertion 17: SPA fallback under /twin/ is broken."
+    exit 1
+fi
+# imagery may come only from the one satellite tile host; nothing else is opened up
+TWIN_CSP=$(curl -s -m 20 -D - -o /dev/null http://localhost:9080/twin/ | grep -i '^content-security-policy' || true)
+if ! echo "$TWIN_CSP" | grep -qF "img-src 'self' data: blob: https://tiles.maps.eox.at" || echo "$TWIN_CSP" | grep -q "script-src[^;]*unsafe"; then
+    echo "[FAIL] Assertion 17: unexpected Content-Security-Policy on /twin/: $TWIN_CSP"
     exit 1
 fi
 PORTAL_HTML=$(curl -s -m 20 http://localhost:9080/ || true)
-if echo "$PORTAL_HTML" | grep -q "Nông Trại Số" || ! echo "$PORTAL_HTML" | grep -q 'id="root"'; then
-    echo "[FAIL] Assertion 17: the operations portal at / was shadowed by the farm route."
+if echo "$PORTAL_HTML" | grep -q "Bản sao số 3D" || ! echo "$PORTAL_HTML" | grep -q 'id="root"'; then
+    echo "[FAIL] Assertion 17: the operations portal at / was shadowed by the twin route."
     exit 1
 fi
-# the game only talks to the protected API: with no token the same data call is refused
+# the twin only talks to the protected API: with no token the same data call is refused
 if [ "$(curl -s -m 20 -o /dev/null -w '%{http_code}' http://localhost:9080/api/v1/state)" != "401" ]; then
     echo "[FAIL] Assertion 17: /api/v1/state is reachable without a token."
     exit 1
 fi
-echo "[PASS] Assertion 17: farm game served at /farm/ (bundle, SPA fallback), portal untouched at /, API still token-protected."
+echo "[PASS] Assertion 17: 3D digital twin served at /twin/ (bundle, SPA fallback, CSP), portal untouched at /, API still token-protected."
 
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

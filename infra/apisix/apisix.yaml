@@ -39,19 +39,19 @@ routes:
         key_type: var
         key: remote_addr
 
-  # 0c. Tier-2 app #2 ("Nông Trại Số"): static SPA under /farm/, no token needed to load the page (the API calls it makes are
+  # 0c. Tier-2 app #2 (3D digital twin): static SPA under /twin/, no token needed to load the page (the API calls it makes are
   #     protected by the normal OIDC route). Higher priority than the catch-all portal route.
-  - id: openagrios-farm-ui-route
-    name: "Farm game SPA"
+  - id: openagrios-twin-ui-route
+    name: "3D digital twin SPA"
     priority: 25
     uris:
-      - "/farm"
-      - "/farm/*"
+      - "/twin"
+      - "/twin/*"
     methods: ["GET", "HEAD", "OPTIONS"]
     upstream:
       type: roundrobin
       nodes:
-        "farm-app:80": 1
+        "twin-app:80": 1
 
   # 1. Public Discovery, Health, and Login Route (No Token Required)
   - id: openagrios-public-discovery-route

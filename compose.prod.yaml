@@ -128,7 +128,7 @@ services:
     restart: always
     ports: !reset []
 
-  farm-app:
+  twin-app:
     build:
       args:
         VITE_DEMO_MODE: "false"
