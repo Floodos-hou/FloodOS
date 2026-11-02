@@ -55,6 +55,7 @@ jobs:
         MQTT_DEVICE_PASSWORD=ci_test_mqtt_device_pw \
         MQTT_INGESTOR_PASSWORD=ci_test_mqtt_ingestor_pw \
         FLOODOS_INGEST_TOKEN=ci_test_ingest_token \
+        PUBLIC_BASE_URL=https://trace.example.test \
         docker compose -f compose.yaml -f compose.prod.yaml config --quiet
         echo "Production Docker Compose override validated successfully!"
 

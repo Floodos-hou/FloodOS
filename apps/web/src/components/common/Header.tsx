@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
-import { ShieldCheck, LogOut, Clock, RotateCcw, FastForward, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, LogOut, Clock, RotateCcw, FastForward, ChevronDown, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { orgLabel, roleLabel, shortName } from '../../utils/labels';
 import { FloodOsLogo } from './FloodOsLogo';
 
@@ -13,18 +13,22 @@ interface HeaderProps {
   onReset: () => void;
   onOpenProofInspector: () => void;
   onSwitchPersona?: (username: string) => Promise<void>;
-  /** Coordinator/admin only: simulation clock and access inspector */
+  /** Staff only: simulation clock and reset */
   showStaffTools: boolean;
-  /** Display name of the user's cooperative (from live state) */
+  /** Display name of the user's cooperative/organization */
   orgName?: string;
+  isStale?: boolean;
 }
 
 const DELEGATION_PROFILES = [
-  { username: 'farmer_ba', name: 'Bác Ba', role: 'FARMER', label: 'Nông hộ (Chủ ruộng F01, F03, F07)', icon: '🌾' },
-  { username: 'coord_htx01', name: 'Chị Lan', role: 'COORDINATOR', label: 'Chỉ huy Điều phối HTX Thới Lai', icon: '🚜' },
-  { username: 'op_minh', name: 'Anh Minh', role: 'OPERATOR', label: 'Kỹ thuật Vận hành máy gặt M01', icon: '⚙️' },
-  { username: 'owner_tu', name: 'Chú Tư', role: 'MACHINE_OWNER', label: 'Chủ sở hữu Đoàn máy Cơ giới', icon: '🔧' },
-  { username: 'repair_01', name: 'Đội 01', role: 'REPAIR_TEAM', label: 'Trạm Cứu viện Kỹ thuật Cơ động', icon: '🛠️' },
+  { username: 'dispatcher_hoa', name: 'Chị Hoa', role: 'DISPATCHER', label: 'Ban Chỉ huy PCTT Hà Nội (Điều phối)', icon: '👩‍💼' },
+  { username: 'reporter_lan', name: 'Chị Lan', role: 'REPORTER', label: 'Người dân vùng ven sông (Báo tin)', icon: '🙋‍♀️' },
+  { username: 'reporter_hung', name: 'Anh Hùng', role: 'REPORTER', label: 'Người dân cụm dân cư B (Báo tin)', icon: '👨‍💼' },
+  { username: 'team_cuong', name: 'Anh Cường', role: 'FIELD_TEAM', label: 'Đội trưởng Cơ động 02 (Xuồng V02)', icon: '🧑‍🚒' },
+  { username: 'team_binh', name: 'Anh Bình', role: 'FIELD_TEAM', label: 'Đội trưởng Xuồng 01 (Chi viện)', icon: '👷' },
+  { username: 'team_dung', name: 'Anh Dũng', role: 'FIELD_TEAM', label: 'Đội trưởng Bơm tiêu úng 03', icon: '🧑‍🔧' },
+  { username: 'resource_giang', name: 'Chị Giang', role: 'RESOURCE_MANAGER', label: 'Quản lý Nguồn lực & Sửa chữa', icon: '📋' },
+  { username: 'platform_admin', name: 'Admin', role: 'PLATFORM_ADMIN', label: 'Quản trị Nền tảng (Sổ cái SHA-256)', icon: '🛡️' },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSwitchPersona,
   showStaffTools,
   orgName,
+  isStale = false,
 }) => {
   const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -63,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white shadow-xl border-b border-emerald-700/60 backdrop-blur-md">
+    <header className="sticky top-0 z-30 bg-gradient-to-r from-slate-950 via-sky-950 to-blue-950 text-white shadow-xl border-b border-sky-800/60 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         {/* Brand with Official Repo Logo */}
         <div className="flex min-w-0 items-center gap-3">
@@ -71,19 +76,19 @@ export const Header: React.FC<HeaderProps> = ({
             size={42}
             showText={true}
             textVariant="white"
-            subtitle="Cổng Điều Hành Nông Nghiệp Mở"
+            subtitle="Hệ Thống Điều Hành Ứng Phó Ngập Lụt — Thí điểm Hà Nội"
           />
         </div>
 
         {/* Tactical Simulation Clock Controls */}
         {showStaffTools && (
           <div
-            className="hidden items-center gap-2 rounded-xl border border-emerald-600/80 bg-emerald-950/80 px-3.5 py-1.5 text-xs shadow-inner xl:flex"
-            title="Đồng hồ điều hành thời gian thực nghiệm"
+            className="hidden items-center gap-2 rounded-xl border border-sky-700/80 bg-slate-900/80 px-3.5 py-1.5 text-xs shadow-inner xl:flex"
+            title="Đồng hồ điều hành tác chiến"
           >
-            <Clock aria-hidden="true" className="h-4 w-4 text-amber-300 animate-pulse" />
-            <span className="whitespace-nowrap font-medium text-emerald-200">Giờ thực nghiệm:</span>
-            <span className="whitespace-nowrap rounded-md bg-emerald-900/90 border border-emerald-700/60 px-2.5 py-0.5 font-mono font-bold text-amber-300">
+            <Clock aria-hidden="true" className="h-4 w-4 text-cyan-300 animate-pulse" />
+            <span className="whitespace-nowrap font-medium text-sky-200">Giờ tác chiến:</span>
+            <span className="whitespace-nowrap rounded-md bg-slate-800 border border-sky-700/60 px-2.5 py-0.5 font-mono font-bold text-amber-300">
               {simTime
                 ? new Date(simTime).toLocaleString('vi-VN', {
                     hour: '2-digit',
@@ -96,149 +101,117 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <button
               type="button"
-              onClick={onTick}
-              title="Tiến thêm 30 phút"
-              aria-label="Tiến thêm 30 phút"
-              className="rounded-lg p-1.5 text-emerald-100 hover:bg-emerald-700 hover:text-white transition flex items-center gap-1 font-semibold text-[11px]"
-            >
-              <FastForward aria-hidden="true" className="h-3.5 w-3.5" />
-              <span>+30m</span>
-            </button>
-            <button
-              type="button"
               onClick={onReset}
-              title="Đặt lại dữ liệu mẫu mặc định"
-              aria-label="Đặt lại dữ liệu mẫu mặc định"
-              className="rounded-lg p-1.5 text-emerald-200 hover:bg-emerald-700 hover:text-white transition"
+              className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-slate-300 hover:bg-slate-700 hover:text-white transition"
+              title="Khôi phục trạng thái mô phỏng ban đầu"
             >
-              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+              <RotateCcw className="h-3 w-3" />
+              <span>Reset</span>
             </button>
           </div>
         )}
 
-        {/* User Identity & Executive Dropdown */}
-        {user && (
-          <div className="relative flex min-w-0 items-center gap-2.5" ref={menuRef}>
-            {/* User Profile Trigger Button */}
+        {/* Right Section: Identity & Actions */}
+        <div className="flex items-center gap-2.5">
+          {/* Stale Warning Indicator */}
+          {isStale && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-300 border border-amber-500/40 animate-pulse">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Dữ liệu lưu tạm
+            </span>
+          )}
+
+          {/* User Profile & Demo Switcher */}
+          <div className="relative" ref={menuRef}>
             <button
               type="button"
               onClick={() => setProfileOpen(!profileOpen)}
-              className="flex items-center gap-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-1.5 text-left transition shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="flex items-center gap-2 rounded-xl bg-slate-900/90 border border-sky-700/70 px-3 py-1.5 text-left text-sm hover:bg-slate-800 transition shadow"
               aria-expanded={profileOpen}
               aria-haspopup="true"
             >
-              <div className="h-8 w-8 rounded-xl bg-emerald-700 border border-emerald-500/60 flex items-center justify-center font-bold text-sm text-amber-200 shadow-inner">
-                {user.full_name?.charAt(0) || 'U'}
+              <div className="hidden sm:block">
+                <div className="font-bold text-white leading-tight">{shortName(user?.full_name, user?.username)}</div>
+                <div className="text-[11px] text-cyan-300 font-medium">{roleLabel(user?.role)}</div>
               </div>
-              <div className="hidden sm:block text-right">
-                <div className="flex items-center gap-1.5 justify-end">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <p className="truncate text-xs font-bold text-white tracking-wide max-w-[10rem]">
-                    {shortName(user.full_name)}
-                  </p>
-                </div>
-                <p className="truncate text-[11px] text-emerald-200 font-medium">
-                  {roleLabel(user.role)}
-                </p>
-              </div>
-              <ChevronDown className={`h-4 w-4 text-emerald-200 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className="h-4 w-4 text-sky-300 shrink-0" />
             </button>
 
-            {/* Profile Popover / Delegation Menu */}
             {profileOpen && (
-              <div className="absolute right-0 top-14 w-80 rounded-2xl bg-white text-slate-800 shadow-2xl border border-slate-200 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                {/* User Info Header */}
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-bold text-base shadow">
-                      {user.full_name?.charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-900">{user.full_name}</p>
-                      <p className="truncate text-xs text-slate-500 font-medium">
-                        {orgLabel(orgName || user.organization_name, user.organization_id)}
-                      </p>
-                    </div>
+              <div
+                className="absolute right-0 mt-2 w-80 rounded-2xl bg-white p-3 text-slate-900 shadow-2xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-150"
+                role="menu"
+              >
+                <div className="border-b border-slate-100 pb-2.5 px-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Tài khoản đang đăng nhập</div>
+                  <div className="font-bold text-slate-900 mt-1">{user?.full_name || user?.username}</div>
+                  <div className="inline-block rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs font-semibold mt-1">
+                    {roleLabel(user?.role)}
                   </div>
-                  <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
-                    <span className="rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
-                      {roleLabel(user.role)}
-                    </span>
-                    <span className="text-slate-400 font-mono text-[11px]">OIDC / PKCE Active</span>
-                  </div>
+                  <div className="text-xs text-slate-500 mt-1">Đơn vị: {orgLabel(orgName, user?.organization_id)}</div>
                 </div>
 
-                {/* Delegation / Persona Switcher Section */}
-                <div className="mt-3">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
-                    Ủy quyền & Đổi Phiên Tác chiến:
-                  </p>
-                  <div className="space-y-1">
+                <div className="pt-2.5 px-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Chuyển nhanh tài khoản demo
+                  </div>
+                  <div className="space-y-1 max-h-56 overflow-y-auto">
                     {DELEGATION_PROFILES.map((p) => {
-                      const isCurrent = user.username === p.username;
+                      const isCurrent = p.username === user?.username;
+                      const isWorking = switching === p.username;
                       return (
                         <button
                           key={p.username}
                           type="button"
                           onClick={() => handleSwitch(p.username)}
-                          disabled={isCurrent || switching !== null}
-                          className={`w-full flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                          disabled={isCurrent || !!switching}
+                          className={`w-full flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-xs transition ${
                             isCurrent
-                              ? 'bg-emerald-50 text-emerald-900 font-bold border border-emerald-200'
-                              : 'text-slate-700 hover:bg-slate-100'
+                              ? 'bg-sky-50 text-sky-900 font-semibold border border-sky-200'
+                              : 'hover:bg-slate-100 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-base shrink-0">{p.icon}</span>
                             <div className="truncate">
-                              <span className="font-bold text-slate-900">{p.name}</span>
-                              <span className="block text-[11px] text-slate-500 truncate">{p.label}</span>
+                              <div className="font-medium text-slate-900 truncate">{p.name}</div>
+                              <div className="text-[11px] text-slate-500 truncate">{p.label}</div>
                             </div>
                           </div>
-                          {isCurrent && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 ml-1" />}
-                          {switching === p.username && (
-                            <span className="text-[10px] text-amber-600 font-semibold animate-pulse shrink-0">
-                              Đang chuyển...
-                            </span>
-                          )}
+                          {isCurrent && <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />}
+                          {isWorking && <span className="text-[10px] text-amber-600 animate-pulse shrink-0">Đang đổi…</span>}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Footer Tools & Logout */}
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                  {showStaffTools && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileOpen(false);
-                        onOpenProofInspector();
-                      }}
-                      className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                    >
-                      <ShieldCheck className="h-4 w-4 text-emerald-700" />
-                      <span>Thanh tra Quyền</span>
-                    </button>
-                  )}
+                <div className="mt-3 border-t border-slate-100 pt-2 flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      onOpenProofInspector();
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-700 hover:text-sky-900"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span>Kiểm tra JWT</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => logout()}
-                    className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-800"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut className="h-3.5 w-3.5" />
                     <span>Đăng xuất</span>
                   </button>
                 </div>
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
-
-      {/* Decorative Golden Agricultural Ribbon */}
-      <div className="h-1 bg-gradient-to-r from-amber-400 via-emerald-400 to-amber-400 opacity-80" aria-hidden="true" />
     </header>
   );
 };

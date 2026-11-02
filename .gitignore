@@ -25,6 +25,7 @@ Thumbs.db
 logs/
 temp/
 tmp/
+scratch/
 
 # Competition proposals & internal design documents (prevent leak)
 *.docx
@@ -33,8 +34,8 @@ FloodOS_De_xuat*
 FloodOS_Ke_hoach*
 
 # Postman local app workspace caches
-.postman/
-postman/
+/.postman/
+/postman/
 tests/postman/postman/
 tests/postman/.postman/
 

@@ -63,7 +63,8 @@ export function fieldColor(readiness: string, blocked: boolean): string {
   }
 }
 
-export function ageText(iso: string, now: number): string {
+export function ageText(iso: string | undefined | null, now: number): string {
+  if (!iso) return 'không rõ';
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return 'không rõ';
   const s = Math.max(0, Math.round((now - t) / 1000));

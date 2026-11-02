@@ -2,11 +2,10 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { DispatchAssignment, FieldPlot, HarvesterMachine } from '../../types';
-import { computeKpis } from '../../utils/fleetInsights';
+import type { TacticalState } from '../../types';
+import { Waves, AlertTriangle, ShieldCheck, Ship, Home, Activity } from 'lucide-react';
 
-/** Eases a displayed number towards its target (skipped when the user prefers reduced motion). */
-function useCountUp(target: number, ms = 700): number {
+function useCountUp(target: number, ms = 600): number {
   const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [value, setValue] = useState(target);
   const from = useRef(target);
@@ -32,62 +31,111 @@ function useCountUp(target: number, ms = 700): number {
 const Card: React.FC<{
   label: string;
   value: number;
-  decimals?: number;
   suffix?: string;
   sub?: string;
   tone: 'green' | 'amber' | 'red' | 'blue' | 'slate';
   alert?: boolean;
-  bar?: number;
-}> = ({ label, value, decimals = 0, suffix = '', sub, tone, alert, bar }) => {
+  icon: React.ReactNode;
+}> = ({ label, value, suffix = '', sub, tone, alert, icon }) => {
   const shown = useCountUp(value);
   const ring: Record<string, string> = {
-    green: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-    amber: 'border-amber-300 bg-amber-50 text-amber-900',
-    red: 'border-red-400 bg-red-50 text-red-900',
-    blue: 'border-sky-300 bg-sky-50 text-sky-900',
-    slate: 'border-slate-300 bg-white text-slate-800',
+    green: 'border-emerald-300 bg-emerald-50 text-emerald-950',
+    amber: 'border-amber-300 bg-amber-50 text-amber-950',
+    red: 'border-red-400 bg-red-50 text-red-950 ring-2 ring-red-300',
+    blue: 'border-sky-300 bg-sky-50 text-sky-950',
+    slate: 'border-slate-300 bg-white text-slate-900',
   };
-  const fill: Record<string, string> = {
-    green: 'bg-emerald-500',
-    amber: 'bg-amber-500',
-    red: 'bg-red-500',
-    blue: 'bg-sky-500',
-    slate: 'bg-slate-500',
-  };
+
   return (
-    <div className={`relative overflow-hidden rounded-2xl border px-4 py-3 shadow-sm ${ring[tone]} ${alert ? 'kpi-alert' : ''}`}>
-      <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">{label}</div>
-      <div className="mt-0.5 text-3xl font-extrabold tabular-nums leading-none">
-        {shown.toFixed(decimals)}
-        <span className="ml-0.5 text-base font-bold opacity-70">{suffix}</span>
+    <div className={`relative overflow-hidden rounded-2xl border px-3.5 py-2.5 shadow-sm transition ${ring[tone]} ${alert ? 'animate-pulse' : ''}`}>
+      <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider opacity-75">
+        <span>{label}</span>
+        <span className="opacity-80">{icon}</span>
       </div>
-      {sub && <div className="mt-1 text-xs opacity-75">{sub}</div>}
-      {bar !== undefined && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
-          <div className={`h-full rounded-full transition-all duration-700 ${fill[tone]}`} style={{ width: `${Math.max(0, Math.min(100, bar))}%` }} />
-        </div>
-      )}
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-2xl font-black tabular-nums leading-none">
+          {Math.round(shown)}
+        </span>
+        {suffix && <span className="text-sm font-semibold opacity-80">{suffix}</span>}
+      </div>
+      {sub && <div className="mt-1 text-[11px] font-medium opacity-80 truncate">{sub}</div>}
     </div>
   );
 };
 
-interface Props {
-  machines: HarvesterMachine[];
-  fields: FieldPlot[];
-  assignments: DispatchAssignment[];
-}
+export const FleetKpiStrip: React.FC<{ state: TacticalState }> = ({ state }) => {
+  const reports = state.reports || [];
+  const orders = state.orders || [];
+  const vehicles = state.vehicles || [];
+  const incidents = state.incidents || [];
+  const shelters = state.shelters || [];
+  const gauges = state.gauges || [];
 
-/** Headline numbers above the map. Hidden for roles that see no fleet and no fields. */
-export const FleetKpiStrip: React.FC<Props> = ({ machines, fields, assignments }) => {
-  const k = useMemo(() => computeKpis(machines, fields, assignments), [machines, fields, assignments]);
-  if (k.machines === 0 && fields.length === 0) return null;
+  const urgentReports = reports.filter((r) => r.priority === 'URGENT' || r.status === 'RECEIVED').length;
+  const activeOrders = orders.filter((o) => o.status === 'IN_PROGRESS').length;
+  const idleVehicles = vehicles.filter((v) => v.status === 'IDLE').length;
+  const brokenVehicles = vehicles.filter((v) => v.status === 'BREAKDOWN').length;
+  const warnGauges = gauges.filter((g) => g.alert_state === 'WARNING' || g.alert_state === 'CRITICAL').length;
+  const totalSheltered = shelters.reduce((sum, s) => sum + (s.occupancy || 0), 0);
+  const totalCapacity = shelters.reduce((sum, s) => sum + (s.capacity || 0), 0);
+
   return (
-    <section aria-label="Chỉ số tổng quan" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-      <Card label="Máy đang gặt" value={k.working} sub={`trên tổng ${k.machines} máy`} tone="green" bar={k.machines ? (k.working / k.machines) * 100 : 0} />
-      <Card label="Máy gặp sự cố" value={k.broken} sub={k.broken ? 'cần máy thay thế' : 'không có sự cố'} tone={k.broken ? 'red' : 'slate'} alert={k.broken > 0} />
-      <Card label="Nhiên liệu trung bình" value={k.avgFuelPct} decimals={1} suffix="%" sub={k.lowFuel ? `${k.lowFuel} máy sắp hết` : 'mức nhiên liệu ổn'} tone={k.lowFuel ? 'amber' : 'blue'} bar={k.avgFuelPct} />
-      <Card label="Tiến độ thu hoạch" value={k.avgHarvestPct} decimals={1} suffix="%" sub="trung bình các thửa" tone="amber" bar={k.avgHarvestPct} />
-      <Card label="Ca đang chạy" value={k.activeShifts} sub={`${k.idle} máy sẵn sàng`} tone="blue" />
-    </section>
+    <aside aria-label="Tổng quan tác chiến ứng phó ngập" className="space-y-2">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+        <Card
+          label="Tin khẩn cấp"
+          value={urgentReports}
+          tone={urgentReports > 0 ? 'red' : 'slate'}
+          alert={urgentReports > 0}
+          icon={<AlertTriangle className="h-4 w-4 text-red-600" />}
+          sub={urgentReports > 0 ? 'Cần xử lý ngay' : 'Đã xác minh'}
+        />
+
+        <Card
+          label="Ca đang xử lý"
+          value={activeOrders}
+          tone={activeOrders > 0 ? 'blue' : 'slate'}
+          icon={<Ship className="h-4 w-4 text-sky-600" />}
+          sub={`${orders.length} lệnh tổng số`}
+        />
+
+        <Card
+          label="Xe sẵn sàng"
+          value={idleVehicles}
+          suffix={`/${vehicles.length}`}
+          tone={brokenVehicles > 0 ? 'amber' : 'green'}
+          alert={brokenVehicles > 0}
+          icon={<Activity className="h-4 w-4 text-emerald-600" />}
+          sub={brokenVehicles > 0 ? `Có ${brokenVehicles} xe gặp sự cố` : 'Nguồn lực đầy đủ'}
+        />
+
+        <Card
+          label="Trạm đo báo động"
+          value={warnGauges}
+          suffix={`/${gauges.length}`}
+          tone={warnGauges > 0 ? 'red' : 'green'}
+          icon={<Waves className="h-4 w-4 text-cyan-600" />}
+          sub={warnGauges > 0 ? 'Vượt ngưỡng an toàn' : 'Mực nước bình thường'}
+        />
+
+        <Card
+          label="Người tại điểm trú"
+          value={totalSheltered}
+          suffix={`/${totalCapacity}`}
+          tone="slate"
+          icon={<Home className="h-4 w-4 text-amber-600" />}
+          sub={`${shelters.length} điểm sơ tán mở`}
+        />
+
+        <Card
+          label="Kiểm toán SHA-256"
+          value={state.audit_chain_proof?.total_blocks || state.chain_proof?.total_blocks || state.audit_logs?.length || 0}
+          suffix=" khối"
+          tone="green"
+          icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
+          sub={(state.audit_chain_proof?.chain_valid ?? state.chain_proof?.chain_valid) !== false ? 'Chuỗi băm toàn vẹn' : 'Lỗi chuỗi băm'}
+        />
+      </div>
+    </aside>
   );
 };

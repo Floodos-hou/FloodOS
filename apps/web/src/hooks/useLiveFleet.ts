@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
 import type { HarvesterMachine } from '../types';
 
-/** One machine as reported by the NGSI-LD digital twin (fed by MQTT telemetry). */
+/** One vehicle as reported by the NGSI-LD digital twin (fed by MQTT telemetry). */
 export interface LiveMachine {
   machine_id: string;
   lat: number;
@@ -29,13 +29,21 @@ export interface LiveFleetInfo {
 }
 
 const POLL_MS = 2_000;
-/** A machine counts as "live" while its position changed this recently. */
+/** A vehicle counts as "live" while its position changed this recently. */
 export const LIVE_WINDOW_MS = 8_000;
 const MAX_TRAIL_POINTS = 60;
 /** Ignore GPS jitter below ~0.5 m when extending a trail. */
 const MIN_STEP_DEG = 0.000005;
 
-const ROLES_WITH_TWIN = new Set(['COORDINATOR', 'MACHINE_OWNER', 'OPERATOR', 'PLATFORM_ADMIN']);
+const ROLES_WITH_TWIN = new Set([
+  'DISPATCHER',
+  'COORDINATOR',
+  'FIELD_TEAM',
+  'RESOURCE_MANAGER',
+  'PLATFORM_ADMIN',
+  'MACHINE_OWNER',
+  'OPERATOR',
+]);
 
 type Trails = Record<string, [number, number][]>;
 
@@ -54,9 +62,8 @@ interface Snapshot {
 const EMPTY: Snapshot = { key: '', live: {}, trails: {}, movedAt: {}, lastMoveAt: null, lastPollAt: null, connected: false, error: null };
 
 /**
- * Polls the digital-twin endpoint every couple of seconds and keeps a short trail per machine.
- * Only roles that the API allows to read machine entities are polled (farmers and repair crews are
- * deliberately blind to the fleet: Fog of War), and polling pauses while the browser tab is hidden.
+ * Polls the digital-twin endpoint every couple of seconds and keeps a short trail per vehicle.
+ * Only roles that the API allows to read vehicle entities are polled.
  */
 export function useLiveFleet(token: string | null, role: string | undefined) {
   const allowed = !!token && !!role && ROLES_WITH_TWIN.has(role);
@@ -88,8 +95,8 @@ export function useLiveFleet(token: string | null, role: string | undefined) {
               machine_id: id,
               lng: Number(coords[0]),
               lat: Number(coords[1]),
-              fuel_pct: Number(e.fuelLevel?.value ?? 0),
-              status: String(e.status?.value ?? 'IDLE'),
+              fuel_pct: Number(e.fuelLevel?.value ?? e.fuelPercent?.value ?? 0),
+              status: String(e.status?.value ?? 'AVAILABLE'),
             };
             live[id] = m;
             const before = prev.live[id];
@@ -149,12 +156,23 @@ export function useLiveFleet(token: string | null, role: string | undefined) {
   return { live: view.live, trails: view.trails, info };
 }
 
-/** Overlays live twin positions and fuel on the (slower) tactical-state machine list. */
-export function mergeLive(machines: HarvesterMachine[], live: Record<string, LiveMachine>): HarvesterMachine[] {
-  if (Object.keys(live).length === 0) return machines;
-  return machines.map((m) => {
-    const l = live[m.machine_id];
-    if (!l) return m;
-    return { ...m, current_lat: l.lat, current_lng: l.lng, fuel_pct: l.fuel_pct };
+/** Overlays live twin positions and fuel on the (slower) tactical-state vehicle list. */
+export function mergeLive<T extends { machine_id?: string; vehicle_id?: string; current_lat?: number; current_lng?: number; fuel_pct?: number; fuel_percent?: number }>(
+  vehicles: T[],
+  live: Record<string, LiveMachine>
+): T[] {
+  if (Object.keys(live).length === 0) return vehicles;
+  return vehicles.map((v) => {
+    const id = v.vehicle_id || v.machine_id;
+    if (!id) return v;
+    const l = live[id];
+    if (!l) return v;
+    return {
+      ...v,
+      current_lat: l.lat,
+      current_lng: l.lng,
+      fuel_pct: l.fuel_pct,
+      fuel_percent: l.fuel_pct,
+    };
   });
 }
