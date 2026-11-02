@@ -49,6 +49,13 @@ final class SecurityTests {
             equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", ImmutableAuditLedger.sha256Hex("abc"), "abc");
             equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", ImmutableAuditLedger.sha256Hex(""), "empty");
         });
+        test("hash formula matches the golden vector shared with the independent Python verifier", () -> {
+            // services/traceability/tests/test_traceability.py asserts the very same raw string and digest
+            String raw = String.join("|", ImmutableAuditLedger.GENESIS_HASH, "1", "EVT-2026-0001", "HTX_CANTHO_01",
+                    "CORR-GOLDEN-F03", "ServiceRequest", "REQ-03", "CREATE_SERVICE_REQUEST", "usr_farmer_ba", "FARMER",
+                    "2026-11-20T09:15:00Z", "{\"status\":\"NEW\"}", "{\"a\":1,\"b\":\"x\"}");
+            equal("c1f69f41b8d35d0e68a8e616f9ab5bd4b903fb9f1b2630607724a84c2d0337c4", ImmutableAuditLedger.sha256Hex(raw), "golden digest");
+        });
         test("empty ledger verifies and reports the genesis hash", () -> {
             Map<String, Object> proof = new ImmutableAuditLedger().verifyChainIntegrity();
             equal(Boolean.TRUE, proof.get("chain_valid"), "valid");
