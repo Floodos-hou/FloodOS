@@ -18,6 +18,7 @@ import {
 } from '../../utils/labels';
 import { Modal } from '../common/Modal';
 import { StatusBadge } from '../common/StatusBadge';
+import { isActiveDispatchOrder, reportDepthCm, reportPeopleAffected } from '../../utils/workflowRules';
 import {
   AlertOctagon,
   Camera,
@@ -41,7 +42,18 @@ interface FieldTeamWorkspaceProps {
   orders: DispatchOrder[];
   reports: FloodReport[];
   incidents: FieldIncident[];
-  onUpdateOrderStatus: (orderId: string, status: DispatchOrderStatus, notes?: string) => Promise<void>;
+  onUpdateOrderStatus: (
+    orderId: string,
+    status: DispatchOrderStatus,
+    payload?: {
+      progress_pct?: number;
+      note?: string;
+      outcome?: 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED' | string;
+      final_depth_cm?: number;
+      evidence_filename?: string;
+      evidence_data_url?: string;
+    } | string
+  ) => Promise<void>;
   onReportIncident: (data: {
     order_id: string;
     vehicle_id: string;
@@ -79,8 +91,8 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
   // Team orders
   const teamOrders = orders.filter((o) => !myTeam || o.team_id === myTeam.team_id);
   const activeOrder =
-    teamOrders.find((o) => ['DISPATCHED', 'EN_ROUTE', 'ON_SCENE'].includes(o.status)) ||
-    orders.find((o) => ['DISPATCHED', 'EN_ROUTE', 'ON_SCENE'].includes(o.status));
+    teamOrders.find((o) => isActiveDispatchOrder(o.status)) ||
+    orders.find((o) => isActiveDispatchOrder(o.status));
 
   const targetReport = reports.find((r) => r.report_id === activeOrder?.report_id);
   const assignedVehicle = vehicles.find((v) => v.vehicle_id === activeOrder?.vehicle_id);
@@ -100,16 +112,25 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
 
   // Complete modal state
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [completionNotes, setCompletionNotes] = useState('Đã tiếp cận, đưa 3 người dân và 1 trẻ nhỏ đến điểm sơ tán an toàn.');
+  const [compOutcome, setCompOutcome] = useState<'RESOLVED' | 'PARTIAL' | 'UNRESOLVED'>('RESOLVED');
+  const [compFinalDepth, setCompFinalDepth] = useState<number>(0);
+  const [completionNotes, setCompletionNotes] = useState('Đã tiếp cận hiện trường, hỗ trợ đưa người dân đến điểm sơ tán an toàn.');
   const [isCompleting, setIsCompleting] = useState(false);
 
+  // Field progress update state
+  const [interimProgress, setInterimProgress] = useState<number>(50);
+  const [interimNote, setInterimNote] = useState<string>('');
+
   // Advance status handler
-  const handleAdvanceStatus = async (nextStatus: DispatchOrderStatus, notes?: string) => {
+  const handleAdvanceStatus = async (
+    nextStatus: DispatchOrderStatus,
+    payload?: { progress_pct?: number; note?: string } | string
+  ) => {
     if (!activeOrder) return;
     setIsUpdatingStatus(true);
     setStatusError(null);
     try {
-      await onUpdateOrderStatus(activeOrder.order_id, nextStatus, notes);
+      await onUpdateOrderStatus(activeOrder.order_id, nextStatus, payload);
     } catch (err: unknown) {
       setStatusError(err instanceof Error ? err.message : 'Cập nhật trạng thái tác chiến thất bại.');
     } finally {
@@ -153,9 +174,19 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
   const handleCompleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeOrder) return;
+    if (completionNotes.trim().length < 3) {
+      setStatusError('Báo cáo hoàn tất yêu cầu ghi rõ kết quả (ít nhất 3 ký tự).');
+      return;
+    }
     setIsCompleting(true);
     try {
-      await onUpdateOrderStatus(activeOrder.order_id, 'RESOLVED', completionNotes);
+      await onUpdateOrderStatus(activeOrder.order_id, 'COMPLETED', {
+        progress_pct: 100,
+        outcome: compOutcome,
+        final_depth_cm: compFinalDepth,
+        note: completionNotes.trim(),
+        evidence_data_url: photoPreview || undefined,
+      });
       setIsCompleteModalOpen(false);
     } catch (err: unknown) {
       setStatusError(err instanceof Error ? err.message : 'Hoàn tất nhiệm vụ thất bại.');
@@ -220,8 +251,8 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
               </div>
               <div className="text-xs text-slate-600 space-y-1">
                 <div>Nhu cầu: <strong className="text-slate-900">{targetReport ? needType[targetReport.need_type] : 'Cứu trợ khẩn cấp'}</strong></div>
-                <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport?.flood_depth_cm || 0} cm</strong></div>
-                <div>Số người cần cứu: <strong className="text-slate-900">{targetReport?.people_count || 1} người</strong></div>
+                <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport ? reportDepthCm(targetReport) : 0} cm</strong></div>
+                <div>Số người cần cứu: <strong className="text-slate-900">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
                 <div>Người liên hệ: <strong className="text-slate-900">{targetReport?.reporter_name} ({targetReport?.reporter_phone})</strong></div>
               </div>
               {targetReport && onSelectReport && (
@@ -278,52 +309,98 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
               Cập nhật tiến độ ca tác chiến:
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {activeOrder.status === 'DISPATCHED' && (
-                <button
-                  type="button"
-                  disabled={isUpdatingStatus}
-                  onClick={() => handleAdvanceStatus('EN_ROUTE', 'Đội đã nhận lệnh và bắt đầu di chuyển về hướng mục tiêu.')}
-                  className="py-4 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  <Navigation className="w-5 h-5 animate-bounce" />
-                  Bắt Đầu Di Chuyển (EN_ROUTE)
-                </button>
-              )}
+            <div className="space-y-4">
+              {/* Progress visual bar */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Tiến độ ca tác chiến hiện tại:</span>
+                  <span className="text-blue-700 text-sm">{Math.round(activeOrder.progress_pct || 0)}%</span>
+                </div>
+                <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(5, Math.min(100, activeOrder.progress_pct || 0))}%` }}
+                  />
+                </div>
+              </div>
 
-              {activeOrder.status === 'EN_ROUTE' && (
-                <button
-                  type="button"
-                  disabled={isUpdatingStatus}
-                  onClick={() => handleAdvanceStatus('ON_SCENE', 'Đã tiếp cận khu vực ngập lụt, triển khai phao và xuồng.')}
-                  className="py-4 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  <MapPin className="w-5 h-5" />
-                  Đã Đến Hiện Trường (ON_SCENE)
-                </button>
-              )}
+              {activeOrder.status === 'CONFIRMED' || activeOrder.status === 'DISPATCHED' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    disabled={isUpdatingStatus}
+                    onClick={() => handleAdvanceStatus('IN_PROGRESS', {
+                      progress_pct: 25,
+                      note: 'Đội đã nhận lệnh và bắt đầu cơ động đến hiện trường.'
+                    })}
+                    className="py-4 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Navigation className="w-5 h-5 animate-bounce" />
+                    🚀 Xuất Phát Đến Hiện Trường (IN_PROGRESS)
+                  </button>
 
-              {activeOrder.status === 'ON_SCENE' && (
-                <button
-                  type="button"
-                  disabled={isUpdatingStatus}
-                  onClick={() => setIsCompleteModalOpen(true)}
-                  className="py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-5 h-5" />
-                  Hoàn Tất Ca Cứu Nạn
-                </button>
-              )}
+                  <button
+                    type="button"
+                    onClick={() => setIsIncidentModalOpen(true)}
+                    className="py-4 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-300 text-rose-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  >
+                    <AlertOctagon className="w-5 h-5 text-rose-600" />
+                    🚨 Báo Sự Cố Kỹ Thuật
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Interim progress quick-updates */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                    <div className="text-xs font-bold text-blue-900">Cập nhật tiến độ tiếp cận &amp; cứu nạn:</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[50, 75, 90].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          disabled={isUpdatingStatus || (activeOrder.progress_pct >= pct)}
+                          onClick={() => {
+                            const noteMap: Record<number, string> = {
+                              50: 'Đã tiếp cận vị trí ngập, triển khai xuồng/phao cứu hộ.',
+                              75: 'Đang hỗ trợ sơ tán người dân và vận chuyển nhu yếu phẩm.',
+                              90: 'Người dân đã lên xuồng an toàn, chuẩn bị đưa về điểm sơ tán.',
+                            };
+                            handleAdvanceStatus('IN_PROGRESS', { progress_pct: pct, note: noteMap[pct] });
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            activeOrder.progress_pct >= pct
+                              ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                              : 'bg-white text-blue-800 border border-blue-300 hover:bg-blue-100 shadow-sm'
+                          }`}
+                        >
+                          Cập nhật {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Emergency Breakdown Button */}
-              <button
-                type="button"
-                onClick={() => setIsIncidentModalOpen(true)}
-                className="py-4 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-300 text-rose-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-              >
-                <AlertOctagon className="w-5 h-5 text-rose-600" />
-                🚨 Báo Sự Cố Phương Tiện
-              </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => setIsCompleteModalOpen(true)}
+                      className="py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-5 h-5" />
+                      ✅ Hoàn Tất Ca Cứu Nạn &amp; Bàn Giao
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsIncidentModalOpen(true)}
+                      className="py-4 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-300 text-rose-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    >
+                      <AlertOctagon className="w-5 h-5 text-rose-600" />
+                      🚨 Báo Sự Cố Phương Tiện
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -473,13 +550,47 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
           title={`Hoàn Tất Ca Tác Chiến #${activeOrder.order_id}`}
         >
           <form onSubmit={handleCompleteSubmit} className="space-y-4">
+            {statusError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                {statusError}
+              </div>
+            )}
+
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
               <div><strong>Khu vực:</strong> {targetReport?.address_hint || 'Hà Nội'}</div>
               <div><strong>Người báo:</strong> {targetReport?.reporter_name}</div>
+              <div className="text-emerald-800 font-semibold">
+                * Khi nộp báo cáo, hồ sơ sẽ chuyển sang trạng thái chờ người dân nghiệm thu an toàn.
+              </div>
             </div>
 
             <div>
-              <label className={LABEL_STYLE}>Báo cáo kết quả cứu nạn &amp; bàn giao</label>
+              <label className={LABEL_STYLE}>Kết quả xử lý hiện trường (Outcome)</label>
+              <select
+                value={compOutcome}
+                onChange={(e) => setCompOutcome(e.target.value as any)}
+                className={INPUT_STYLE}
+              >
+                <option value="RESOLVED">✅ RESOLVED - Đã cứu nạn / giải cứu an toàn toàn bộ</option>
+                <option value="PARTIAL">⚠️ PARTIAL - Đã hỗ trợ một phần, cần lực lượng tiếp ứng</option>
+                <option value="UNRESOLVED">❌ UNRESOLVED - Không thể tiếp cận mục tiêu</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={LABEL_STYLE}>Độ sâu mực nước đo đạc sau cứu nạn (cm)</label>
+              <input
+                type="number"
+                min="0"
+                max="500"
+                value={compFinalDepth}
+                onChange={(e) => setCompFinalDepth(Number(e.target.value))}
+                className={INPUT_STYLE}
+              />
+            </div>
+
+            <div>
+              <label className={LABEL_STYLE}>Báo cáo kết quả cứu nạn &amp; bàn giao (Bắt buộc)</label>
               <textarea
                 rows={4}
                 value={completionNotes}
@@ -488,6 +599,22 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                 className={INPUT_STYLE}
                 required
               />
+            </div>
+
+            <div>
+              <label className={LABEL_STYLE}>Ảnh chụp minh chứng hoàn thành (quét ClamAV)</label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer text-xs font-semibold text-slate-700">
+                  <Camera className="w-4 h-4 text-slate-500" />
+                  <span>Chọn ảnh hiện trường</span>
+                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                </label>
+                {photoPreview && (
+                  <span className="text-xs text-emerald-600 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Đã chọn ảnh minh chứng
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3">
