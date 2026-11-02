@@ -877,6 +877,9 @@ public final class AgriOpsService {
         String prcId = "PRC-" + incId;
         String ts = nowIso();
 
+        // 6.0. Malware gate: nothing reaches object storage unless it has been scanned clean (fail-closed)
+        HttpResult blockedUpload = screenEvidence(auth, incId, evidenceFilename, evidenceDataUrl);
+        if (blockedUpload != null) return blockedUpload;
         // 6.1. Store Evidence in SeaweedFS/S3 Object Storage (Tier 1 Core)
         var s3Obj = store.s3Storage.putEvidenceObject(
                 orgId, "openagrios-evidence", "incidents", incId,
@@ -1495,6 +1498,71 @@ public final class AgriOpsService {
         res.put("sim_time", store.simTime);
         res.put("tick_count", store.tickCount);
         return res;
+    }
+
+
+    // ------------------------------------------------------------------------
+    // UPLOAD SCREENING (ClamAV) for client-supplied evidence
+    // ------------------------------------------------------------------------
+    private static byte[] decodeEvidence(String dataUrl) {
+        String payload = dataUrl.trim();
+        if (payload.startsWith("data:")) {
+            int comma = payload.indexOf(',');
+            if (comma < 0 || !payload.substring(0, comma).contains(";base64")) {
+                throw new IllegalArgumentException("evidence_data_url must be a base64 data URL");
+            }
+            payload = payload.substring(comma + 1);
+        }
+        return Base64.getDecoder().decode(payload.replaceAll("\\s", ""));
+    }
+
+    /** Returns an error result when the upload must be refused, or {@code null} when it may be stored. */
+    private HttpResult screenEvidence(AuthContext auth, String entityId, String filename, String dataUrl) {
+        if (dataUrl == null || dataUrl.isBlank()) {
+            return null; // nothing was uploaded
+        }
+        byte[] bytes;
+        try {
+            bytes = decodeEvidence(dataUrl);
+        } catch (IllegalArgumentException e) {
+            return new HttpResult(400, Map.of("error", "INVALID_EVIDENCE",
+                    "message", "evidence_data_url must be valid base64 (optionally a data: URL)."));
+        }
+        MalwareScanner scanner = store.malwareScanner;
+        if (bytes.length > scanner.getMaxBytes()) {
+            return new HttpResult(413, Map.of("error", "EVIDENCE_TOO_LARGE",
+                    "message", "Evidence larger than " + scanner.getMaxBytes() + " bytes is not accepted."));
+        }
+        if (!scanner.isEnabled()) {
+            return null;
+        }
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("filename", filename);
+        after.put("size_bytes", bytes.length);
+        try {
+            MalwareScanner.Verdict verdict = scanner.scan(bytes);
+            if (verdict.clean()) {
+                return null;
+            }
+            after.put("signature", verdict.signature());
+            var audit = store.auditLedger.appendRecord(auth.organizationId(), "CORR-UPLOAD-" + shortUuid(), "Evidence", entityId,
+                    "UPLOAD_BLOCKED_MALWARE", auth.username(), auth.role(), Map.of(), after, 422);
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "MALWARE_DETECTED");
+            err.put("message", "Tệp tải lên bị chặn: phát hiện mã độc (" + verdict.signature() + "). Tệp không được lưu.");
+            err.put("signature", verdict.signature());
+            err.put("audit_event", audit.toSummaryMap());
+            return new HttpResult(422, err);
+        } catch (MalwareScanner.ScanUnavailableException e) {
+            after.put("reason", e.getMessage());
+            var audit = store.auditLedger.appendRecord(auth.organizationId(), "CORR-UPLOAD-" + shortUuid(), "Evidence", entityId,
+                    "UPLOAD_BLOCKED_SCANNER_UNAVAILABLE", auth.username(), auth.role(), Map.of(), after, 503);
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "MALWARE_SCANNER_UNAVAILABLE");
+            err.put("message", "Chưa quét được mã độc nên tệp không được lưu (fail-closed). Vui lòng thử lại sau.");
+            err.put("audit_event", audit.toSummaryMap());
+            return new HttpResult(503, err);
+        }
     }
 
     // ------------------------------------------------------------------------

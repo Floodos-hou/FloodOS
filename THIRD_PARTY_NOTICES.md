@@ -22,6 +22,7 @@ This document lists the third-party open-source components, libraries, and runti
 | **Eclipse Mosquitto** | Eclipse Foundation 2.0 | MQTT broker cho dữ liệu cảm biến OT | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
 | **Eclipse Paho (Python)** | Eclipse Foundation 2.1 | MQTT client của `telemetry-ingestor` và `device-simulator` | **EPL-2.0 / EDL-1.0 (BSD-3-Clause)** | Yes |
 | **segno** | Michael Peterson 1.6 | Sinh mã QR (SVG) cho trang truy xuất nguồn gốc (Tầng 3) | **BSD-3-Clause** | Yes |
+| **ClamAV** | Cisco Talos 1.4 (image `clamav/clamav`) | Quét mã độc cho tệp client tải lên (cổng chặn fail-closed) | **GPL-2.0** | Yes |
 | **DuckDB** | DuckDB Foundation 1.1 | Truy vấn phân tích trên Parquet (kho lạnh) | **MIT** | Yes |
 | **Python** | PSF 3.12 (image `python:3.12-slim`) | Runtime của dịch vụ `lake-archiver` | **PSF-2.0** | Yes |
 
