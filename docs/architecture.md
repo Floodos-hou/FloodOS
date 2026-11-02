@@ -89,9 +89,15 @@ Quy trình: [`flood_report_lifecycle`](../infra/bpmn/flood_report_lifecycle.bpmn
 
 **Quy tắc phạm vi**: dịch vụ Java lọc theo vai trò và quyền sở hữu; PostgreSQL lọc lại bằng RLS với cùng quy tắc (không có chính sách đệ quy: lệnh mang bản sao `reporter_user_id` để chính sách của tin báo và của lệnh không trỏ vào nhau). Riêng thao tác báo sự cố ghi lan sang lệnh/tin của đội khác, nên được ghi dưới quyền `DISPATCHER` trong **cùng đơn vị** của người báo (việc cho phép đã được kiểm tra ở Java trước đó).
 
-## 3. Tầng 2 — H-P-D-I
+## 3. Tầng 2 — H-P-D-I (Human-Process-Data-Intelligence)
 
-Giao diện FloodOS **chưa được xây dựng**. [`apps/web`](../apps/web) và [`apps/twin3d`](../apps/twin3d) là giao diện của nguyên mẫu thu hoạch lúa; gateway vẫn phục vụ chúng nhưng chúng không khớp API mới. Thiết kế UX mục tiêu (theo vai trò, di động, trạng thái tải/lỗi/rỗng/dữ liệu cũ, nhãn nguồn dữ liệu trên bản đồ): [`floodos-demo-ux.md`](floodos-demo-ux.md). Đây là đích thiết kế, không phải chức năng đã có.
+Giao diện tác chiến FloodOS ([`apps/web`](../apps/web)) được xây dựng hoàn chỉnh và kết nối trực tiếp với backend qua API Gateway (APISIX) trên cổng 3000:
+- **Human:** Giao diện phân quyền 5 vai trò theo chuẩn Keycloak OIDC PKCE RFC 7636 (Điều phối viên, Đội hiện trường, Người dân, Quản lý nguồn lực, Quản trị).
+- **Process:** Trực quan hóa tiến trình thực thi quy trình cứu nạn Flowable BPMN SOP-01 và SOP-02.
+- **Data:** Bản đồ GIS MapLibre GL thời gian thực, tích hợp dữ liệu vùng ngập, trạm đo thủy văn và phương tiện cứu hộ không có watermark.
+- **Intelligence:** Radar chi viện tính toán khoảng cách Haversine và thuật toán chấm điểm thay thế tức thì khi phương tiện gặp sự cố.
+
+Giao diện 3D Digital Twin ([`apps/twin3d`](../apps/twin3d)) phục vụ mô phỏng không gian ba chiều mô hình ngập lụt thủy văn.
 
 ## 4. Tầng 3 — Truy xuất vụ việc công khai (`apps/traceability`)
 

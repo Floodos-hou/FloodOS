@@ -24,18 +24,14 @@ Authorization Code + PKCE (RFC 7636 / RFC 9700), client công khai `floodos-web`
 3. Keycloak chuyển về `/auth/callback?code=…&state=…`; state được so khớp trước khi đổi token.
 4. Access token chỉ nằm trong bộ nhớ React, không ghi `localStorage`. Hết hạn → xóa phiên cục bộ và hiện thông báo.
 
-## Giao diện
+## Giao diện tác chiến FloodOS
 
-Giao diện viết cho nông dân: toàn bộ chữ bằng tiếng Việt thường ngày, cỡ chữ gốc 17px, nút bấm lớn (cao ≥ 48px),
-mỗi vai trò chỉ thấy các tab liên quan. Mọi mã trạng thái của backend (`IN_PROGRESS`, `READY_HARVEST`…) được đổi sang
-lời thường ở một nơi duy nhất: `src/utils/labels.ts`. Thêm trạng thái mới thì thêm nhãn ở đó, đừng hiển thị mã thô.
+Giao diện điều hành ứng phó ngập lụt đô thị: thiết kế chuyên dụng cho 5 vai trò (Điều phối viên, Đội hiện trường, Người dân vùng ngập, Quản lý nguồn lực, Quản trị nền tảng). Toàn bộ chữ bằng tiếng Việt chuẩn công vụ, bản đồ tác chiến MapLibre GL thời gian thực, nút bấm và luồng thao tác tối ưu cho cả máy tính tác chiến và thiết bị di động hiện trường. Mọi mã trạng thái của backend (`IN_PROGRESS`, `CRITICAL`, `SUPERSEDED`…) được chuẩn hóa nhãn tập trung tại `src/utils/labels.ts`.
 
-Bảng màu "Đồng lúa & Phù sa" khai báo bằng `@theme` trong `src/index.css`: nhóm trung tính ấm màu đất/rơm
-(`slate-*`), xanh lá (`emerald-*`) và vàng lúa chín (`amber-*`). Dùng font hệ thống có đủ dấu tiếng Việt (font serif dự phòng làm lệch dấu); có hỗ trợ
-`prefers-reduced-motion`.
+Bảng màu "Tác chiến & Thủy văn Đô thị" (Tactical Dark Slate & Hydrology) khai báo bằng `@theme` trong `src/index.css`: nhóm màu slate chỉ huy (`slate-*`), xanh thủy văn tác chiến (`sky-*`, `cyan-*`), và cảnh báo khẩn cấp (`amber-*`, `red-*`). Hỗ trợ chế độ bản đồ tác chiến ban đêm và ban ngày.
 
 ## Bảo mật
 
 - Nginx áp dụng CSP + các header bảo mật cho **mọi** location (`security-headers.conf`).
 - Dữ liệu từ API không bao giờ được chèn bằng `innerHTML` (marker bản đồ dựng bằng DOM + `textContent`).
-- Danh tính người vận hành/chủ máy lấy từ hồ sơ đăng nhập, không có tài khoản demo gán cứng.
+- Danh tính điều phối viên/đội cứu hộ lấy trực tiếp từ hồ sơ đăng nhập Keycloak OIDC, bảo vệ phân quyền RBAC và PostgreSQL RLS nghiêm ngặt.

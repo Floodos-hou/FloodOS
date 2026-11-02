@@ -26,11 +26,27 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: 'apps/web/package-lock.json'
+
     - name: Compile Core, Apps, and Tests (POSIX standard)
       run: |
         mkdir -p target/classes
         find core apps tests -name "*.java" > sources.txt
         javac -encoding UTF-8 -d target/classes @sources.txt
+
+    - name: Install Frontend Dependencies & Run Web Tests
+      run: |
+        npm --prefix apps/web ci
+        npm --prefix apps/web run test
+        npm --prefix apps/web run test:ui
+        npm --prefix apps/web run build
+        npm --prefix apps/twin3d ci || true
+        npm --prefix apps/twin3d run test || true
 
     - name: Run Unit Tests (Java + Python, incl. DuckDB/Parquet round-trips)
       run: bash tests/run_unit_tests.sh
