@@ -57,20 +57,25 @@ AUDIT_COLUMNS = [
     ("created_at", "TIMESTAMP"), ("before_canonical", "VARCHAR"), ("after_canonical", "VARCHAR"),
     ("ingested_at", "TIMESTAMP"),
 ]
+# One row per device sample: a rescue vehicle (lat/lon/fuel/speed) or a water gauge (level_cm).
+# `source` says where the value came from (SIMULATOR or DEVICE) and is mandatory.
+# Stored under its own prefix (asset_telemetry/) so files of the former per-machine layout are never mixed in.
 TELEMETRY_COLUMNS = [
-    ("machine_id", "VARCHAR"), ("organization_id", "VARCHAR"), ("ts", "TIMESTAMP"),
+    ("asset_kind", "VARCHAR"), ("asset_id", "VARCHAR"), ("organization_id", "VARCHAR"), ("ts", "TIMESTAMP"),
     ("lat", "DOUBLE"), ("lon", "DOUBLE"), ("speed_kmh", "DOUBLE"), ("fuel_pct", "DOUBLE"),
-    ("status", "VARCHAR"), ("source", "VARCHAR"), ("ingested_at", "TIMESTAMP"),
+    ("level_cm", "DOUBLE"), ("status", "VARCHAR"), ("source", "VARCHAR"), ("ingested_at", "TIMESTAMP"),
 ]
+ALLOWED_SOURCES = ("SIMULATOR", "DEVICE")
+ALLOWED_ASSET_KINDS = ("vehicle", "gauge")
 TABLES = {
     "audit": (TOPIC_AUDIT, AUDIT_COLUMNS),
-    "telemetry": (TOPIC_TELEMETRY, TELEMETRY_COLUMNS),
+    "asset_telemetry": (TOPIC_TELEMETRY, TELEMETRY_COLUMNS),
 }
 
 state = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "consumer": "starting",
-    "rows_archived": {"audit": 0, "telemetry": 0},
+    "rows_archived": {"audit": 0, "asset_telemetry": 0},
     "files_written": 0,
     "files_compacted": 0,
     "commit_failures": 0,
@@ -193,14 +198,24 @@ def audit_row(v, now):
 
 
 def telemetry_row(v, now):
+    kind = v.get("asset_kind")
+    if kind not in ALLOWED_ASSET_KINDS:
+        raise ValueError(f"asset_kind must be one of {ALLOWED_ASSET_KINDS}, got {kind!r}")
+    if not v.get("asset_id"):
+        raise ValueError("asset_id is required")
+    if v.get("source") not in ALLOWED_SOURCES:
+        raise ValueError(f"source must be one of {ALLOWED_SOURCES}, got {v.get('source')!r}")
+    ts = parse_ts(v.get("ts"))
+    if ts is None:
+        raise ValueError("ts is required")
     return (
-        v.get("machine_id"), v.get("organization_id"), parse_ts(v.get("ts")),
+        kind, v.get("asset_id"), v.get("organization_id"), ts,
         v.get("lat"), v.get("lon"), v.get("speed_kmh"), v.get("fuel_pct"),
-        v.get("status"), v.get("source", "unknown"), now,
+        v.get("level_cm"), v.get("status"), v.get("source"), now,
     )
 
 
-ROW_BUILDERS = {"audit": audit_row, "telemetry": telemetry_row}
+ROW_BUILDERS = {"audit": audit_row, "asset_telemetry": telemetry_row}
 
 
 def write_parquet(con, table, rows):
@@ -359,7 +374,7 @@ def delete_key(key):
         pass
 
 
-DEDUPE_KEYS = {"audit": "ledger_epoch, event_id", "telemetry": "organization_id, machine_id, ts"}
+DEDUPE_KEYS = {"audit": "ledger_epoch, event_id", "asset_telemetry": "organization_id, asset_kind, asset_id, ts"}
 
 
 def compact_once(con, now=None):
@@ -440,9 +455,9 @@ def audit_view():
 
 def telemetry_view():
     return (
-        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/telemetry/*/*.parquet', hive_partitioning=true) "
+        f"(SELECT * FROM read_parquet('{LAKE_ROOT}/asset_telemetry/*/*.parquet', hive_partitioning=true) "
         "WHERE organization_id = ? "
-        "QUALIFY row_number() OVER (PARTITION BY machine_id, ts ORDER BY ingested_at) = 1)"
+        "QUALIFY row_number() OVER (PARTITION BY asset_kind, asset_id, ts ORDER BY ingested_at) = 1)"
     )
 
 
@@ -472,13 +487,14 @@ def _run_query(name, org):
                 f"SELECT CAST(created_at AS DATE) AS day, action, count(*) AS events FROM {audit_view()} "
                 "GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC", [org])
             result["rows"] = rows_as_dicts(cur)
-        elif name == "machine-utilization":
+        elif name == "asset-utilization":
             cur = con.execute(
                 f"""WITH t AS (
-                        SELECT machine_id, ts, lat, lon, speed_kmh, fuel_pct,
+                        SELECT asset_id, ts, lat, lon, speed_kmh, fuel_pct, source,
                                lag(lat) OVER w AS plat, lag(lon) OVER w AS plon
-                        FROM {telemetry_view()} WINDOW w AS (PARTITION BY machine_id ORDER BY ts))
-                    SELECT machine_id,
+                        FROM {telemetry_view()} WHERE asset_kind = 'vehicle'
+                        WINDOW w AS (PARTITION BY asset_id ORDER BY ts))
+                    SELECT asset_id,
                            count(*) AS samples,
                            round(avg(speed_kmh), 2) AS avg_speed_kmh,
                            round(min(fuel_pct), 1) AS min_fuel_pct,
@@ -487,8 +503,17 @@ def _run_query(name, org):
                                    pow(sin(radians(lat - plat) / 2), 2) +
                                    cos(radians(plat)) * cos(radians(lat)) * pow(sin(radians(lon - plon) / 2), 2)))
                            END), 3) AS distance_km,
-                           max(ts) AS last_seen
-                    FROM t GROUP BY machine_id ORDER BY distance_km DESC""", [org])
+                           max(ts) AS last_seen,
+                           string_agg(DISTINCT source, ',') AS sources
+                    FROM t GROUP BY asset_id ORDER BY distance_km DESC""", [org])
+            result["rows"] = rows_as_dicts(cur)
+        elif name == "water-level-summary":
+            cur = con.execute(
+                f"""SELECT asset_id, count(*) AS samples, round(min(level_cm), 1) AS min_level_cm,
+                           round(avg(level_cm), 1) AS avg_level_cm, round(max(level_cm), 1) AS max_level_cm,
+                           max(ts) AS last_seen, string_agg(DISTINCT source, ',') AS sources
+                    FROM {telemetry_view()} WHERE asset_kind = 'gauge'
+                    GROUP BY asset_id ORDER BY max_level_cm DESC""", [org])
             result["rows"] = rows_as_dicts(cur)
         elif name == "summary":
             a = con.execute(
@@ -497,11 +522,11 @@ def _run_query(name, org):
             result["audit"] = rows_as_dicts(a)[0]
             try:
                 t = con.execute(
-                    f"SELECT count(*) AS samples, count(DISTINCT machine_id) AS machines, "
+                    f"SELECT count(*) AS samples, count(DISTINCT asset_id) AS assets, "
                     f"max(ts) AS last_sample FROM {telemetry_view()}", [org])
                 result["telemetry"] = rows_as_dicts(t)[0]
             except duckdb.IOException:
-                result["telemetry"] = {"samples": 0, "machines": 0, "last_sample": None}
+                result["telemetry"] = {"samples": 0, "assets": 0, "last_sample": None}
             result["archiver"] = snapshot()
         else:
             return 404, {"error": "unknown_query", "message": name}
@@ -544,7 +569,7 @@ class Handler(BaseHTTPRequestHandler):
             lines = [
                 "# TYPE openagrios_lake_rows_archived_total counter",
                 f'openagrios_lake_rows_archived_total{{table="audit"}} {snap["rows_archived"]["audit"]}',
-                f'openagrios_lake_rows_archived_total{{table="telemetry"}} {snap["rows_archived"]["telemetry"]}',
+                f'openagrios_lake_rows_archived_total{{table="asset_telemetry"}} {snap["rows_archived"]["asset_telemetry"]}',
                 "# TYPE openagrios_lake_files_written_total counter",
                 f"openagrios_lake_files_written_total {snap['files_written']}",
                 "# TYPE openagrios_lake_rejected_events_total counter",

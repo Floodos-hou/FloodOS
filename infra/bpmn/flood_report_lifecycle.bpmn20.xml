@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenAgriOS Contributors -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://openagrios.org/bpmn">
+
+  <!-- Hanoi FloodOps SOP-01: from a flood report to a confirmed, audit-sealed resolution. -->
+  <process id="flood_report_lifecycle" name="Quy trình Tin báo ngập: tiếp nhận - xác minh - điều phối - xử lý - xác nhận (SOP-01)" isExecutable="true">
+    <startEvent id="startReport" name="Tiếp nhận tin báo ngập" flowable:initiator="reporterUserId"/>
+    <sequenceFlow id="rptFlow1" sourceRef="startReport" targetRef="taskDispatcherVerify"/>
+
+    <userTask id="taskDispatcherVerify"
+              name="Điều phối viên xác minh tin báo và xếp mức ưu tiên"
+              flowable:candidateGroups="DISPATCHER"/>
+    <sequenceFlow id="rptFlow2" sourceRef="taskDispatcherVerify" targetRef="gwVerified"/>
+
+    <exclusiveGateway id="gwVerified" name="Tin báo được xác minh?"/>
+    <sequenceFlow id="rptFlow3a" sourceRef="gwVerified" targetRef="taskDispatcherDispatch">
+      <conditionExpression xsi:type="tFormalExpression">${verified == true}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="rptFlow3b" sourceRef="gwVerified" targetRef="endRejected">
+      <conditionExpression xsi:type="tFormalExpression">${verified == false}</conditionExpression>
+    </sequenceFlow>
+
+    <userTask id="taskDispatcherDispatch"
+              name="Điều phối viên ghép đội và phương tiện, kiểm tra xung đột lịch"
+              flowable:candidateGroups="DISPATCHER"/>
+    <sequenceFlow id="rptFlow4" sourceRef="taskDispatcherDispatch" targetRef="taskFieldTeamExecute"/>
+
+    <userTask id="taskFieldTeamExecute"
+              name="Đội hiện trường xử lý và cập nhật tiến độ"
+              flowable:candidateGroups="FIELD_TEAM"/>
+    <sequenceFlow id="rptFlow5" sourceRef="taskFieldTeamExecute" targetRef="taskReporterConfirm"/>
+
+    <userTask id="taskReporterConfirm"
+              name="Người báo tin (hoặc điều phối viên) xác nhận đã xử lý xong"
+              flowable:candidateGroups="REPORTER,DISPATCHER"/>
+    <sequenceFlow id="rptFlow6" sourceRef="taskReporterConfirm" targetRef="gwConfirmed"/>
+
+    <exclusiveGateway id="gwConfirmed" name="Được xác nhận?"/>
+    <sequenceFlow id="rptFlow7a" sourceRef="gwConfirmed" targetRef="endResolved">
+      <conditionExpression xsi:type="tFormalExpression">${confirmed == true}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="rptFlow7b" sourceRef="gwConfirmed" targetRef="taskDispatcherDispatch">
+      <conditionExpression xsi:type="tFormalExpression">${confirmed == false}</conditionExpression>
+    </sequenceFlow>
+
+    <endEvent id="endRejected" name="Từ chối tin báo, lưu dấu kiểm toán"/>
+    <endEvent id="endResolved" name="Đóng vụ việc và niêm phong sổ cái SHA-256"/>
+  </process>
+</definitions>

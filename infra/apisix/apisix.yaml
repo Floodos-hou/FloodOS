@@ -22,7 +22,7 @@ routes:
 
   # 0b. Tier-3 public traceability pages (consumers scan a QR code: no login, read-only, rate limited, redacted by design)
   - id: openagrios-public-trace-route
-    name: "Public rice traceability (Tier 3)"
+    name: "Public flood-case traceability (Tier 3)"
     priority: 30
     uris:
       - "/trace/*"

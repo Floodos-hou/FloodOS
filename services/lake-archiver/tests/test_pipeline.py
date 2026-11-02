@@ -70,7 +70,7 @@ class PumpTests(LakeTestCase):
         self._flush = archiver.FLUSH_SECONDS
         archiver.FLUSH_SECONDS = 0  # flush on every step
         with archiver.state_lock:
-            archiver.state["rows_archived"] = {"audit": 0, "telemetry": 0}
+            archiver.state["rows_archived"] = {"audit": 0, "asset_telemetry": 0}
             archiver.state["commit_failures"] = 0
 
     def tearDown(self):
@@ -130,7 +130,7 @@ class PumpTests(LakeTestCase):
         pump.step()
         pump.step()
         self.assertEqual(1, archiver.state["rows_archived"]["audit"])
-        self.assertEqual(1, archiver.state["rows_archived"]["telemetry"])
+        self.assertEqual(1, archiver.state["rows_archived"]["asset_telemetry"])
 
 
 class WorkerSafetyTests(unittest.TestCase):
@@ -193,11 +193,11 @@ class DedupeAndCompactionTests(LakeTestCase):
         return len(archiver.list_keys(f"{table}/"))
 
     def test_replayed_telemetry_is_not_counted_twice(self):
-        ev1 = telemetry_event("M01", ts="2026-11-20T10:00:00Z", lat=10.0)
-        ev2 = telemetry_event("M01", ts="2026-11-20T10:00:02Z", lat=10.001)
-        self.write("telemetry", [ev1, ev2])
-        self.write("telemetry", [ev1, ev2])  # redelivery after an uncommitted restart
-        _, body = self.query("machine-utilization")
+        ev1 = telemetry_event("V01", ts="2026-11-20T10:00:00Z", lat=10.0)
+        ev2 = telemetry_event("V01", ts="2026-11-20T10:00:02Z", lat=10.001)
+        self.write("asset_telemetry", [ev1, ev2])
+        self.write("asset_telemetry", [ev1, ev2])  # redelivery after an uncommitted restart
+        _, body = self.query("asset-utilization")
         self.assertEqual(2, body["rows"][0]["samples"])
         self.assertAlmostEqual(0.111, body["rows"][0]["distance_km"], places=2)
 
@@ -219,21 +219,21 @@ class DedupeAndCompactionTests(LakeTestCase):
         self.assertEqual(1, self.count("audit"))
 
     def test_compaction_leaves_recent_files_alone(self):
-        self.aged_files("telemetry", [[telemetry_event(ts=f"2026-11-20T10:00:{i:02d}Z")] for i in range(25)], age_s=5)
+        self.aged_files("asset_telemetry", [[telemetry_event(ts=f"2026-11-20T10:00:{i:02d}Z")] for i in range(25)], age_s=5)
         self.assertEqual(0, archiver.compact_once(self.con))
-        self.assertEqual(25, self.count("telemetry"))
+        self.assertEqual(25, self.count("asset_telemetry"))
 
     def test_compaction_waits_until_there_are_enough_files(self):
         n = archiver.COMPACT_MIN_FILES - 1
-        self.aged_files("telemetry", [[telemetry_event(ts=f"2026-11-20T10:00:{i:02d}Z")] for i in range(n)])
+        self.aged_files("asset_telemetry", [[telemetry_event(ts=f"2026-11-20T10:00:{i:02d}Z")] for i in range(n)])
         self.assertEqual(0, archiver.compact_once(self.con))
-        self.assertEqual(n, self.count("telemetry"))
+        self.assertEqual(n, self.count("asset_telemetry"))
 
     def test_compacted_telemetry_keeps_distance_and_sample_counts(self):
-        self.aged_files("telemetry", [[telemetry_event("M01", ts=f"2026-11-20T10:00:{i:02d}Z", lat=10.0 + i * 0.0001)] for i in range(25)])
-        before = self.query("machine-utilization")[1]["rows"]
+        self.aged_files("asset_telemetry", [[telemetry_event("V01", ts=f"2026-11-20T10:00:{i:02d}Z", lat=10.0 + i * 0.0001)] for i in range(25)])
+        before = self.query("asset-utilization")[1]["rows"]
         archiver.compact_once(self.con)
-        after = self.query("machine-utilization")[1]["rows"]
+        after = self.query("asset-utilization")[1]["rows"]
         self.assertEqual(before, after)
         self.assertEqual(25, after[0]["samples"])
 

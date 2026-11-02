@@ -2,14 +2,19 @@
 -- Copyright 2026 OpenAgriOS Contributors
 
 -- ============================================================================
--- OPENAGRIOS PLATFORM — MULTI-TENANT DATABASE SCHEMA
+-- OPENDXOS PLATFORM — MULTI-TENANT DATABASE SCHEMA (single source of truth for DDL)
 -- PostgreSQL 16 + btree_gist + GeoJSON JSONB + Row-Level Security (RLS)
 -- License: Apache-2.0
--- Architecture:
---   - Hot Data (OLTP): Transactional service requests, resource dispatch, incidents
---   - Warm Data (Spatial & Digital Twin): GeoJSON field boundaries & ETSI NGSI-LD telemetry
---   - Cold Data (Immutable Ledger): SHA-256 Hash-Chain audit records & Data Lineage
---   - Multi-Tenancy: PostgreSQL Row-Level Security (RLS) & GiST time-window exclusion
+-- This file is applied idempotently on EVERY start of the postgres container
+-- (infra/db/docker-entrypoint-sync.sh), whether the volume is new or already exists.
+-- The Java services never create tables: they only verify that the tables they need exist (fail-fast).
+-- Layers:
+--   - Platform (domain-neutral): organizations, users, audit_records (hash-chained, append-only)
+--   - Application "Hanoi FloodOps": flood_zones, flood_reports, rescue_teams, rescue_vehicles,
+--     dispatch_orders, field_incidents, report_resolutions, safe_shelters, gauge_stations
+--   - Multi-tenancy: PostgreSQL Row-Level Security keyed by app.current_org_id / _user_role / _user_id
+-- Legacy note: tables of the former rice-harvest prototype (fields, machines, operators, service_requests,
+-- assignments, incidents, work_acceptances) are NOT touched or dropped here; nothing reads them any more.
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -20,11 +25,16 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE IF NOT EXISTS organizations (
     organization_id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    org_type VARCHAR(50) NOT NULL CHECK (org_type IN ('COOPERATIVE', 'SERVICE_PROVIDER', 'REPAIR_UNIT')),
-    province VARCHAR(100) NOT NULL DEFAULT 'Cần Thơ',
+    org_type VARCHAR(50) NOT NULL,
+    province VARCHAR(100) NOT NULL DEFAULT 'Hà Nội',
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- The allowed values changed with the application. NOT VALID keeps rows written by an older version of the
+-- platform readable while still enforcing the constraint for every new or updated row.
+ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_org_type_check;
+ALTER TABLE organizations ADD CONSTRAINT organizations_org_type_check
+    CHECK (org_type IN ('LOCAL_COMMAND')) NOT VALID;
 
 -- 2. USERS & ROLES (Ánh xạ định danh từ Keycloak SSO - Apache-2.0)
 CREATE TABLE IF NOT EXISTS users (
@@ -32,155 +42,205 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(100) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    role VARCHAR(50) NOT NULL CHECK (role IN ('FARMER', 'COORDINATOR', 'MACHINE_OWNER', 'OPERATOR', 'REPAIR_TEAM', 'PLATFORM_ADMIN')),
+    role VARCHAR(50) NOT NULL,
     keycloak_sub VARCHAR(128) UNIQUE,
     phone VARCHAR(32),
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+    CHECK (role IN ('REPORTER', 'DISPATCHER', 'FIELD_TEAM', 'RESOURCE_MANAGER', 'PLATFORM_ADMIN')) NOT VALID;
 
--- 3. FIELDS / SEASONS (Vùng canh tác & Mùa vụ — Kho Ấm GeoJSON JSONB)
-CREATE TABLE IF NOT EXISTS fields (
-    field_id VARCHAR(64) PRIMARY KEY,
+-- 3. FLOOD ZONES (Vùng ảnh hưởng ngập — ranh giới GeoJSON, mức nước kèm NGUỒN)
+-- water_level_source says where the number came from; the platform never claims official gauge data.
+CREATE TABLE IF NOT EXISTS flood_zones (
+    zone_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    owner_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
     name VARCHAR(255) NOT NULL,
-    hamlet VARCHAR(255) NOT NULL,
-    crop VARCHAR(100) NOT NULL DEFAULT 'Lúa Đông Xuân (OM18)',
-    area_ha NUMERIC(8,2) NOT NULL CHECK (area_ha > 0),
-    readiness_status VARCHAR(32) NOT NULL DEFAULT 'READY_HARVEST'
-        CHECK (readiness_status IN ('GROWING', 'READY_HARVEST', 'SCHEDULED', 'HARVESTING', 'IMPACTED', 'COMPLETED')),
-    harvest_progress_pct NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (harvest_progress_pct BETWEEN 0 AND 100),
-    season_window TSTZRANGE NOT NULL,
+    risk_level VARCHAR(16) NOT NULL DEFAULT 'WATCH'
+        CHECK (risk_level IN ('NORMAL', 'WATCH', 'WARNING', 'CRITICAL')),
+    water_level_cm NUMERIC(6,1) CHECK (water_level_cm IS NULL OR water_level_cm >= 0),
+    water_level_source VARCHAR(16) NOT NULL DEFAULT 'UNKNOWN'
+        CHECK (water_level_source IN ('UNKNOWN', 'SEED', 'SIMULATOR', 'REPORTED')),
+    water_level_updated_at TIMESTAMPTZ,
     boundary_geojson JSONB NOT NULL,
-    center_lat DOUBLE PRECISION NOT NULL,
-    center_lng DOUBLE PRECISION NOT NULL,
+    center_lat DOUBLE PRECISION NOT NULL CHECK (center_lat BETWEEN -90 AND 90),
+    center_lng DOUBLE PRECISION NOT NULL CHECK (center_lng BETWEEN -180 AND 180),
+    data_origin VARCHAR(16) NOT NULL DEFAULT 'SEED' CHECK (data_origin IN ('SEED', 'SIMULATOR', 'MANUAL')),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. MACHINES (Máy cơ giới — Bản sao số IT/OT Digital Twin)
-CREATE TABLE IF NOT EXISTS machines (
-    machine_id VARCHAR(64) PRIMARY KEY,
+-- 4. RESCUE TEAMS (Đội ứng cứu)
+CREATE TABLE IF NOT EXISTS rescue_teams (
+    team_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    owner_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
+    lead_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
     name VARCHAR(255) NOT NULL,
-    machine_type VARCHAR(64) NOT NULL DEFAULT 'COMBINE_HARVESTER',
-    model VARCHAR(128) NOT NULL DEFAULT 'Kubota DC-70 Plus',
-    capacity_ha_per_hr NUMERIC(6,2) NOT NULL CHECK (capacity_ha_per_hr > 0),
+    member_count INTEGER NOT NULL DEFAULT 4 CHECK (member_count > 0),
+    skills TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    rating NUMERIC(3,2) NOT NULL DEFAULT 4.5 CHECK (rating BETWEEN 0 AND 5),
+    status VARCHAR(32) NOT NULL DEFAULT 'AVAILABLE'
+        CHECK (status IN ('AVAILABLE', 'ON_MISSION', 'OFF_DUTY'))
+);
+
+-- 5. RESCUE VEHICLES (Phương tiện ứng cứu: xuồng, xe gầm cao, máy bơm di động)
+CREATE TABLE IF NOT EXISTS rescue_vehicles (
+    vehicle_id VARCHAR(64) PRIMARY KEY,
+    organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
+    manager_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
+    name VARCHAR(255) NOT NULL,
+    vehicle_type VARCHAR(32) NOT NULL
+        CHECK (vehicle_type IN ('RESCUE_BOAT', 'HIGH_CLEARANCE_TRUCK', 'MOBILE_PUMP')),
+    capacity_value NUMERIC(8,1) NOT NULL CHECK (capacity_value > 0),
+    capacity_unit VARCHAR(16) NOT NULL CHECK (capacity_unit IN ('PERSONS', 'M3_PER_HOUR')),
     status VARCHAR(32) NOT NULL DEFAULT 'IDLE'
         CHECK (status IN ('IDLE', 'MOVING', 'WORKING', 'BREAKDOWN', 'MAINTENANCE')),
-    fuel_pct NUMERIC(5,2) NOT NULL DEFAULT 100,
-    health_pct NUMERIC(5,2) NOT NULL DEFAULT 100,
-    location_geojson JSONB,
-    current_lat DOUBLE PRECISION NOT NULL,
-    current_lng DOUBLE PRECISION NOT NULL,
+    fuel_pct NUMERIC(5,2) NOT NULL DEFAULT 100 CHECK (fuel_pct BETWEEN 0 AND 100),
+    health_pct NUMERIC(5,2) NOT NULL DEFAULT 100 CHECK (health_pct BETWEEN 0 AND 100),
+    current_lat DOUBLE PRECISION NOT NULL CHECK (current_lat BETWEEN -90 AND 90),
+    current_lng DOUBLE PRECISION NOT NULL CHECK (current_lng BETWEEN -180 AND 180),
+    assigned_team_id VARCHAR(64) REFERENCES rescue_teams(team_id),
     telemetry_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    assigned_operator_id VARCHAR(64)
-);
--- Volumes created before this column existed are upgraded on every boot (entrypoint re-applies this file).
-ALTER TABLE machines ADD COLUMN IF NOT EXISTS assigned_operator_id VARCHAR(64);
-
--- 5. OPERATORS (Người vận hành máy)
-CREATE TABLE IF NOT EXISTS operators (
-    operator_id VARCHAR(64) PRIMARY KEY,
-    user_id VARCHAR(64) UNIQUE NOT NULL REFERENCES users(user_id),
-    organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    full_name VARCHAR(255) NOT NULL,
-    skills TEXT[] NOT NULL DEFAULT ARRAY['COMBINE_HARVESTER'],
-    rating NUMERIC(3,2) NOT NULL DEFAULT 4.8,
-    status VARCHAR(32) NOT NULL DEFAULT 'AVAILABLE'
-        CHECK (status IN ('AVAILABLE', 'ON_SHIFT', 'OFF_DUTY'))
+    telemetry_source VARCHAR(16) NOT NULL DEFAULT 'SEED'
+        CHECK (telemetry_source IN ('SEED', 'SIMULATOR', 'DEVICE'))
 );
 
--- 6. SERVICE REQUESTS (Yêu cầu dịch vụ thu hoạch từ Nông hộ)
-CREATE TABLE IF NOT EXISTS service_requests (
-    request_id VARCHAR(64) PRIMARY KEY,
+-- 6. FLOOD REPORTS (Tin báo / sự kiện ngập do người dân hoặc điều phối viên ghi nhận)
+CREATE TABLE IF NOT EXISTS flood_reports (
+    report_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    field_id VARCHAR(64) NOT NULL REFERENCES fields(field_id),
-    requester_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
-    area_ha NUMERIC(8,2) NOT NULL,
-    requested_start TIMESTAMPTZ NOT NULL,
-    requested_end TIMESTAMPTZ NOT NULL,
-    priority VARCHAR(32) NOT NULL DEFAULT 'HIGH',
-    status VARCHAR(40) NOT NULL DEFAULT 'PENDING_SCHEDULE'
-        CHECK (status IN ('PENDING_SCHEDULE', 'SCHEDULED', 'IN_PROGRESS', 'IMPACTED_BY_INCIDENT', 'RESCHEDULED', 'WAITING_ACCEPTANCE', 'COMPLETED', 'CANCELLED')),
+    zone_id VARCHAR(64) NOT NULL REFERENCES flood_zones(zone_id),
+    reporter_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
+    channel VARCHAR(16) NOT NULL DEFAULT 'APP' CHECK (channel IN ('APP', 'PHONE')),
+    lat DOUBLE PRECISION NOT NULL CHECK (lat BETWEEN -90 AND 90),
+    lng DOUBLE PRECISION NOT NULL CHECK (lng BETWEEN -180 AND 180),
+    depth_cm NUMERIC(6,1) NOT NULL CHECK (depth_cm >= 0),
+    need_type VARCHAR(24) NOT NULL
+        CHECK (need_type IN ('EVACUATION', 'FOOD_WATER', 'MEDICAL', 'PUMPING', 'ROAD_BLOCKED')),
+    people_affected INTEGER NOT NULL DEFAULT 0 CHECK (people_affected >= 0),
+    description TEXT,
+    priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL' CHECK (priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')),
+    status VARCHAR(32) NOT NULL DEFAULT 'RECEIVED'
+        CHECK (status IN ('RECEIVED', 'VERIFIED', 'REJECTED', 'DISPATCHED', 'IN_PROGRESS', 'IMPACTED',
+                          'RESCHEDULED', 'AWAITING_CONFIRMATION', 'RESOLVED')),
+    verified_by_user_id VARCHAR(64) REFERENCES users(user_id),
+    verification_note TEXT,
+    evidence_object_key VARCHAR(255),
     bpmn_process_id VARCHAR(128),
     correlation_id VARCHAR(64) NOT NULL,
-    notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK (requested_end > requested_start)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. ASSIGNMENTS (Lịch phân công Máy + Người vận hành — Ràng buộc GiST chống trùng lịch)
-CREATE TABLE IF NOT EXISTS assignments (
-    assignment_id VARCHAR(64) PRIMARY KEY,
+-- 7. DISPATCH ORDERS (Lệnh điều phối: đội + phương tiện + khung giờ; GiST chặn trùng lịch)
+CREATE TABLE IF NOT EXISTS dispatch_orders (
+    order_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    request_id VARCHAR(64) NOT NULL REFERENCES service_requests(request_id),
-    field_id VARCHAR(64) NOT NULL REFERENCES fields(field_id),
-    machine_id VARCHAR(64) NOT NULL REFERENCES machines(machine_id),
-    operator_id VARCHAR(64) NOT NULL REFERENCES operators(operator_id),
+    report_id VARCHAR(64) NOT NULL REFERENCES flood_reports(report_id),
+    -- copied from the report when the order is created; lets the RLS policies of dispatch_orders and
+    -- flood_reports avoid referring to each other (PostgreSQL rejects recursive policies)
+    reporter_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
+    zone_id VARCHAR(64) NOT NULL REFERENCES flood_zones(zone_id),
+    vehicle_id VARCHAR(64) NOT NULL REFERENCES rescue_vehicles(vehicle_id),
+    team_id VARCHAR(64) NOT NULL REFERENCES rescue_teams(team_id),
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
     time_window TSTZRANGE GENERATED ALWAYS AS (tstzrange(start_time, end_time, '[)')) STORED,
-    status VARCHAR(40) NOT NULL DEFAULT 'CONFIRMED'
+    status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED'
         CHECK (status IN ('CONFIRMED', 'IN_PROGRESS', 'IMPACTED', 'SUPERSEDED', 'COMPLETED', 'CANCELLED')),
-    replaces_assignment_id VARCHAR(64) REFERENCES assignments(assignment_id),
-    superseded_by_assignment_id VARCHAR(64) REFERENCES assignments(assignment_id),
+    progress_pct NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (progress_pct BETWEEN 0 AND 100),
+    replaces_order_id VARCHAR(64) REFERENCES dispatch_orders(order_id),
+    superseded_by_order_id VARCHAR(64) REFERENCES dispatch_orders(order_id),
     bpmn_task_id VARCHAR(128),
     correlation_id VARCHAR(64) NOT NULL,
     created_by VARCHAR(64) NOT NULL REFERENCES users(user_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (end_time > start_time),
-    -- Time-window exclusion constraint: a machine cannot have two overlapping CONFIRMED/IN_PROGRESS shifts
     EXCLUDE USING gist (
-        machine_id WITH =,
+        vehicle_id WITH =,
         time_window WITH &&
     ) WHERE (status IN ('CONFIRMED', 'IN_PROGRESS')),
-    -- Time-window exclusion constraint: an operator cannot have two overlapping CONFIRMED/IN_PROGRESS shifts
     EXCLUDE USING gist (
-        operator_id WITH =,
+        team_id WITH =,
         time_window WITH &&
     ) WHERE (status IN ('CONFIRMED', 'IN_PROGRESS'))
 );
 
--- 8. INCIDENTS & REPAIR TICKETS (Sự cố máy hỏng & Phiếu sửa chữa)
-CREATE TABLE IF NOT EXISTS incidents (
+-- 8. FIELD INCIDENTS (Sự cố hiện trường làm đứt gãy lệnh điều phối)
+CREATE TABLE IF NOT EXISTS field_incidents (
     incident_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    machine_id VARCHAR(64) NOT NULL REFERENCES machines(machine_id),
+    vehicle_id VARCHAR(64) NOT NULL REFERENCES rescue_vehicles(vehicle_id),
     reported_by_user_id VARCHAR(64) NOT NULL REFERENCES users(user_id),
-    severity VARCHAR(32) NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
-    incident_type VARCHAR(100) NOT NULL,
-    description TEXT NOT NULL,
-    estimated_downtime_hours NUMERIC(6,2) NOT NULL DEFAULT 24,
-    evidence_object_key VARCHAR(512),
+    severity VARCHAR(16) NOT NULL CHECK (severity IN ('MINOR', 'MAJOR', 'CRITICAL')),
+    incident_type VARCHAR(32) NOT NULL
+        CHECK (incident_type IN ('ENGINE_FAILURE', 'PROPELLER_FOULED', 'PUMP_CLOGGED', 'ROUTE_BLOCKED', 'OTHER')),
+    description TEXT,
+    estimated_downtime_hours NUMERIC(6,1) NOT NULL DEFAULT 0 CHECK (estimated_downtime_hours >= 0),
+    evidence_object_key VARCHAR(255),
     evidence_etag VARCHAR(128),
-    repair_ticket_id VARCHAR(64) UNIQUE NOT NULL,
+    repair_ticket_id VARCHAR(64),
     assigned_repair_user_id VARCHAR(64) REFERENCES users(user_id),
-    status VARCHAR(40) NOT NULL DEFAULT 'OPEN_REPLANNING'
+    status VARCHAR(32) NOT NULL DEFAULT 'OPEN_REPLANNING'
         CHECK (status IN ('OPEN_REPLANNING', 'REPLAN_APPROVED', 'UNDER_REPAIR', 'RESOLVED')),
     bpmn_process_id VARCHAR(128),
+    impacted_order_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    candidate_options JSONB NOT NULL DEFAULT '[]'::jsonb,
+    selected_option JSONB,
     correlation_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 9. WORK RESULTS & ACCEPTANCE (Biên bản hoàn thành & Nghiệm thu dịch vụ)
-CREATE TABLE IF NOT EXISTS work_acceptances (
-    acceptance_id VARCHAR(64) PRIMARY KEY,
+-- 9. REPORT RESOLUTIONS (Kết quả xử lý hiện trường và xác nhận hoàn tất)
+CREATE TABLE IF NOT EXISTS report_resolutions (
+    resolution_id VARCHAR(64) PRIMARY KEY,
     organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
-    assignment_id VARCHAR(64) UNIQUE NOT NULL REFERENCES assignments(assignment_id),
-    request_id VARCHAR(64) NOT NULL REFERENCES service_requests(request_id),
-    completed_area_ha NUMERIC(8,2) NOT NULL,
-    evidence_object_key VARCHAR(512),
-    operator_submitted_by VARCHAR(64) NOT NULL REFERENCES users(user_id),
-    farmer_confirmed_by VARCHAR(64) REFERENCES users(user_id),
-    confirmation_status VARCHAR(32) NOT NULL DEFAULT 'PENDING_FARMER'
-        CHECK (confirmation_status IN ('PENDING_FARMER', 'CONFIRMED', 'DISPUTED')),
+    report_id VARCHAR(64) NOT NULL REFERENCES flood_reports(report_id),
+    order_id VARCHAR(64) NOT NULL REFERENCES dispatch_orders(order_id),
+    outcome VARCHAR(16) NOT NULL CHECK (outcome IN ('RESOLVED', 'PARTIAL', 'UNRESOLVED')),
+    final_depth_cm NUMERIC(6,1) CHECK (final_depth_cm IS NULL OR final_depth_cm >= 0),
+    evidence_object_key VARCHAR(255),
+    field_submitted_by VARCHAR(64) NOT NULL REFERENCES users(user_id),
+    confirmed_by VARCHAR(64) REFERENCES users(user_id),
+    confirmation_status VARCHAR(16) NOT NULL DEFAULT 'PENDING'
+        CHECK (confirmation_status IN ('PENDING', 'CONFIRMED', 'DISPUTED')),
     notes TEXT,
     correlation_id VARCHAR(64) NOT NULL,
     confirmed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 10. SAFE SHELTERS (Điểm trú an toàn). occupancy_source says whether the headcount is a seed value or reported.
+CREATE TABLE IF NOT EXISTS safe_shelters (
+    shelter_id VARCHAR(64) PRIMARY KEY,
+    organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
+    name VARCHAR(255) NOT NULL,
+    capacity INTEGER NOT NULL CHECK (capacity > 0),
+    occupancy INTEGER NOT NULL DEFAULT 0 CHECK (occupancy >= 0),
+    occupancy_source VARCHAR(16) NOT NULL DEFAULT 'SEED' CHECK (occupancy_source IN ('SEED', 'REPORTED')),
+    lat DOUBLE PRECISION NOT NULL CHECK (lat BETWEEN -90 AND 90),
+    lng DOUBLE PRECISION NOT NULL CHECK (lng BETWEEN -180 AND 180),
+    status VARCHAR(16) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'FULL', 'CLOSED')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (occupancy <= capacity)
+);
+
+-- 11. GAUGE STATIONS (Trạm đo mực nước). In this repository every station is a SIMULATOR source:
+-- no physical or official gauge is connected.
+CREATE TABLE IF NOT EXISTS gauge_stations (
+    station_id VARCHAR(64) PRIMARY KEY,
+    organization_id VARCHAR(64) NOT NULL REFERENCES organizations(organization_id),
+    zone_id VARCHAR(64) NOT NULL REFERENCES flood_zones(zone_id),
+    name VARCHAR(255) NOT NULL,
+    lat DOUBLE PRECISION NOT NULL CHECK (lat BETWEEN -90 AND 90),
+    lng DOUBLE PRECISION NOT NULL CHECK (lng BETWEEN -180 AND 180),
+    warn_level_cm NUMERIC(6,1) NOT NULL CHECK (warn_level_cm > 0),
+    critical_level_cm NUMERIC(6,1) NOT NULL CHECK (critical_level_cm > 0),
+    level_cm NUMERIC(6,1) CHECK (level_cm IS NULL OR level_cm >= 0),
+    level_updated_at TIMESTAMPTZ,
+    source VARCHAR(16) NOT NULL DEFAULT 'SIMULATOR' CHECK (source IN ('SIMULATOR', 'DEVICE')),
+    CHECK (critical_level_cm >= warn_level_cm)
 );
 
 -- 10. IMMUTABLE AUDIT LEDGER (Kho Lạnh Bất Biến — SHA-256 Hash Chain & Data Lineage)
@@ -229,90 +289,212 @@ BEFORE UPDATE OR DELETE ON audit_records
 FOR EACH ROW EXECUTE FUNCTION prevent_audit_mutation();
 
 -- ============================================================================
--- ROW-LEVEL SECURITY (RLS) — ĐA THUÊ ƯỚC (MULTI-TENANCY) & FOG OF WAR
+-- ROW-LEVEL SECURITY (RLS) — ĐA THUÊ ƯỚC (MULTI-TENANCY) & PHẠM VI THEO VAI TRÒ
 -- ============================================================================
--- Enable and FORCE Row-Level Security on ALL entity tables (enforces policies even on table owner)
-ALTER TABLE fields ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fields FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE machines FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE operators ENABLE ROW LEVEL SECURITY;
-ALTER TABLE operators FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE service_requests FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE assignments FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE incidents FORCE ROW LEVEL SECURITY;
-
-ALTER TABLE work_acceptances ENABLE ROW LEVEL SECURITY;
-ALTER TABLE work_acceptances FORCE ROW LEVEL SECURITY;
-
+-- Session context set by the Java services for every statement (TenantRlsContext.applyPostgresRlsSession):
+--   app.current_org_id, app.current_user_role, app.current_user_id
+-- A missing or unknown context matches NO row: current_setting(..., true) is NULL/'' and every comparison below is
+-- then false/NULL, so the default is "deny", never "allow".
+-- Enable and FORCE RLS on ALL tables so the policies also bind the table owner.
+ALTER TABLE flood_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flood_zones FORCE ROW LEVEL SECURITY;
+ALTER TABLE rescue_teams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rescue_teams FORCE ROW LEVEL SECURITY;
+ALTER TABLE rescue_vehicles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rescue_vehicles FORCE ROW LEVEL SECURITY;
+ALTER TABLE flood_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flood_reports FORCE ROW LEVEL SECURITY;
+ALTER TABLE dispatch_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dispatch_orders FORCE ROW LEVEL SECURITY;
+ALTER TABLE field_incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE field_incidents FORCE ROW LEVEL SECURITY;
+ALTER TABLE report_resolutions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_resolutions FORCE ROW LEVEL SECURITY;
+ALTER TABLE safe_shelters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE safe_shelters FORCE ROW LEVEL SECURITY;
+ALTER TABLE gauge_stations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gauge_stations FORCE ROW LEVEL SECURITY;
 ALTER TABLE audit_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_records FORCE ROW LEVEL SECURITY;
 
--- Tenant Isolation Policies (Idempotent: DROP before CREATE)
-DROP POLICY IF EXISTS tenant_isolation_fields ON fields;
-CREATE POLICY tenant_isolation_fields ON fields
+-- Policies (idempotent: DROP before CREATE). The reporter (REPORTER) only ever sees rows tied to their own reports.
+
+-- Reporter sees only zones where they filed a report; every other role sees the zones of its own organization.
+DROP POLICY IF EXISTS tenant_isolation_zones ON flood_zones;
+CREATE POLICY tenant_isolation_zones ON flood_zones
     USING (
         current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
         OR (
             organization_id = current_setting('app.current_org_id', true)
             AND (
-                current_setting('app.current_user_role', true) <> 'FARMER'
-                OR owner_user_id = current_setting('app.current_user_id', true)
+                current_setting('app.current_user_role', true) IN ('DISPATCHER', 'RESOURCE_MANAGER', 'FIELD_TEAM')
+                OR (
+                    current_setting('app.current_user_role', true) = 'REPORTER'
+                    AND EXISTS (
+                        SELECT 1 FROM flood_reports r
+                        WHERE r.zone_id = flood_zones.zone_id
+                          AND r.reporter_user_id = current_setting('app.current_user_id', true)
+                    )
+                )
             )
         )
     );
 
-DROP POLICY IF EXISTS tenant_isolation_machines ON machines;
-CREATE POLICY tenant_isolation_machines ON machines
-    USING (
-        organization_id = current_setting('app.current_org_id', true)
-        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
-    );
-
-DROP POLICY IF EXISTS tenant_isolation_operators ON operators;
-CREATE POLICY tenant_isolation_operators ON operators
-    USING (
-        organization_id = current_setting('app.current_org_id', true)
-        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
-    );
-
-DROP POLICY IF EXISTS tenant_isolation_requests ON service_requests;
-CREATE POLICY tenant_isolation_requests ON service_requests
+-- A field team sees only the team it leads.
+DROP POLICY IF EXISTS tenant_isolation_teams ON rescue_teams;
+CREATE POLICY tenant_isolation_teams ON rescue_teams
     USING (
         current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
         OR (
             organization_id = current_setting('app.current_org_id', true)
             AND (
-                current_setting('app.current_user_role', true) <> 'FARMER'
-                OR requester_user_id = current_setting('app.current_user_id', true)
+                current_setting('app.current_user_role', true) IN ('DISPATCHER', 'RESOURCE_MANAGER')
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND lead_user_id = current_setting('app.current_user_id', true)
+                )
             )
         )
     );
 
-DROP POLICY IF EXISTS tenant_isolation_assignments ON assignments;
-CREATE POLICY tenant_isolation_assignments ON assignments
+-- Dispatcher and resource manager see the fleet; a field team sees the vehicles of its team and those on its own active orders;
+-- a reporter sees only a vehicle that is currently committed to one of their own reports.
+DROP POLICY IF EXISTS tenant_isolation_vehicles ON rescue_vehicles;
+CREATE POLICY tenant_isolation_vehicles ON rescue_vehicles
+    USING (
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) IN ('DISPATCHER', 'RESOURCE_MANAGER')
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND (
+                        EXISTS (
+                            SELECT 1 FROM rescue_teams t
+                            WHERE t.team_id = rescue_vehicles.assigned_team_id
+                              AND t.lead_user_id = current_setting('app.current_user_id', true)
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM dispatch_orders o
+                            JOIN rescue_teams t2 ON t2.team_id = o.team_id
+                            WHERE o.vehicle_id = rescue_vehicles.vehicle_id
+                              AND o.status IN ('CONFIRMED', 'IN_PROGRESS')
+                              AND t2.lead_user_id = current_setting('app.current_user_id', true)
+                        )
+                    )
+                )
+                OR (
+                    current_setting('app.current_user_role', true) = 'REPORTER'
+                    AND EXISTS (
+                        SELECT 1 FROM dispatch_orders o
+                        WHERE o.vehicle_id = rescue_vehicles.vehicle_id
+                          AND o.status IN ('CONFIRMED', 'IN_PROGRESS')
+                          AND o.reporter_user_id = current_setting('app.current_user_id', true)
+                    )
+                )
+            )
+        )
+    );
+
+DROP POLICY IF EXISTS tenant_isolation_reports ON flood_reports;
+CREATE POLICY tenant_isolation_reports ON flood_reports
+    USING (
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) = 'DISPATCHER'
+                OR (
+                    current_setting('app.current_user_role', true) = 'REPORTER'
+                    AND reporter_user_id = current_setting('app.current_user_id', true)
+                )
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND EXISTS (
+                        SELECT 1 FROM dispatch_orders o
+                        WHERE o.report_id = flood_reports.report_id
+                    )
+                )
+            )
+        )
+    );
+
+DROP POLICY IF EXISTS tenant_isolation_orders ON dispatch_orders;
+CREATE POLICY tenant_isolation_orders ON dispatch_orders
+    USING (
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) IN ('DISPATCHER', 'RESOURCE_MANAGER')
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND EXISTS (
+                        SELECT 1 FROM rescue_teams t
+                        WHERE t.team_id = dispatch_orders.team_id
+                          AND t.lead_user_id = current_setting('app.current_user_id', true)
+                    )
+                )
+                OR (
+                    current_setting('app.current_user_role', true) = 'REPORTER'
+                    AND reporter_user_id = current_setting('app.current_user_id', true)
+                )
+            )
+        )
+    );
+
+-- Incidents are operational: a reporter never sees them (the report status shows the effect).
+DROP POLICY IF EXISTS tenant_isolation_incidents ON field_incidents;
+CREATE POLICY tenant_isolation_incidents ON field_incidents
+    USING (
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) IN ('DISPATCHER', 'RESOURCE_MANAGER')
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND reported_by_user_id = current_setting('app.current_user_id', true)
+                )
+            )
+        )
+    );
+
+DROP POLICY IF EXISTS tenant_isolation_resolutions ON report_resolutions;
+CREATE POLICY tenant_isolation_resolutions ON report_resolutions
+    USING (
+        current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
+        OR (
+            organization_id = current_setting('app.current_org_id', true)
+            AND (
+                current_setting('app.current_user_role', true) = 'DISPATCHER'
+                OR (
+                    current_setting('app.current_user_role', true) = 'FIELD_TEAM'
+                    AND field_submitted_by = current_setting('app.current_user_id', true)
+                )
+                OR (
+                    current_setting('app.current_user_role', true) = 'REPORTER'
+                    AND EXISTS (
+                        SELECT 1 FROM flood_reports r
+                        WHERE r.report_id = report_resolutions.report_id
+                          AND r.reporter_user_id = current_setting('app.current_user_id', true)
+                    )
+                )
+            )
+        )
+    );
+
+-- Shelters and gauge stations are public-safety information: every role of the organization may read them.
+DROP POLICY IF EXISTS tenant_isolation_shelters ON safe_shelters;
+CREATE POLICY tenant_isolation_shelters ON safe_shelters
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
     );
 
-DROP POLICY IF EXISTS tenant_isolation_incidents ON incidents;
-CREATE POLICY tenant_isolation_incidents ON incidents
-    USING (
-        organization_id = current_setting('app.current_org_id', true)
-        OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
-    );
-
-DROP POLICY IF EXISTS tenant_isolation_acceptances ON work_acceptances;
-CREATE POLICY tenant_isolation_acceptances ON work_acceptances
+DROP POLICY IF EXISTS tenant_isolation_gauges ON gauge_stations;
+CREATE POLICY tenant_isolation_gauges ON gauge_stations
     USING (
         organization_id = current_setting('app.current_org_id', true)
         OR current_setting('app.current_user_role', true) = 'PLATFORM_ADMIN'
@@ -340,24 +522,6 @@ BEGIN
     END IF;
 END $$;
 
--- ============================================================================
--- BOOTSTRAP SEED DATA (Idempotent: ON CONFLICT DO NOTHING)
--- ============================================================================
-INSERT INTO organizations (organization_id, name, org_type, province, status) VALUES
-('HTX_CANTHO_01', 'HTX Nông nghiệp Số Thới Lai — Cần Thơ', 'COOPERATIVE', 'Cần Thơ', 'ACTIVE'),
-('HTX_SOCTRANG_02', 'HTX Lúa Chất lượng cao Mỹ Xuyên — Sóc Trăng', 'COOPERATIVE', 'Sóc Trăng', 'ACTIVE')
-ON CONFLICT (organization_id) DO NOTHING;
-
-INSERT INTO users (user_id, username, full_name, organization_id, role, phone, status) VALUES
-('usr_farmer_ba', 'farmer_ba', 'Bác Ba Nguyễn Văn', 'HTX_CANTHO_01', 'FARMER', '0901234567', 'ACTIVE'),
-('usr_farmer_tam', 'farmer_tam', 'Chú Tám Lê Văn', 'HTX_CANTHO_01', 'FARMER', '0901234568', 'ACTIVE'),
-('usr_farmer_nam', 'farmer_nam', 'Anh Nam (Nông hộ F02)', 'HTX_CANTHO_01', 'FARMER', '0901234599', 'ACTIVE'),
-('usr_coord_01', 'coord_htx01', 'Chị Lan (Điều phối viên HTX Cần Thơ 01)', 'HTX_CANTHO_01', 'COORDINATOR', '0901234569', 'ACTIVE'),
-('usr_op_minh', 'op_minh', 'Anh Minh (Lái máy M01)', 'HTX_CANTHO_01', 'OPERATOR', '0901234570', 'ACTIVE'),
-('usr_op_nam', 'op_nam', 'Anh Nam (Lái máy M02 - Cứu viện)', 'HTX_CANTHO_01', 'OPERATOR', '0901234571', 'ACTIVE'),
-('usr_op_hai', 'op_hai', 'Anh Hải (Lái máy M03)', 'HTX_CANTHO_01', 'OPERATOR', '0901234572', 'ACTIVE'),
-('usr_op_son', 'op_son', 'Anh Sơn (Lái máy M04)', 'HTX_CANTHO_01', 'OPERATOR', '0901234573', 'ACTIVE'),
-('usr_owner_tu', 'owner_tu', 'Chú Tư Võ Văn (Chủ máy M01, M02)', 'HTX_CANTHO_01', 'MACHINE_OWNER', '0901234574', 'ACTIVE'),
-('usr_repair_01', 'repair_01', 'Đội Sửa chữa Cơ khí R01', 'HTX_CANTHO_01', 'REPAIR_TEAM', '0901234575', 'ACTIVE'),
-('usr_coord_02', 'coord_htx02', 'Anh Hùng (Điều phối viên HTX Sóc Trăng 02)', 'HTX_SOCTRANG_02', 'COORDINATOR', '0901234576', 'ACTIVE')
-ON CONFLICT (user_id) DO NOTHING;
+-- Demo data (organizations, users, zones, vehicles, ...) is NOT seeded here. The core API seeds it from
+-- apps/floodops/FloodDataStore when the database is empty; identities come from infra/keycloak/openagrios-realm.json.
+-- A unit test keeps those two lists identical.

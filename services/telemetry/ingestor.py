@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 OpenAgriOS Contributors
 """
-OpenAgriOS OT telemetry ingestor.
+OpenDXOS OT telemetry ingestor.
 
 MQTT (Mosquitto) -> validate -> Core API internal endpoint -> digital twin + Kafka telemetry topic.
 
-Devices publish to  openagrios/<organization_id>/machines/<machine_id>/telemetry.
+Devices publish to
+    openagrios/<organization_id>/vehicles/<vehicle_id>/telemetry   {lat, lon, fuel_pct, [speed_kmh], source, [ts]}
+    openagrios/<organization_id>/gauges/<station_id>/telemetry     {level_cm, source, [ts]}
+Every message must say where it comes from ("source": SIMULATOR or DEVICE); a message without a known source is
+rejected, so a simulated value can never be stored as an observation.
 This service is the only MQTT subscriber (least-privilege ACL) and the only caller of the core's
 internal endpoint, authenticated with a shared secret. Messages are rejected, never silently
 dropped: every outcome is counted and exposed on /metrics (Prometheus text format) and /health.
@@ -32,8 +36,10 @@ CORE_URL = os.environ.get("CORE_URL", "http://core-api:8000").rstrip("/")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8091"))
 
-SUBSCRIPTION = "openagrios/+/machines/+/telemetry"
-TOPIC_RE = re.compile(r"^openagrios/([A-Za-z0-9_-]+)/machines/([A-Za-z0-9_-]+)/telemetry$")
+SUBSCRIPTIONS = ("openagrios/+/vehicles/+/telemetry", "openagrios/+/gauges/+/telemetry")
+TOPIC_RE = re.compile(r"^openagrios/([A-Za-z0-9_-]+)/(vehicles|gauges)/([A-Za-z0-9_-]+)/telemetry$")
+KIND_BY_SEGMENT = {"vehicles": "vehicle", "gauges": "gauge"}
+ALLOWED_SOURCES = ("SIMULATOR", "DEVICE")
 MAX_PAYLOAD_BYTES = 2048
 
 stats_lock = threading.Lock()
@@ -41,7 +47,7 @@ stats = {
     "received": 0,
     "forwarded": 0,
     "rejected_invalid": 0,       # failed local validation
-    "rejected_by_core": 0,       # core answered 4xx (unknown machine, tenant mismatch, range)
+    "rejected_by_core": 0,       # core answered 4xx (unknown asset, tenant mismatch, range)
     "forward_failed": 0,         # core unreachable / 5xx
     "mqtt_connected": 0,
     "last_message_at": "",
@@ -70,8 +76,9 @@ def validate(topic, raw):
     """Return (payload, None) or (None, reason)."""
     m = TOPIC_RE.match(topic)
     if not m:
-        return None, f"topic '{topic}' does not match openagrios/<org>/machines/<id>/telemetry"
-    org, machine = m.groups()
+        return None, f"topic '{topic}' does not match openagrios/<org>/<vehicles|gauges>/<id>/telemetry"
+    org, segment, asset_id = m.groups()
+    kind = KIND_BY_SEGMENT[segment]
     if len(raw) > MAX_PAYLOAD_BYTES:
         return None, f"payload too large ({len(raw)} bytes)"
     try:
@@ -80,24 +87,31 @@ def validate(topic, raw):
         return None, "payload is not valid JSON"
     if not isinstance(data, dict):
         return None, "payload must be a JSON object"
-    for key, expected in (("organization_id", org), ("machine_id", machine)):
+    for key, expected in (("organization_id", org), ("asset_id", asset_id)):
         if key in data and data[key] != expected:
             return None, f"{key} in payload ({data[key]!r}) does not match topic ({expected!r})"
-    for key in ("lat", "lon", "fuel_pct"):
-        if not is_number(data.get(key)):
-            return None, f"'{key}' must be a finite number"
-    if "speed_kmh" in data and not is_number(data["speed_kmh"]):
-        return None, "'speed_kmh' must be a finite number"
+    source = data.get("source")
+    if source not in ALLOWED_SOURCES:
+        return None, f"'source' must be one of {ALLOWED_SOURCES} (got {source!r})"
     ts = data.get("ts") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
     except ValueError:
         return None, "'ts' must be ISO-8601"
-    return {
-        "organization_id": org, "machine_id": machine, "ts": ts,
-        "lat": data["lat"], "lon": data["lon"], "fuel_pct": data["fuel_pct"],
-        "speed_kmh": data.get("speed_kmh", 0.0), "source": "mqtt",
-    }, None
+    payload = {"asset_kind": kind, "asset_id": asset_id, "organization_id": org, "ts": ts, "source": source}
+    if kind == "vehicle":
+        for key in ("lat", "lon", "fuel_pct"):
+            if not is_number(data.get(key)):
+                return None, f"'{key}' must be a finite number"
+        if "speed_kmh" in data and not is_number(data["speed_kmh"]):
+            return None, "'speed_kmh' must be a finite number"
+        payload.update({"lat": data["lat"], "lon": data["lon"], "fuel_pct": data["fuel_pct"],
+                        "speed_kmh": data.get("speed_kmh", 0.0)})
+    else:
+        if not is_number(data.get("level_cm")):
+            return None, "'level_cm' must be a finite number"
+        payload["level_cm"] = data["level_cm"]
+    return payload, None
 
 
 def forward(payload):
@@ -112,7 +126,7 @@ def forward(payload):
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:200]
         if 400 <= e.code < 500:
-            bump("rejected_by_core", f"core HTTP {e.code} for {payload['machine_id']}: {detail}")
+            bump("rejected_by_core", f"core HTTP {e.code} for {payload['asset_id']}: {detail}")
         else:
             bump("forward_failed", f"core HTTP {e.code}: {detail}")
     except Exception as e:
@@ -123,10 +137,11 @@ def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code.is_failure:
         bump("forward_failed", f"MQTT connect refused: {reason_code}")
         return
-    client.subscribe(SUBSCRIPTION, qos=1)
+    for topic in SUBSCRIPTIONS:
+        client.subscribe(topic, qos=1)
     with stats_lock:
         stats["mqtt_connected"] = 1
-    log(f"connected to {MQTT_HOST}:{MQTT_PORT}, subscribed to {SUBSCRIPTION}")
+    log(f"connected to {MQTT_HOST}:{MQTT_PORT}, subscribed to {", ".join(SUBSCRIPTIONS)}")
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):

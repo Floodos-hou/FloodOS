@@ -22,10 +22,12 @@ mosquitto_passwd -b "$CONF/passwd" "$MQTT_INGESTOR_USER" "$MQTT_INGESTOR_PASSWOR
 
 cat > "$CONF/acl" <<ACL
 user $MQTT_DEVICE_USER
-topic write openagrios/+/machines/+/telemetry
+topic write openagrios/+/vehicles/+/telemetry
+topic write openagrios/+/gauges/+/telemetry
 
 user $MQTT_INGESTOR_USER
-topic read openagrios/+/machines/+/telemetry
+topic read openagrios/+/vehicles/+/telemetry
+topic read openagrios/+/gauges/+/telemetry
 ACL
 
 chown -R mosquitto:mosquitto "$CONF" /mosquitto/data 2>/dev/null || true
