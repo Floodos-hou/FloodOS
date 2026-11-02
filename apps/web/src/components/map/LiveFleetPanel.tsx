@@ -84,7 +84,7 @@ export const LiveFleetPanel: React.FC<Props> = ({ machines, live, onFocus }) => 
           )}
           {live.error && <p className="mb-2 text-[11px] text-red-300">{live.error}</p>}
 
-          <ul className="max-h-52 space-y-1.5 overflow-y-auto pr-0.5">
+          <ul className="max-h-36 space-y-1.5 overflow-y-auto pr-0.5">
             {machines.map((m) => {
               const st = STATUS_STYLE[m.status] ?? STATUS_STYLE.IDLE;
               return (
