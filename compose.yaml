@@ -103,6 +103,7 @@ services:
     depends_on:
       - core-api
       - web-app
+      - farm-app
 
   # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
   core-api:
@@ -339,6 +340,21 @@ services:
       timeout: 10s
       retries: 10
       start_period: 180s
+
+  # 15. TIER-2 APP #2: "Nông Trại Số", a game-style view of the same Tier-1 platform (served by the gateway under /farm/)
+  farm-app:
+    build:
+      context: ./apps
+      dockerfile: farm/Dockerfile
+      args:
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+    container_name: openagrios-farm-app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:

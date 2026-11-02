@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
 - **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
+### Tier-2 App #2: "Nông Trại Số" (game-style farm view)
+- New `apps/farm` (Vite + React + canvas, served by APISIX under `/farm/`): procedural, asset-free artwork (swaying crops that turn to stubble with real harvest progress, harvesters that glide and turn towards their heading, dust/chaff/smoke/spark/confetti particles, rescue route with ring pulses, day/night with headlights, clouds, river, farmstead, fireflies), synthesised sound (off by default), pan/zoom/pinch camera, character-select start screen, quest panel, rating modal, slide-in notifications.
+- Everything shown is derived from the Tier-1 API; quests are the current step of the real service-request workflow. Fogged fields never enter the world; far-away machines are compressed (direction and monotonicity preserved) so the camera stays on the farm; the camera fit leaves room for the HUD.
+- Shares the API client, auth and pure helpers with `apps/web` by relative import (`resolve.dedupe` keeps one React instance). Docker build context is `./apps`; production build turns the demo character picker off.
+- Tests: 41 `node --test` tests on the pure logic (14 injected defects: 13 caught, 1 equivalent); e2e Assertion 17; verified in real Chrome through the gateway (start screen, farmer and coordinator flows, night mode, breakdown event).
+
 ### Live Map Visual Feedback
 - KPI strip above the map (working / broken / average fuel / harvest progress / active shifts) with animated counters and a pulsing card while a machine is broken.
 - Machine icons turn towards their direction of travel (compass bearing corrected for the map rotation; a parked machine never spins on GPS noise).
