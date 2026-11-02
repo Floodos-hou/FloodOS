@@ -468,6 +468,25 @@ final class PlatformTests {
             equal("SUPERSEDED", fresh.getStore().assignments.get(String.valueOf(ok.body().get("superseded_assignment_id"))).status, "old shift superseded");
         });
 
+        suite("Seed data consistency (true-scale 3D twin relies on it)");
+        test("every seeded field polygon has the area the field declares (within 2%)", () -> {
+            for (var f : newService().getStore().fields.values()) {
+                double got = org.openagrios.core.dataservices.SpatialMatchingEngine.ringAreaHa(f.polygon.get(0));
+                near(f.areaHa, got, f.areaHa * 0.02, "field " + f.fieldId + " declares " + f.areaHa + " ha but its polygon is " + got + " ha");
+            }
+        });
+        test("seeded field polygons do not overlap each other", () -> {
+            var fields = new java.util.ArrayList<>(newService().getStore().fields.values());
+            for (int i = 0; i < fields.size(); i++) {
+                for (int j = i + 1; j < fields.size(); j++) {
+                    var a = fields.get(i).polygon.get(0); var b = fields.get(j).polygon.get(0);
+                    boolean separated = a.get(2).get(0) < b.get(0).get(0) || b.get(2).get(0) < a.get(0).get(0)
+                            || a.get(2).get(1) < b.get(0).get(1) || b.get(2).get(1) < a.get(0).get(1);
+                    isTrue(separated, fields.get(i).fieldId + " overlaps " + fields.get(j).fieldId);
+                }
+            }
+        });
+
         suite("AgriOpsService - digital twin visibility");
         test("coordinators see only their own cooperative's machines", () -> {
             List<String> ids = twinIds(s, coord);
