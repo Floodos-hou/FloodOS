@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import { LiveFleetPanel } from './LiveFleetPanel';
+import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 setWorkerUrl(maplibreWorkerUrl);
 import type { FieldPlot, HarvesterMachine, DispatchAssignment, CandidateRescueOption } from '../../types';
 import { EyeOff, Video, Compass, MapPin } from 'lucide-react';
@@ -19,6 +21,10 @@ interface TacticalMapProps {
   onSelectField?: (field: FieldPlot) => void;
   onSelectMachine?: (machine: HarvesterMachine) => void;
   userRole?: string;
+  /** Recent positions per machine as [lng, lat], newest last: drawn as trails. */
+  trails?: Record<string, [number, number][]>;
+  /** Live telemetry status for the HUD panel. */
+  live?: LiveFleetInfo;
 }
 
 type OperationsZone = 'NAM_DINH' | 'CAN_THO';
@@ -255,6 +261,37 @@ function getCropStyle(crop: string, status: string): { color: string; height: nu
   return { color: '#3A7228', height: 20, badge: '🌱 Canh Tác' };
 }
 
+interface MachineMarkerEntry {
+  marker: Marker;
+  /** Appearance signature: the marker element is rebuilt only when this changes. */
+  sig: string;
+  machine: HarvesterMachine;
+  raf: number;
+}
+
+const GLIDE_MS = 1_800;
+
+/** Moves a marker to `target` with an ease-out glide; large jumps (zone switch, reset) snap instead. */
+function glideMarker(entry: MachineMarkerEntry, target: [number, number]) {
+  cancelAnimationFrame(entry.raf);
+  const from = entry.marker.getLngLat();
+  const dx = target[0] - from.lng;
+  const dy = target[1] - from.lat;
+  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return;
+  if (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) {
+    entry.marker.setLngLat(target);
+    return;
+  }
+  const t0 = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / GLIDE_MS);
+    const e = 1 - Math.pow(1 - k, 3);
+    entry.marker.setLngLat([from.lng + dx * e, from.lat + dy * e]);
+    if (k < 1) entry.raf = requestAnimationFrame(step);
+  };
+  entry.raf = requestAnimationFrame(step);
+}
+
 export const TacticalMap: React.FC<TacticalMapProps> = ({
   fields,
   machines,
@@ -262,13 +299,21 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   rescueCandidate,
   onSelectField,
   onSelectMachine,
+  trails,
+  live,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const machineMarkersRef = useRef<Map<string, MachineMarkerEntry>>(new Map());
+  const tagSigRef = useRef('');
+  // True after MapLibre's 'load' event. isStyleLoaded() is NOT used as a guard: it stays false while raster tiles are
+  // slow or unreachable (flaky venue Wi-Fi), which froze every live update.
+  const mapReadyRef = useRef(false);
+  const syncRef = useRef<(map: MapLibreMap) => void>(() => {});
   const orbitAnimRef = useRef<number | null>(null);
 
-  const [activeZone, setActiveZone] = useState<OperationsZone>('NAM_DINH');
+  const [activeZone, setActiveZone] = useState<OperationsZone>('CAN_THO');
   const [is3D, setIs3D] = useState(true);
   const [isOrbiting, setIsOrbiting] = useState(false);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
@@ -351,7 +396,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   };
 
   // --- RENDER 3D SVG ISOMETRIC MACHINE MARKER ---
-  const create3DMachineMarker = useCallback((m: HarvesterMachine) => {
+  const create3DMachineMarker = useCallback((m: HarvesterMachine, getLatest?: () => HarvesterMachine) => {
     const isWorking = m.status === 'WORKING';
     const isBreakdown = m.status === 'BREAKDOWN';
 
@@ -451,8 +496,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     el.setAttribute('aria-label', `Thiết bị ${m.machine_id}: ${m.name}`);
 
     el.addEventListener('click', () => {
-      setSelectedItem({ type: 'MACHINE', data: m });
-      latest.current.onSelectMachine?.(m);
+      const current = getLatest ? getLatest() : m;
+      setSelectedItem({ type: 'MACHINE', data: current });
+      latest.current.onSelectMachine?.(current);
     });
 
     return el;
@@ -461,8 +507,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   // Update Layers & GeoJSON on Map
   const updateMapLayers = useCallback(
     (map: MapLibreMap) => {
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
 
       // --- 1. FIELD POLYGONS WITH 3D EXTRUSION ---
       const currentFields = latest.current.fields;
@@ -645,20 +689,55 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         });
       }
 
-      // --- 3. 3D ISOMETRIC HARVESTER / TRACTOR MARKERS ---
-      if (showMachines) {
+      // --- 3. LIVE TRAILS (machine markers are managed by syncMachineMarkers so they can glide) ---
+      const trailFeatures: any[] = [];
+      if (showMachines && trails) {
         currentMachines.forEach((m) => {
-          if (m.current_lat === 0 && m.current_lng === 0) return;
-          const el = create3DMachineMarker(m);
-          const marker = new Marker({ element: el })
-            .setLngLat([m.current_lng, m.current_lat])
-            .addTo(map);
-          markersRef.current.push(marker);
+          const pts = trails[m.machine_id];
+          if (!pts || pts.length < 2) return;
+          trailFeatures.push({
+            type: 'Feature',
+            properties: {
+              color: m.status === 'BREAKDOWN' ? '#ef4444' : m.status === 'WORKING' ? '#f59e0b' : '#10b981',
+            },
+            geometry: { type: 'LineString', coordinates: pts },
+          });
+        });
+      }
+      const trailsGeoJson: any = { type: 'FeatureCollection', features: trailFeatures };
+      if (map.getSource('trails-source')) {
+        (map.getSource('trails-source') as GeoJSONSource).setData(trailsGeoJson);
+      } else {
+        map.addSource('trails-source', { type: 'geojson', data: trailsGeoJson });
+        map.addLayer({
+          id: 'trails-glow',
+          type: 'line',
+          source: 'trails-source',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': ['get', 'color'] as any, 'line-width': 9, 'line-opacity': 0.18, 'line-blur': 4 },
+        });
+        map.addLayer({
+          id: 'trails-line',
+          type: 'line',
+          source: 'trails-source',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': ['get', 'color'] as any, 'line-width': 3, 'line-opacity': 0.85 },
         });
       }
 
       // --- 4. 3D CROP BADGE LABELS OVER PARCELS ---
-      if (showFields) {
+      const tagSig = showFields
+        ? currentFields
+            .map((f) => `${f.field_id}|${f.visibility}|${f.crop}|${f.readiness_status}|${f.harvest_progress_pct}|${f.area_ha}`)
+            .join(';')
+        : '';
+      const tagsChanged = tagSig !== tagSigRef.current;
+      if (tagsChanged) {
+        markersRef.current.forEach((m) => m.remove());
+        markersRef.current = [];
+        tagSigRef.current = tagSig;
+      }
+      if (showFields && tagsChanged) {
         currentFields.forEach((f) => {
           if (f.visibility === 'FULL' && f.center_lat && f.center_lng) {
             const style = getCropStyle(f.crop, f.readiness_status);
@@ -687,8 +766,57 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         });
       }
     },
-    [showFields, showMachines, showVectors, is3D, activeZone, assignments, rescueCandidate, create3DMachineMarker]
+    [showFields, showMachines, showVectors, is3D, activeZone, assignments, rescueCandidate, trails]
   );
+
+    // Machine markers are reused between updates so they glide to their new position instead of flickering.
+  const syncMachineMarkers = useCallback(
+    (map: MapLibreMap) => {
+      const entries = machineMarkersRef.current;
+      const wanted = showMachines
+        ? latest.current.machines.filter((m) => !(m.current_lat === 0 && m.current_lng === 0))
+        : [];
+      const keep = new Set(wanted.map((m) => m.machine_id));
+      entries.forEach((entry, id) => {
+        if (!keep.has(id)) {
+          cancelAnimationFrame(entry.raf);
+          entry.marker.remove();
+          entries.delete(id);
+        }
+      });
+      wanted.forEach((m) => {
+        const sig = `${m.status}|${m.machine_type}|${m.model}`;
+        const target: [number, number] = [m.current_lng, m.current_lat];
+        const existing = entries.get(m.machine_id);
+        if (existing && existing.sig === sig) {
+          existing.machine = m;
+          glideMarker(existing, target);
+          return;
+        }
+        let start = target;
+        if (existing) {
+          cancelAnimationFrame(existing.raf);
+          const p = existing.marker.getLngLat();
+          start = [p.lng, p.lat];
+          existing.marker.remove();
+        }
+        const entry = { sig, machine: m, raf: 0 } as MachineMarkerEntry;
+        const el = create3DMachineMarker(m, () => entry.machine);
+        entry.marker = new Marker({ element: el }).setLngLat(start).addTo(map);
+        entries.set(m.machine_id, entry);
+        if (start !== target) glideMarker(entry, target);
+      });
+    },
+    [showMachines, create3DMachineMarker]
+  );
+
+  // Fly the camera to a machine (from the live roster)
+  const focusMachine = useCallback((m: HarvesterMachine) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: [m.current_lng, m.current_lat], zoom: Math.max(map.getZoom(), 15.5), speed: 0.9, essential: true });
+    setSelectedItem({ type: 'MACHINE', data: m });
+  }, []);
 
   // Initialize Map with resilient styles and background
   useEffect(() => {
@@ -746,6 +874,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
 
     map.on('load', () => {
+      mapReadyRef.current = true;
       // Setup natural 3D sun lighting for extruded parcels
       try {
         map.setLight({
@@ -758,6 +887,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         // Safe fallback
       }
       updateRef.current(map);
+      syncRef.current(map);
     });
 
     mapRef.current = map;
@@ -766,6 +896,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       if (orbitAnimRef.current) cancelAnimationFrame(orbitAnimRef.current);
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      machineMarkersRef.current.forEach((entry) => {
+        cancelAnimationFrame(entry.raf);
+        entry.marker.remove();
+      });
+      machineMarkersRef.current.clear();
+      mapReadyRef.current = false;
+      tagSigRef.current = '';
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -776,16 +913,32 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   useEffect(() => {
     updateRef.current = updateMapLayers;
     const map = mapRef.current;
-    if (map && map.isStyleLoaded()) {
+    if (map && mapReadyRef.current) {
       updateMapLayers(map);
     }
   }, [updateMapLayers]);
+
+  useEffect(() => {
+    syncRef.current = syncMachineMarkers;
+    const map = mapRef.current;
+    if (map && mapReadyRef.current) {
+      syncMachineMarkers(map);
+    }
+  }, [syncMachineMarkers, activeMachines]);
+
+  // Vector lines (machine -> field) must follow machines as they move
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && mapReadyRef.current) {
+      updateRef.current(map);
+    }
+  }, [activeMachines]);
 
   const fogOfWarCount = activeFields.filter((f) => f.visibility === 'FOG_OF_WAR').length;
   const fullVisibleCount = activeFields.filter((f) => f.visibility === 'FULL').length;
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col h-[600px] relative">
+    <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col h-[600px] xl:h-[720px] relative">
       {/* Tactical Map Header Control Bar */}
       <div className="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -814,7 +967,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
               }`}
             >
               <MapPin className="h-3.5 w-3.5" />
-              <span>Hải Hậu (Nam Định)</span>
+              <span>Hải Hậu (dữ liệu mẫu)</span>
             </button>
             <button
               type="button"
@@ -952,7 +1105,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       {/* Main Map Canvas with Warm Meadow Green Background (NEVER BLACK!) */}
       <div className="relative flex-1 bg-[#e3ebd8] overflow-hidden">
         {viewMode === 'MAP' ? (
-          <div ref={mapContainer} className="w-full h-full" />
+          <>
+            <div ref={mapContainer} className="w-full h-full" />
+            {activeZone === 'CAN_THO' && <LiveFleetPanel machines={activeMachines} live={live} onFocus={focusMachine} />}
+          </>
         ) : (
           <div className="p-6 h-full overflow-y-auto bg-slate-50">
             <h4 className="text-base font-bold text-slate-800 mb-4">
@@ -1033,7 +1189,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
         {/* Selected Entity Card Modal Overlay */}
         {selectedItem && (
-          <div className="absolute bottom-5 left-5 right-5 sm:right-auto sm:w-88 bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 p-4 z-30 text-white animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="absolute bottom-5 left-5 right-5 sm:left-auto sm:right-5 sm:w-88 bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 p-4 z-30 text-white animate-in fade-in slide-in-from-bottom-2 duration-150">
             <div className="flex justify-between items-start pb-2.5 border-b border-slate-800 mb-3">
               <div>
                 <span className="font-bold text-amber-300 text-sm">

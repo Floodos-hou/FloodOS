@@ -416,12 +416,28 @@ SKIP_PYTHON=1 bash tests/run_unit_tests.sh   # chỉ phần Java, không cần D
 
 | Tầng | Số ca | Phạm vi |
 |---|---|---|
-| Java — [`tests/unit/`](tests/unit/) | 122 | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
+| Java — [`tests/unit/`](tests/unit/) | 127 | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
 | Python — [`services/lake-archiver/tests/`](services/lake-archiver/tests/test_archiver.py) | 26 | **DuckDB + Parquet thật** trên thư mục tạm: khử trùng lặp, epoch, cách ly tenant, tham số hóa SQL, Haversine, *offset chỉ commit sau khi ghi xong*, sự kiện hỏng không làm kẹt lô |
-| Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 26 | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
+| Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 29 | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
 
 Chất lượng bộ test được kiểm bằng **đột biến mã** (cố ý phá từng quy tắc trên bản sao mã nguồn rồi chạy test): 29/29 đột biến bị phát hiện (14 Java, 15 Python).
 Bộ unit test cũng chạy trong CI trước bộ acceptance và E2E.
+
+### 8.0b. Chạy demo trực quan (bản đồ trực tiếp)
+
+```bash
+docker compose --profile demo up -d --build     # profile `demo` bật thêm thiết bị MÔ PHỎNG (device-simulator)
+# mở http://localhost:9080  → đăng nhập  coord_htx01 / 123456  → tab “Bản đồ”
+```
+
+| Thành phần trên bản đồ | Nguồn dữ liệu |
+|---|---|
+| Chấm **TRỰC TIẾP · MQTT**, danh sách máy, thanh nhiên liệu | Bản sao số NGSI-LD (`/api/v1/digital-twin/entities`, hỏi lại mỗi 2 giây) |
+| Marker máy **trượt mượt** tới vị trí mới, vệt di chuyển | Telemetry MQTT → `telemetry-ingestor` → core |
+| Nút **▶ Chạy kịch bản** (chỉ vai điều phối viên, chỉ build demo) | Gọi API thật: báo sự cố → chấm điểm máy thay → duyệt → máy thay xuất phát → kiểm chuỗi băm |
+| **↺ Đặt lại dữ liệu** | `POST /api/v1/sim/reset` (xóa dữ liệu nghiệp vụ trong PostgreSQL rồi nạp lại dữ liệu mẫu) |
+
+Lưu ý trung thực: (1) thiết bị là **mô phỏng**, chạy time-lapse ×12 (`SIM_TIMELAPSE`) để chuyển động thấy được ở mức zoom 14; (2) nền bản đồ lấy tile OpenStreetMap nên cần Internet, mất mạng thì vẫn có nền xanh mặc định và dữ liệu trực tiếp vẫn cập nhật; (3) vùng “Hải Hậu (dữ liệu mẫu)” là dữ liệu cố định trong giao diện, không phải dữ liệu thật; (4) nông hộ và đội sửa chữa không thấy đội máy (Fog of War).
 
 ### 8.1. Chạy Bộ Kiểm Thử Chấp Nhận Tự Động (Acceptance Test Suite)
 

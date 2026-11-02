@@ -17,8 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
 - **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
+### Live Fleet Map and Automated Incident Demo (web)
+- `useLiveFleet` polls the digital twin every 2 s (roles with fleet access only; paused when the tab is hidden; the snapshot is bound to the session token so a switched persona never sees another tenant's positions) and keeps a trail per machine.
+- `TacticalMap`: machine markers are reused and glide to new positions, trails layer, `LiveFleetPanel` HUD (live/waiting/disconnected, moving count, fuel bars, click-to-fly), field labels rebuilt only when fields change, default zone is now the real Can Tho data (the Nam Dinh fixture is labelled sample data). Map updates are guarded by the MapLibre `load` event instead of `isStyleLoaded()`, which stays false when tiles are slow or unreachable and froze all live updates.
+- `IncidentScenario` (demo builds, COORDINATOR): drives the real API end to end (incident -> scored rescue options -> approval -> rescuer starts -> ticks -> audit chain verification) with narration per step and a reset button.
+- Simulator: `SIM_TIMELAPSE` (default 12 under the `demo` profile, 1 otherwise; reported speed capped at 80 km/h) and a 5 s roster resync so a reset is followed quickly.
+- Verified in a real Chrome session (login, live HUD, markers moving, 7/7 scenario steps) and by e2e Assertions 13 and 14.
+
+### Defects Found While Verifying the Live Demo on the Real Stack (all fixed, all covered by tests)
+- **Machines lost their operator on PostgreSQL**: `machines` had no `assigned_operator_id` column although the loader read it, so after any reload the rescue algorithm fell back to "the first operator" (the broken machine's own driver) and the replacement shift violated the operator exclusion constraint (`approve-replan` failed). Added the column (idempotent upgrade of existing volumes), persisted it, and the algorithm no longer guesses a driver.
+- **Audit chain could not be re-verified after a restart**: the hash covers sequence, timestamp and canonical JSON, but PostgreSQL stored `NOW()`, re-formatted JSONB and its own serial. The exact hashed material is now persisted and the newest ledger epoch is restored (`GET /api/v1/audit/verify` stays valid across restarts).
+- **Records written after a simulator reset were silently dropped** (`UNIQUE(event_id)` + `ON CONFLICT DO NOTHING` while ids restart at `EVT-2026-0001`). Event ids are now unique per ledger epoch and duplicates are reported, not ignored.
+- **`sim/reset` did not reset PostgreSQL**: incident/replacement rows survived and resurrected on restart. Reset now deletes transactional rows (the append-only audit ledger starts a new epoch instead).
+- Persistence failures of machines, assignments and audit records are now logged instead of swallowed.
+
 ### Unit Test Suites and Defects Found by Them
-- Added `tests/run_unit_tests.sh` (wired into CI): 122 Java tests (`tests/unit/`, dependency-free harness), 26 Python tests for `lake-archiver` (real DuckDB + Parquet in a temp dir) and 26 for `telemetry`. Mutation-checked: 29/29 deliberately injected defects are caught.
+- Added `tests/run_unit_tests.sh` (wired into CI): 127 Java tests (`tests/unit/`, dependency-free harness), 26 Python tests for `lake-archiver` (real DuckDB + Parquet in a temp dir) and 29 for `telemetry`. Mutation-checked: 29/29 deliberately injected defects are caught.
 - **Fixed**: `JsonCodec.parseObject` silently turned garbage request bodies (e.g. `not-json`) into `{}`, so handlers applied their defaults (`machine_id=M01`, `field_id=F07`...). Client bodies now go through the new strict `JsonCodec.parseObjectStrict`; malformed JSON returns `400 INVALID_JSON`. The lenient parser is kept only for trusted upstream responses.
 - **Fixed**: `NaN`/`Infinity` were serialised verbatim (invalid JSON); they are now emitted as `null`.
 - **Fixed**: `lake-archiver` returned `datetime.date` values un-serialised from `rows_as_dicts`.

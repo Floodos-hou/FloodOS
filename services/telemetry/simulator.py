@@ -27,7 +27,11 @@ MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "")
 CORE_URL = os.environ.get("CORE_URL", "http://core-api:8000").rstrip("/")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 INTERVAL_S = float(os.environ.get("SIM_INTERVAL_S", "2"))
-REFRESH_S = float(os.environ.get("SIM_FLEET_REFRESH_S", "30"))
+REFRESH_S = float(os.environ.get("SIM_FLEET_REFRESH_S", "5"))
+# Demo time-lapse: machines move TIMELAPSE x faster than real life so motion is visible on a 14-zoom map.
+# 1 = real speed. The reported speed is capped at the core's 80 km/h validation limit.
+TIMELAPSE = max(1.0, float(os.environ.get("SIM_TIMELAPSE", "1")))
+MAX_REPORTED_SPEED_KMH = 80.0
 
 WORKING_SPEED_KMH = 6.0
 FUEL_BURN_PCT_PER_SAMPLE = 0.02
@@ -63,6 +67,18 @@ def metres_between(lat1, lon1, lat2, lon2):
     return math.hypot(dx, dy)
 
 
+def advance(m, interval_s, timelapse, turn_deg):
+    """Moves one WORKING machine along its (slowly turning) heading. Returns the speed reported in the sample (km/h)."""
+    speed = WORKING_SPEED_KMH * timelapse
+    m["heading"] = (m["heading"] + turn_deg) % 360
+    dist_km = speed * interval_s / 3600.0
+    h = math.radians(m["heading"])
+    m["lat"] += dist_km * math.cos(h) / 111.32
+    m["lon"] += dist_km * math.sin(h) / (111.32 * math.cos(math.radians(m["lat"])))
+    m["fuel_pct"] = max(5.0, m["fuel_pct"] - FUEL_BURN_PCT_PER_SAMPLE)
+    return min(MAX_REPORTED_SPEED_KMH, speed)
+
+
 def main():
     if not (INGEST_TOKEN and MQTT_USER and MQTT_PASSWORD):
         sys.exit("INGEST_TOKEN, MQTT_USER and MQTT_PASSWORD are required; failing fast")
@@ -74,7 +90,7 @@ def main():
     client.loop_start()
 
     machines = {m["machine_id"]: dict(m, heading=random.uniform(0, 360)) for m in wait_for_fleet()}
-    log(f"simulating {len(machines)} machine(s) every {INTERVAL_S}s: {', '.join(sorted(machines))}")
+    log(f"simulating {len(machines)} machine(s) every {INTERVAL_S}s (time-lapse x{TIMELAPSE:g}): {', '.join(sorted(machines))}")
     last_refresh = time.time()
 
     while True:
@@ -95,14 +111,9 @@ def main():
             last_refresh = time.time()
 
         for m in machines.values():
-            speed = WORKING_SPEED_KMH if m["status"] == "WORKING" else 0.0
-            if speed > 0:
-                m["heading"] = (m["heading"] + random.uniform(-15, 15)) % 360
-                dist_km = speed * INTERVAL_S / 3600.0
-                h = math.radians(m["heading"])
-                m["lat"] += dist_km * math.cos(h) / 111.32
-                m["lon"] += dist_km * math.sin(h) / (111.32 * math.cos(math.radians(m["lat"])))
-                m["fuel_pct"] = max(5.0, m["fuel_pct"] - FUEL_BURN_PCT_PER_SAMPLE)
+            speed = 0.0
+            if m["status"] == "WORKING":
+                speed = advance(m, INTERVAL_S, TIMELAPSE, random.uniform(-15, 15))
             payload = {
                 "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "lat": round(m["lat"], 6), "lon": round(m["lon"], 6),
