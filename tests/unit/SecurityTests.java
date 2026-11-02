@@ -160,6 +160,30 @@ final class SecurityTests {
             equal(1, r.seqNo(), "seq reset");
             equal(ImmutableAuditLedger.GENESIS_HASH, r.prevHash(), "genesis again");
         });
+        test("a persisted chain restored with its epoch still verifies and keeps growing in the same epoch", () -> {
+            ImmutableAuditLedger original = new ImmutableAuditLedger();
+            AuditRecord a = append(original, "ORG", "C1", "A");
+            AuditRecord b = append(original, "ORG", "C1", "B");
+            String epoch = original.getLedgerEpoch();
+
+            ImmutableAuditLedger restarted = new ImmutableAuditLedger();   // what the core does after a restart
+            restarted.rehydrateLedger(List.of(a, b), epoch);
+            equal(Boolean.TRUE, restarted.verifyChainIntegrity().get("chain_valid"), "restored chain verifies");
+            equal(epoch, restarted.getLedgerEpoch(), "epoch continues");
+            AuditRecord c = append(restarted, "ORG", "C1", "C");
+            equal(3, c.seqNo(), "sequence continues");
+            equal(b.recordHash(), c.prevHash(), "new record links to the last persisted record");
+            equal(Boolean.TRUE, restarted.verifyChainIntegrity().get("chain_valid"), "still valid after growing");
+        });
+        test("clear() starts a new epoch while rehydrate without an epoch also never reuses an old one", () -> {
+            ImmutableAuditLedger l = new ImmutableAuditLedger();
+            String first = l.getLedgerEpoch();
+            l.clear();
+            isFalse(first.equals(l.getLedgerEpoch()), "reset = new epoch");
+            String second = l.getLedgerEpoch();
+            l.rehydrateLedger(List.of());
+            isFalse(second.equals(l.getLedgerEpoch()), "rehydrating nothing starts a fresh epoch");
+        });
         test("concurrent appends keep a gap-free, valid chain", () -> {
             ImmutableAuditLedger l = new ImmutableAuditLedger();
             ExecutorService pool = Executors.newFixedThreadPool(8);

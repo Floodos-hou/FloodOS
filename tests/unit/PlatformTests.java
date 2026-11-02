@@ -296,6 +296,17 @@ final class PlatformTests {
         return m;
     }
 
+    private static Map<String, Object> incidentBody(String machineId) {
+        Map<String, Object> b = new LinkedHashMap<>();
+        b.put("machine_id", machineId);
+        b.put("severity", "CRITICAL");
+        b.put("incident_type", "Động cơ quá nóng");
+        b.put("description", "unit test");
+        b.put("estimated_downtime_hours", 24);
+        b.put("evidence_filename", "evidence.jpg");
+        return b;
+    }
+
     private static void applicationRules() {
         suite("AgriOpsService - telemetry ingestion");
         AgriOpsService svc = newService();
@@ -418,6 +429,43 @@ final class PlatformTests {
             s.dispatchAssignment(farmerBa, Map.of("machine_id", "M01"));
             isTrue((int) s.getStore().auditLedger.verifyChainIntegrity().get("total_blocks") > before, "RBAC denial audited");
             equal(Boolean.TRUE, s.getStore().auditLedger.verifyChainIntegrity().get("chain_valid"), "chain still valid");
+        });
+
+        test("rescue candidates use each machine's own registered operator, never the broken machine's driver", () -> {
+            AgriOpsService fresh = newService();
+            HttpResult r = fresh.reportMachineIncident(coord, incidentBody("M01"));
+            equal(201, r.status(), "incident accepted");
+            List<?> options = (List<?>) r.body().get("candidate_options");
+            isTrue(!options.isEmpty(), "there are rescue options");
+            Map<?, ?> top = (Map<?, ?>) options.get(0);
+            equal("M02", top.get("machine_id"), "best rescuer");
+            equal("OP-02", top.get("operator_id"), "M02 is driven by its own operator OP-02, not by M01's driver OP-01");
+            for (Object o : options) {
+                isFalse("OP-01".equals(((Map<?, ?>) o).get("operator_id")), "OP-01 (driver of the broken M01) is never proposed");
+            }
+        });
+        test("a machine with no registered operator is skipped instead of being given a guessed driver", () -> {
+            AgriOpsService fresh = newService();
+            HarvesterMachine m02 = fresh.getStore().machines.get("M02");
+            // simulates a machine reloaded from a database that lost its operator link (the original defect)
+            fresh.getStore().machines.put("M02", new HarvesterMachine(m02.machineId, m02.organizationId, m02.ownerUserId, m02.name,
+                    m02.machineType, m02.model, m02.capacityHaPerHr, m02.status, m02.fuelPct, m02.healthPct,
+                    m02.currentLat, m02.currentLng, null, m02.telemetryUpdatedAt));
+            HttpResult r = fresh.reportMachineIncident(coord, incidentBody("M01"));
+            for (Object o : (List<?>) r.body().get("candidate_options")) {
+                isFalse("M02".equals(((Map<?, ?>) o).get("machine_id")), "operator-less M02 must not be proposed");
+            }
+        });
+        test("approving a rescue replan swaps the shift and keeps the rescuer's own operator", () -> {
+            AgriOpsService fresh = newService();
+            HttpResult inc = fresh.reportMachineIncident(coord, incidentBody("M01"));
+            String incId = String.valueOf(inc.body().get("incident_id"));
+            Map<?, ?> top = (Map<?, ?>) ((List<?>) inc.body().get("candidate_options")).get(0);
+            HttpResult ok = fresh.approveRescueReplan(coord, incId, Map.of("option_id", top.get("option_id")));
+            equal(200, ok.status(), "approved");
+            String newId = String.valueOf(ok.body().get("new_assignment_id"));
+            equal("OP-02", fresh.getStore().assignments.get(newId).operatorId, "new shift uses M02's operator");
+            equal("SUPERSEDED", fresh.getStore().assignments.get(String.valueOf(ok.body().get("superseded_assignment_id"))).status, "old shift superseded");
         });
 
         suite("AgriOpsService - digital twin visibility");

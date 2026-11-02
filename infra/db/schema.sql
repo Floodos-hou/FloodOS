@@ -74,8 +74,11 @@ CREATE TABLE IF NOT EXISTS machines (
     location_geojson JSONB,
     current_lat DOUBLE PRECISION NOT NULL,
     current_lng DOUBLE PRECISION NOT NULL,
-    telemetry_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    telemetry_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    assigned_operator_id VARCHAR(64)
 );
+-- Volumes created before this column existed are upgraded on every boot (entrypoint re-applies this file).
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS assigned_operator_id VARCHAR(64);
 
 -- 5. OPERATORS (Người vận hành máy)
 CREATE TABLE IF NOT EXISTS operators (
@@ -197,6 +200,20 @@ CREATE TABLE IF NOT EXISTS audit_records (
     record_hash VARCHAR(64) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Exact material that went into each record hash, so a chain can be re-verified after a restart:
+-- JSONB re-formats text and created_at is the INSERT time, neither can reproduce the hashed bytes.
+-- A ledger "epoch" (new one after every simulator reset) is an independent chain starting at genesis, so
+-- event ids are unique per epoch rather than globally. Rows from before this upgrade have a NULL epoch and
+-- stay in the table as unverifiable history; they are not loaded into the live chain.
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS ledger_epoch VARCHAR(40);
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS ledger_seq INTEGER;
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS ledger_ts VARCHAR(40);
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS before_canonical TEXT;
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS after_canonical TEXT;
+ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS gateway_status INTEGER;
+ALTER TABLE audit_records DROP CONSTRAINT IF EXISTS audit_records_event_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_audit_epoch_event ON audit_records (ledger_epoch, event_id);
 
 -- Enforce append-only immutability on audit_records (Cold Audit Storage)
 CREATE OR REPLACE FUNCTION prevent_audit_mutation()

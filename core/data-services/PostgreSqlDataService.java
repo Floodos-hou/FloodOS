@@ -435,14 +435,15 @@ public final class PostgreSqlDataService {
     public boolean syncMachine(
             String orgId, String role, String userId, String machineId, String ownerUserId, String name,
             String machineType, String model, double capacityHaPerHr, String status,
-            double fuelPct, double healthPct, double currentLat, double currentLng
+            double fuelPct, double healthPct, double currentLat, double currentLng, String assignedOperatorId
     ) {
         if (!isConnectionLive()) return false;
         String sql = """
             INSERT INTO machines (
                 machine_id, organization_id, owner_user_id, name, machine_type,
-                model, capacity_ha_per_hr, status, fuel_pct, health_pct, current_lat, current_lng
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                model, capacity_ha_per_hr, status, fuel_pct, health_pct, current_lat, current_lng,
+                assigned_operator_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (machine_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 machine_type = EXCLUDED.machine_type,
@@ -453,6 +454,7 @@ public final class PostgreSqlDataService {
                 health_pct = EXCLUDED.health_pct,
                 current_lat = EXCLUDED.current_lat,
                 current_lng = EXCLUDED.current_lng,
+                assigned_operator_id = EXCLUDED.assigned_operator_id,
                 telemetry_updated_at = NOW();
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
@@ -471,11 +473,13 @@ public final class PostgreSqlDataService {
                 ps.setDouble(10, healthPct);
                 ps.setDouble(11, currentLat);
                 ps.setDouble(12, currentLng);
+                ps.setString(13, assignedOperatorId);
                 ps.executeUpdate();
             }
             conn.commit();
             return true;
         } catch (Exception e) {
+            System.err.println("[PG] syncMachine " + machineId + " failed: " + e.getMessage());
             return false;
         }
     }
@@ -484,7 +488,15 @@ public final class PostgreSqlDataService {
             String machineType, String model, double capacityHaPerHr, String status,
             double fuelPct, double healthPct, double currentLat, double currentLng
     ) {
-        return syncMachine(orgId, role, ownerUserId, machineId, ownerUserId, name, machineType, model, capacityHaPerHr, status, fuelPct, healthPct, currentLat, currentLng);
+        return syncMachine(orgId, role, ownerUserId, machineId, ownerUserId, name, machineType, model, capacityHaPerHr, status, fuelPct, healthPct, currentLat, currentLng, null);
+    }
+
+    public boolean syncMachine(
+            String orgId, String role, String machineId, String ownerUserId, String name,
+            String machineType, String model, double capacityHaPerHr, String status,
+            double fuelPct, double healthPct, double currentLat, double currentLng, String assignedOperatorId
+    ) {
+        return syncMachine(orgId, role, ownerUserId, machineId, ownerUserId, name, machineType, model, capacityHaPerHr, status, fuelPct, healthPct, currentLat, currentLng, assignedOperatorId);
     }
 
     /**
@@ -626,6 +638,7 @@ public final class PostgreSqlDataService {
             conn.commit();
             return true;
         } catch (Exception e) {
+            System.err.println("[PG] syncAssignment failed: " + e.getMessage());
             return false;
         }
     }
@@ -760,16 +773,17 @@ public final class PostgreSqlDataService {
     public boolean syncAuditRecord(
             String orgId, String role, String userId, String eventId, String correlationId, String entityType,
             String entityId, String action, String actorUserId, String actorRole,
-            String beforeStateJson, String afterStateJson, String prevHash, String recordHash
+            String beforeStateJson, String afterStateJson, String prevHash, String recordHash,
+            String ledgerEpoch, int ledgerSeq, String ledgerTs, int gatewayStatus
     ) {
         if (!isConnectionLive()) return false;
         String sql = """
             INSERT INTO audit_records (
                 event_id, organization_id, correlation_id, entity_type, entity_id,
                 action, actor_user_id, actor_role, before_state, after_state,
-                prev_hash, record_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)
-            ON CONFLICT (event_id) DO NOTHING;
+                prev_hash, record_hash, ledger_epoch, ledger_seq, ledger_ts, before_canonical, after_canonical, gateway_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING;
             """;
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
             conn.setAutoCommit(false);
@@ -787,11 +801,21 @@ public final class PostgreSqlDataService {
                 ps.setString(10, (afterStateJson != null && !afterStateJson.isBlank()) ? afterStateJson : "{}");
                 ps.setString(11, prevHash != null ? prevHash : "0000000000000000000000000000000000000000000000000000000000000000");
                 ps.setString(12, recordHash);
-                ps.executeUpdate();
+                ps.setString(13, ledgerEpoch);
+                ps.setInt(14, ledgerSeq);
+                ps.setString(15, ledgerTs);
+                ps.setString(16, (beforeStateJson != null && !beforeStateJson.isBlank()) ? beforeStateJson : "{}");
+                ps.setString(17, (afterStateJson != null && !afterStateJson.isBlank()) ? afterStateJson : "{}");
+                ps.setInt(18, gatewayStatus);
+                int inserted = ps.executeUpdate();
+                if (inserted == 0) {
+                    throw new IllegalStateException("audit record " + eventId + " was not inserted (duplicate in epoch " + ledgerEpoch + ")");
+                }
             }
             conn.commit();
             return true;
         } catch (Exception e) {
+            System.err.println("[PG] syncAuditRecord " + eventId + " failed: " + e.getMessage());
             return false;
         }
     }
@@ -801,7 +825,7 @@ public final class PostgreSqlDataService {
             String entityId, String action, String actorUserId, String actorRole,
             String beforeStateJson, String afterStateJson, String prevHash, String recordHash
     ) {
-        return syncAuditRecord(orgId, role, actorUserId, eventId, correlationId, entityType, entityId, action, actorUserId, actorRole, beforeStateJson, afterStateJson, prevHash, recordHash);
+        return syncAuditRecord(orgId, role, actorUserId, eventId, correlationId, entityType, entityId, action, actorUserId, actorRole, beforeStateJson, afterStateJson, prevHash, recordHash, null, 0, null, 200);
     }
 
     /**
@@ -874,6 +898,30 @@ public final class PostgreSqlDataService {
     /**
      * Queries all records of a table for cold-start platform rehydration using PLATFORM_ADMIN role.
      */
+    /**
+     * Removes every row produced by business activity (acceptances, incidents, assignments, requests) so that a
+     * simulator reset really returns to the seed state instead of letting stale rows resurrect on the next boot
+     * (and block new shifts through the GiST exclusion constraints). Master data is re-upserted by the seeding step
+     * and the audit ledger is never touched: it is append-only and a reset simply starts a new ledger epoch.
+     */
+    public boolean deleteTransactionalData() {
+        if (!isConnectionLive()) return false;
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
+            conn.setAutoCommit(false);
+            try (Statement st = conn.createStatement()) {
+                st.execute("SET LOCAL app.current_user_role = 'PLATFORM_ADMIN';");
+                for (String table : new String[]{"work_acceptances", "incidents", "assignments", "service_requests"}) {
+                    st.executeUpdate("DELETE FROM " + table);
+                }
+            }
+            conn.commit();
+            return true;
+        } catch (Exception e) {
+            System.err.println("[PG] deleteTransactionalData failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     public List<Map<String, Object>> queryAll(String tableName) {
         List<Map<String, Object>> rows = new ArrayList<>();
         if (!isConnectionLive()) return rows;
@@ -901,7 +949,7 @@ public final class PostgreSqlDataService {
             } else if ("work_acceptances".equalsIgnoreCase(tableName)) {
                 sql = "SELECT acceptance_id, organization_id, assignment_id, request_id, completed_area_ha, evidence_object_key, operator_submitted_by, farmer_confirmed_by, confirmation_status, notes, correlation_id, confirmed_at::text AS confirmed_at, created_at::text AS created_at FROM work_acceptances";
             } else if ("audit_records".equalsIgnoreCase(tableName)) {
-                sql = "SELECT seq_no, event_id, organization_id, correlation_id, entity_type, entity_id, action, actor_user_id, actor_role, before_state::text AS before_state, after_state::text AS after_state, prev_hash, record_hash, created_at::text AS created_at FROM audit_records ORDER BY seq_no ASC";
+                sql = "SELECT seq_no, event_id, organization_id, correlation_id, entity_type, entity_id, action, actor_user_id, actor_role, before_state::text AS before_state, after_state::text AS after_state, prev_hash, record_hash, created_at::text AS created_at, ledger_epoch, ledger_seq, ledger_ts, before_canonical, after_canonical, gateway_status FROM audit_records ORDER BY seq_no ASC";
             } else if ("incidents".equalsIgnoreCase(tableName)) {
                 sql = "SELECT incident_id, organization_id, machine_id, reported_by_user_id, severity, incident_type, description, estimated_downtime_hours, evidence_object_key, evidence_etag, repair_ticket_id, assigned_repair_user_id, status, bpmn_process_id, correlation_id, created_at::text AS created_at FROM incidents";
             } else {
