@@ -96,8 +96,18 @@ public final class ImmutableAuditLedger {
     }
 
     public synchronized void rehydrateLedger(List<AuditRecord> records) {
+        rehydrateLedger(records, null);
+    }
+
+    /** Restores a persisted chain and continues it in the same epoch (a null epoch starts a fresh one). */
+    public synchronized void rehydrateLedger(List<AuditRecord> records, String epoch) {
         ledger.clear();
         ledger.addAll(records);
+        ledgerEpoch = (epoch != null && !epoch.isBlank()) ? epoch : UUID.randomUUID().toString();
+    }
+
+    public synchronized String getLedgerEpoch() {
+        return ledgerEpoch;
     }
 
     public static String sha256Hex(String input) {
@@ -170,9 +180,10 @@ public final class ImmutableAuditLedger {
 
         if (postgreSqlDataService != null && postgreSqlDataService.isConnectionLive()) {
             postgreSqlDataService.syncAuditRecord(
-                    organizationId, actorRole, eventId, correlationId,
+                    organizationId, actorRole, actorUserId, eventId, correlationId,
                     entityType, entityId, action, actorUserId, actorRole,
-                    beforeJson, afterJson, prevHash, recordHash
+                    beforeJson, afterJson, prevHash, recordHash,
+                    ledgerEpoch, nextSeq, ts, gatewayStatus
             );
         }
 
