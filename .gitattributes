@@ -7,3 +7,13 @@
 Dockerfile text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+*.svg text eol=lf
+
+# Protect binary images from line-ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
+*.gif binary
+*.jar binary
