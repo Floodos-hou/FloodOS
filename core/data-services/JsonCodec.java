@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.util.*;
 
@@ -32,10 +32,16 @@ public final class JsonCodec {
             return value.toString();
         }
         if (value instanceof Double d) {
+            if (d.isNaN() || d.isInfinite()) {
+                return "null";
+            }
             if (d == Math.floor(d) && !Double.isInfinite(d)) {
                 return String.format(Locale.US, "%.1f", d);
             }
             return Double.toString(d);
+        }
+        if (value instanceof Float f && (f.isNaN() || f.isInfinite())) {
+            return "null";
         }
         if (value instanceof Number n) {
             return n.toString();
@@ -91,29 +97,68 @@ public final class JsonCodec {
         return sb.toString();
     }
 
+    /**
+     * Lenient parse for trusted upstream responses (Keycloak, Flowable, Postgres): blank or non-object input
+     * yields an empty map and minor syntax errors are tolerated.
+     */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> parseObject(String json) {
         if (json == null || json.isBlank()) {
             return new LinkedHashMap<>();
         }
-        Object parsed = new Parser(json.trim()).parseValue();
+        Object parsed = new Parser(json.trim(), false).parseValue();
         if (parsed instanceof Map<?, ?> m) {
             return (Map<String, Object>) m;
         }
         return new LinkedHashMap<>();
     }
 
+    /**
+     * Strict RFC 8259 parse for untrusted client input. A blank body is an empty object; anything else must be
+     * one well-formed JSON object with no trailing characters, otherwise {@link IllegalArgumentException}.
+     * Garbage must never degrade silently into "{}" (handlers would then apply their default values).
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parseObjectStrict(String json) {
+        if (json == null || json.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        Parser parser = new Parser(json.trim(), true);
+        Object parsed = parser.parseValue();
+        parser.expectEnd();
+        if (!(parsed instanceof Map<?, ?> m)) {
+            throw new IllegalArgumentException("JSON body must be an object");
+        }
+        return (Map<String, Object>) m;
+    }
+
     private static final class Parser {
         private final String src;
+        private final boolean strict;
         private int pos = 0;
 
-        Parser(String src) {
+        Parser(String src, boolean strict) {
             this.src = src;
+            this.strict = strict;
+        }
+
+        private IllegalArgumentException syntax(String what) {
+            return new IllegalArgumentException("Malformed JSON at offset " + pos + ": " + what);
+        }
+
+        void expectEnd() {
+            skipWhitespace();
+            if (pos != src.length()) {
+                throw syntax("unexpected trailing characters");
+            }
         }
 
         Object parseValue() {
             skipWhitespace();
-            if (pos >= src.length()) return null;
+            if (pos >= src.length()) {
+                if (strict) throw syntax("unexpected end of input");
+                return null;
+            }
             char c = src.charAt(pos);
             return switch (c) {
                 case '{' -> parseMap();
@@ -135,9 +180,14 @@ public final class JsonCodec {
             }
             while (pos < src.length()) {
                 skipWhitespace();
+                if (strict && (pos >= src.length() || src.charAt(pos) != '"')) throw syntax("object key must be a string");
                 String key = parseString();
                 skipWhitespace();
-                if (pos < src.length() && src.charAt(pos) == ':') pos++;
+                if (pos < src.length() && src.charAt(pos) == ':') {
+                    pos++;
+                } else if (strict) {
+                    throw syntax("expected ':' after object key");
+                }
                 Object val = parseValue();
                 map.put(key, val);
                 skipWhitespace();
@@ -145,11 +195,12 @@ public final class JsonCodec {
                     pos++;
                 } else if (pos < src.length() && src.charAt(pos) == '}') {
                     pos++;
-                    break;
+                    return map;
                 } else {
                     break;
                 }
             }
+            if (strict) throw syntax("unterminated object");
             return map;
         }
 
@@ -168,11 +219,12 @@ public final class JsonCodec {
                     pos++;
                 } else if (pos < src.length() && src.charAt(pos) == ']') {
                     pos++;
-                    break;
+                    return list;
                 } else {
                     break;
                 }
             }
+            if (strict) throw syntax("unterminated array");
             return list;
         }
 
@@ -183,6 +235,9 @@ public final class JsonCodec {
                 char c = src.charAt(pos++);
                 if (c == '"') {
                     return sb.toString();
+                }
+                if (strict && c < 0x20) {
+                    throw syntax("unescaped control character in string");
                 }
                 if (c == '\\' && pos < src.length()) {
                     char esc = src.charAt(pos++);
@@ -196,16 +251,27 @@ public final class JsonCodec {
                         case 'u' -> {
                             if (pos + 4 <= src.length()) {
                                 String hex = src.substring(pos, pos + 4);
-                                sb.append((char) Integer.parseInt(hex, 16));
+                                try {
+                                    sb.append((char) Integer.parseInt(hex, 16));
+                                } catch (NumberFormatException e) {
+                                    if (strict) throw syntax("invalid \\u escape");
+                                    throw e;
+                                }
                                 pos += 4;
+                            } else if (strict) {
+                                throw syntax("truncated \\u escape");
                             }
                         }
-                        default -> sb.append(esc);
+                        default -> {
+                            if (strict) throw syntax("invalid escape \\" + esc);
+                            sb.append(esc);
+                        }
                     }
                 } else {
                     sb.append(c);
                 }
             }
+            if (strict) throw syntax("unterminated string");
             return sb.toString();
         }
 
@@ -218,12 +284,15 @@ public final class JsonCodec {
                 pos += 5;
                 return Boolean.FALSE;
             }
+            if (strict) throw syntax("invalid literal");
             return Boolean.FALSE;
         }
 
         private Object parseNull() {
             if (src.startsWith("null", pos)) {
                 pos += 4;
+            } else if (strict) {
+                throw syntax("invalid literal");
             }
             return null;
         }
@@ -234,6 +303,9 @@ public final class JsonCodec {
                 pos++;
             }
             String numStr = src.substring(start, pos);
+            if (strict && numStr.isEmpty()) {
+                throw syntax("unexpected character '" + (pos < src.length() ? src.charAt(pos) : '?') + "'");
+            }
             if (numStr.contains(".") || numStr.contains("e") || numStr.contains("E")) {
                 return Double.parseDouble(numStr);
             }

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 FloodOS Contributors -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://floodos.org/bpmn">
+
+  <!-- FloodOS SOP-02: a vehicle fails in the field; affected orders are re-planned and the vehicle is repaired. -->
+  <process id="dispatch_replan_workflow" name="Quy trình Sự cố phương tiện và điều phối lại (SOP-02)" isExecutable="true">
+    <startEvent id="startIncident" name="Đội hiện trường báo sự cố phương tiện kèm ảnh" flowable:initiator="reporterUserId"/>
+    <sequenceFlow id="incFlow1" sourceRef="startIncident" targetRef="serviceImpactAnalysis"/>
+
+    <serviceTask id="serviceImpactAnalysis"
+                 name="Tự động khoanh vùng lệnh bị đứt gãy và xếp hạng phương án thay thế (khoảng cách đường chim bay Haversine, tải, đội)"
+                 flowable:expression="${execution.setVariable(&apos;impactEvaluated&apos;, true)}"/>
+    <sequenceFlow id="incFlow2" sourceRef="serviceImpactAnalysis" targetRef="parallelSplit"/>
+
+    <parallelGateway id="parallelSplit"/>
+    <sequenceFlow id="incFlow3a" sourceRef="parallelSplit" targetRef="taskDispatcherApproveReplan"/>
+    <sequenceFlow id="incFlow3b" sourceRef="parallelSplit" targetRef="taskResourceManagerRepair"/>
+
+    <userTask id="taskDispatcherApproveReplan"
+              name="Điều phối viên phê duyệt phương án thay thế"
+              flowable:candidateGroups="DISPATCHER"/>
+    <sequenceFlow id="incFlow4" sourceRef="taskDispatcherApproveReplan" targetRef="taskFieldTeamAcknowledge"/>
+
+    <userTask id="taskFieldTeamAcknowledge"
+              name="Đội thay thế nhận lệnh và xuất phát"
+              flowable:candidateGroups="FIELD_TEAM"/>
+    <sequenceFlow id="incFlow5a" sourceRef="taskFieldTeamAcknowledge" targetRef="endReplan"/>
+
+    <userTask id="taskResourceManagerRepair"
+              name="Quản lý nguồn lực tiếp nhận phiếu sửa chữa và khắc phục phương tiện"
+              flowable:candidateGroups="RESOURCE_MANAGER"/>
+    <sequenceFlow id="incFlow5b" sourceRef="taskResourceManagerRepair" targetRef="endRepair"/>
+
+    <endEvent id="endReplan" name="Hoàn tất điều phối lại"/>
+    <endEvent id="endRepair" name="Hoàn tất phiếu sửa chữa"/>
+  </process>
+</definitions>

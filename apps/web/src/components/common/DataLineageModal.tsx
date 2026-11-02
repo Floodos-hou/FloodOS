@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { api } from '../../services/api';
 import { formatLocalTime } from '../../utils/dateTime';
 import { GitCommit, ShieldCheck, X, Clock, User } from 'lucide-react';
+import { TraceLink } from './TraceLink';
 
 interface DataLineageModalProps {
   isOpen: boolean;
@@ -99,6 +100,7 @@ export const DataLineageModal: React.FC<DataLineageModalProps> = ({
                   <p className="text-sm text-slate-600 mt-1 font-mono">
                     Mã theo dõi: <strong>{lineageData.correlation_id}</strong> · Số bản ghi: {lineageData.chain_proof.total_blocks}
                   </p>
+                  <div className="mt-3"><TraceLink traceId={String(lineageData.correlation_id)} /></div>
                 </div>
               </div>
               <div className="text-right hidden sm:block">

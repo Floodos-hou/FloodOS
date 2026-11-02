@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 /**
- * Multi-Tenant Row-Level Security (RLS) & Field-Level Visibility Policy Resolver.
- * Enforces tenant isolation by `organization_id`, user-level isolation by `user_id`,
- * and role-based data masking.
+ * Multi-Tenant Row-Level Security (RLS) session helper (domain-neutral).
+ * Carries `organization_id`, role and `user_id` into the PostgreSQL session so the policies in infra/db/schema.sql
+ * decide which rows a request may see. Which role sees which rows is defined by the application, not here.
  */
 public final class TenantRlsContext {
+
+    /** Platform-level role: bypasses tenant filters in the policies. Used for seeding and cold-start rehydration only. */
+    public static final String PLATFORM_ROLE = "PLATFORM_ADMIN";
 
     private TenantRlsContext() {}
 
@@ -62,15 +65,5 @@ public final class TenantRlsContext {
 
     public static boolean isSameTenant(AuthContext auth, String resourceOrgId) {
         return auth != null && auth.organizationId().equals(resourceOrgId);
-    }
-
-    public static String resolveFieldVisibility(AuthContext auth, String fieldOwnerUserId) {
-        if ("FARMER".equals(auth.role()) && !auth.userId().equals(fieldOwnerUserId)) {
-            return "FOG_OF_WAR";
-        }
-        if ("REPAIR_TEAM".equals(auth.role())) {
-            return "FOG_OF_WAR";
-        }
-        return "FULL";
     }
 }

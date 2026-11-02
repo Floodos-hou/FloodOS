@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 /** RFC 7636: the code_verifier is generated and kept in the browser; only the S256 challenge is sent out. */
 

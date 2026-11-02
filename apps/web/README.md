@@ -1,4 +1,4 @@
-# OpenAgriOS Web — Cổng Điều Hành Tác Chiến Nông Nghiệp (Operations Portal)
+# FloodOS Web — Cổng Điều Hành Tác Chiến Nông Nghiệp (Operations Portal)
 
 Ứng dụng React 19 + TypeScript + Vite + Tailwind CSS 4 + MapLibre GL cho nông hộ, điều phối viên HTX,
 người vận hành, chủ máy và đội sửa chữa. Mọi dữ liệu đi qua API Gateway (APISIX); không có mock.
@@ -17,7 +17,7 @@ Biến môi trường (xem `.env.example`): `VITE_API_GATEWAY_URL`, `VITE_KEYCLO
 
 ## Xác thực
 
-Authorization Code + PKCE (RFC 7636 / RFC 9700), client công khai `agriops-web`:
+Authorization Code + PKCE (RFC 7636 / RFC 9700), client công khai `floodos-web`:
 
 1. Trình duyệt tự sinh `code_verifier` và `code_challenge` (Web Crypto, `src/utils/pkce.ts`).
 2. Gọi `GET /api/v1/auth/pkce/authorize-url?code_challenge=…` rồi chuyển hướng sang Keycloak.

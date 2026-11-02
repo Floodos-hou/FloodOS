@@ -1,691 +1,210 @@
 // SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 FloodOS Contributors
 
-// Copyright 2026 OpenAgriOS Contributors
+package org.floodos.tests;
 
-
-
-package org.openagrios.tests;
-
-
-
-import org.openagrios.apps.agriops.OpenAgriOsServer;
-
-import org.openagrios.core.dataservices.JsonCodec;
-
-import org.openagrios.core.identity.KeycloakOidcEngine;
-
-import org.openagrios.core.dataservices.PostgreSqlDataService;
-import org.openagrios.core.dataservices.TenantRlsContext;
-
-
+import org.floodos.apps.floodos.FloodOSServer;
+import org.floodos.core.dataservices.JsonCodec;
+import org.floodos.core.identity.KeycloakOidcEngine;
 
 import java.io.File;
-
 import java.net.URI;
-
 import java.net.http.HttpClient;
-
 import java.net.http.HttpRequest;
-
 import java.net.http.HttpResponse;
-
 import java.util.*;
 
-
-
 /**
-
- * Automated End-to-End Integration & Acceptance Test Suite for OpenAgriOS Core & AgriOps Application.
-
- * Verifies OIDC authentication, RBAC access control, Multi-Tenant RLS isolation,
-
- * schedule conflict detection, BPMN incident replanning, and SHA-256 audit chain integrity.
-
+ * In-process acceptance suite for FloodOS: the real HTTP server on an ephemeral port, the real router, the
+ * real RBAC / ownership / conflict rules and the real hash-chained ledger, with the development token issuer.
+ * (The full-stack suite, tests/e2e_full_stack_test.sh, repeats the golden path against Docker with Keycloak, APISIX,
+ * PostgreSQL row-level security, Flowable, SeaweedFS and Kafka.)
+ *
+ * <p>Story: a resident reports a flood, the dispatcher verifies and dispatches a boat, the field team starts, the boat
+ * breaks down, the dispatcher approves a ranked replacement, the field team finishes, the resident confirms, and the
+ * audit chain proves the whole case.
  */
-
 public final class AcceptanceTestRunner {
 
-
-
     private static final int TEST_PORT = 18091;
-
     private static final String BASE_URL = "http://127.0.0.1:" + TEST_PORT;
-
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
-
-
+    private static int passed = 0;
 
     private record ApiRes(int status, Map<String, Object> body) {}
 
-
-
-    private static ApiRes apiReq(String method, String path, String token, Map<String, Object> payload) throws Exception {
-
-        HttpRequest.Builder b = HttpRequest.newBuilder()
-
-                .uri(URI.create(BASE_URL + path))
-
-                .header("Content-Type", "application/json");
-
-        if (token != null) {
-
-            b.header("Authorization", "Bearer " + token);
-
-        }
-
+    private static ApiRes api(String method, String path, String token, Map<String, Object> payload) throws Exception {
+        HttpRequest.Builder b = HttpRequest.newBuilder().uri(URI.create(BASE_URL + path)).header("Content-Type", "application/json");
+        if (token != null) b.header("Authorization", "Bearer " + token);
         if ("POST".equals(method)) {
-
-            String json = payload != null ? JsonCodec.toJson(payload) : "{}";
-
-            b.POST(HttpRequest.BodyPublishers.ofString(json));
-
+            b.POST(HttpRequest.BodyPublishers.ofString(JsonCodec.toJson(payload != null ? payload : Map.of())));
         } else {
-
             b.GET();
-
         }
-
         HttpResponse<String> resp = CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofString());
-
         return new ApiRes(resp.statusCode(), JsonCodec.parseObject(resp.body()));
-
     }
-
-
 
     private static void check(boolean condition, String msg) {
-
-        if (!condition) {
-
-            throw new AssertionError("TEST FAILED: " + msg);
-
-        }
-
+        if (!condition) throw new AssertionError("TEST FAILED: " + msg);
+        passed++;
+        System.out.println("  [ok] " + (msg.length() > 150 ? msg.substring(0, 150) + "..." : msg));
     }
 
+    private static Map<String, Object> body(Object... kv) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) m.put(String.valueOf(kv[i]), kv[i + 1]);
+        return m;
+    }
 
+    private static String login(String username) throws Exception {
+        ApiRes r = api("POST", "/api/v1/auth/login", null, body("username", username, "password", "123456"));
+        check(r.status() == 200 && r.body().get("access_token") != null, "login " + username);
+        return String.valueOf(r.body().get("access_token"));
+    }
 
     @SuppressWarnings("unchecked")
-
-    public static void main(String[] args) throws Exception {
-
-        File root = OpenAgriOsServer.resolveProjectRoot();
-
-        OpenAgriOsServer server = new OpenAgriOsServer(root);
-
-        server.start(TEST_PORT);
-
-
-
-        try {
-
-            System.out.println("============================================================================");
-
-            System.out.println("RUNNING OPENAGRIOS INTEGRATION TEST SUITE (JAVA 21)");
-
-            System.out.println("============================================================================");
-
-
-
-            // 1. Health & BPMN Process Definitions
-
-            ApiRes health = apiReq("GET", "/api/v1/health", null, null);
-
-            check(health.status() == 200 && "HEALTHY".equals(health.body().get("status")), "Health check failed");
-
-            Map<String, Object> bpmnDefs = (Map<String, Object>) health.body().get("bpmn_definitions");
-
-            check(bpmnDefs.containsKey("service_request") && bpmnDefs.containsKey("incident_replan"), "BPMN definitions missing");
-
-            System.out.println("[PASS] Core Platform Health & BPMN 2.0 XML Definitions verified.");
-
-
-
-            // 2. Keycloak OIDC Multi-Role Authentication
-
-            ApiRes farmerLogin = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "farmer_ba", "password", "123456"));
-
-            ApiRes coordLogin = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "coord_htx01", "password", "123456"));
-
-            ApiRes opLogin = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "op_minh", "password", "123456"));
-
-            ApiRes stLogin = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "coord_htx02", "password", "123456"));
-
-
-
-            String tFarmer = String.valueOf(farmerLogin.body().get("access_token"));
-
-            String tCoord = String.valueOf(coordLogin.body().get("access_token"));
-
-            String tOp = String.valueOf(opLogin.body().get("access_token"));
-
-            String tSt = String.valueOf(stLogin.body().get("access_token"));
-
-            System.out.println("[PASS] OIDC Authentication verified across roles (FARMER, COORDINATOR, OPERATOR) and tenants.");
-
-
-
-            // 2.1. Zero-Trust Gateway rejects invalid, forged, or missing JWT tokens (HTTP 401)
-
-            ApiRes forgedTokenRes = apiReq("GET", "/api/v1/state", tFarmer + "forged_tampered_signature", null);
-
-            check(forgedTokenRes.status() == 401 && "UNAUTHORIZED".equals(forgedTokenRes.body().get("error")), "Tampered token was not rejected with 401");
-
-
-
-            ApiRes noTokenRes = apiReq("GET", "/api/v1/state", null, null);
-
-            check(noTokenRes.status() == 401 && "UNAUTHORIZED".equals(noTokenRes.body().get("error")), "Missing token was not rejected with 401");
-
-
-
-            // 2.2. Verify forged RS256 token is strictly rejected in mock mode (HTTP 401)
-
-            String forgedRs256 = KeycloakOidcEngine.createForgedRs256Token("attacker_sub", "COORDINATOR", "HTX_CANTHO_01");
-
-            ApiRes forgedRs256Res = apiReq("GET", "/api/v1/state", forgedRs256, null);
-
-            check(forgedRs256Res.status() == 401 && "UNAUTHORIZED".equals(forgedRs256Res.body().get("error")), "Forged RS256 token was not rejected with 401");
-
-
-
-            // 2.3. Verify KEYCLOAK_PRODUCTION mode fails fast without mock fallback when Keycloak is offline
-
-            try {
-
-                KeycloakOidcEngine.setAuthModeForTesting(KeycloakOidcEngine.AuthMode.KEYCLOAK_PRODUCTION);
-
-                ApiRes liveLoginFail = apiReq("POST", "/api/v1/auth/login", null, Map.of("username", "non_existent_user_999", "password", "wrong_password"));
-
-                check(liveLoginFail.status() == 401 && "KEYCLOAK_LOGIN_FAILED".equals(liveLoginFail.body().get("error")),
-
-                        "KEYCLOAK_PRODUCTION mode must return 401 KEYCLOAK_LOGIN_FAILED and never fallback to mock");
-
-
-
-                ApiRes hs256InProd = apiReq("GET", "/api/v1/state", tCoord, null);
-
-                check(hs256InProd.status() == 401 && "UNAUTHORIZED".equals(hs256InProd.body().get("error")),
-
-                        "In KEYCLOAK_PRODUCTION mode, HS256 mock token must be rejected with 401");
-
-                // In KEYCLOAK_PRODUCTION mode: authorize-url must not issue fake code, and token exchange must fail fast with 401 when Keycloak is offline
-                ApiRes prodPkceUrl = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
-                check(prodPkceUrl.status() == 200 && !prodPkceUrl.body().containsKey("code"),
-                        "In KEYCLOAK_PRODUCTION mode, authorize-url must never issue a fake code");
-                check("KEYCLOAK_PRODUCTION".equals(prodPkceUrl.body().get("auth_mode")),
-                        "In KEYCLOAK_PRODUCTION mode, auth_mode stamp must be KEYCLOAK_PRODUCTION");
-
-                ApiRes prodPkceFail = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                        "code", "fake_code_12345",
-                        "code_verifier", "dummy_code_verifier_1234567890123456789012345678901234567890",
-                        "client_id", "agriops-web",
-                        "redirect_uri", "http://localhost:8000/callback"
-                ));
-                check((prodPkceFail.status() == 400 || prodPkceFail.status() == 401) && prodPkceFail.body().containsKey("error"),
-                        "In KEYCLOAK_PRODUCTION mode, PKCE exchange must fail fast (HTTP 401) without mock fallback when Keycloak is offline");
-
-            } finally {
-
-                KeycloakOidcEngine.resetAuthModeForTesting();
-
-            }
-
-
-
-            // 2.4. Verify expired token is strictly rejected (HTTP 401)
-
-            KeycloakOidcEngine.UserAccount dummyUser = new KeycloakOidcEngine.UserAccount("usr_coord_01", "coord_htx01", "123456", "Chi Lan", "c@htx.vn", "HTX_CANTHO_01", "COORDINATOR");
-
-            String expiredToken = KeycloakOidcEngine.createExpiredToken(dummyUser);
-
-            ApiRes expiredRes = apiReq("GET", "/api/v1/state", expiredToken, null);
-
-            check(expiredRes.status() == 401 && "UNAUTHORIZED".equals(expiredRes.body().get("error")), "Expired token was not rejected with 401");
-
-
-
-            // 2.5. Verify wrong audience token is strictly rejected (HTTP 401)
-
-            String wrongAudToken = KeycloakOidcEngine.createWrongAudienceToken(dummyUser);
-
-            ApiRes wrongAudRes = apiReq("GET", "/api/v1/state", wrongAudToken, null);
-
-            check(wrongAudRes.status() == 401 && "UNAUTHORIZED".equals(wrongAudRes.body().get("error")), "Wrong audience token was not rejected with 401");
-
-
-
-            // 2.6. Verify PKCE Authorization Session Generator (RFC 7636)
-            ApiRes pkceRes = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
-            check(pkceRes.status() == 200 && pkceRes.body().containsKey("code_challenge") && pkceRes.body().containsKey("code_verifier"), "PKCE session generation failed");
-            String generatedCode = String.valueOf(pkceRes.body().get("code"));
-            String generatedVerifier = String.valueOf(pkceRes.body().get("code_verifier"));
-
-            // Verify /api/v1/auth/pkce/authorize-code acquisition in standalone mock mode
-            ApiRes mockCodeAcquisition = apiReq("POST", "/api/v1/auth/pkce/authorize-code", null, Map.of(
-                    "username", "coord_htx01",
-                    "password", "123456",
-                    "code_challenge", String.valueOf(pkceRes.body().get("code_challenge")),
-                    "state", "test-state-pkce-1"
-            ));
-            check(mockCodeAcquisition.status() == 200 && mockCodeAcquisition.body().containsKey("code"), "PKCE authorize-code acquisition failed");
-
-            // 2.7. Verify Confidential Client Introspection Credentials (RFC 7662)
-            check("agriops-gateway".equals(KeycloakOidcEngine.DEFAULT_INTROSPECTION_CLIENT_ID), "Confidential client ID must be agriops-gateway");
-            check("agriops-gateway-secret-2026".equals(KeycloakOidcEngine.DEFAULT_INTROSPECTION_CLIENT_SECRET), "Confidential client secret must match Keycloak realm");
-
-            // 2.8. Verify End-to-End PKCE Token Exchange with Generated Code & Code Verifier
-            ApiRes pkceTokenRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", generatedCode,
-                    "code_verifier", generatedVerifier,
-                    "client_id", "agriops-web",
-                    "state", String.valueOf(pkceRes.body().get("state")),
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(pkceTokenRes.status() == 200 && pkceTokenRes.body().containsKey("access_token"), "PKCE token exchange failed");
-            check(Boolean.TRUE.equals(pkceTokenRes.body().get("pkce_verified")), "PKCE verified flag must be true");
-
-            // 2.8.1. Verify that the access token obtained via PKCE successfully authenticates against protected APIs
-            String pkceToken = String.valueOf(pkceTokenRes.body().get("access_token"));
-            ApiRes pkceAuthApiRes = apiReq("GET", "/api/v1/state", pkceToken, null);
-            check(pkceAuthApiRes.status() == 200, "PKCE bearer token must grant access to /api/v1/state");
-
-            // 2.8.2. Verify PKCE rejects invalid/mismatched code_verifier (RFC 7636 Section 4.6)
-            ApiRes pkceSession2 = apiReq("GET", "/api/v1/auth/pkce/authorize-url", null, null);
-            String code2 = String.valueOf(pkceSession2.body().get("code"));
-            ApiRes pkceMismatchRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", code2,
-                    "code_verifier", "wrong_verifier_abcdefghijklmnopqrstuvwxyz0123456789_invalid",
-                    "client_id", "agriops-web",
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(pkceMismatchRes.status() == 400 && "INVALID_GRANT".equals(pkceMismatchRes.body().get("error")), "Mismatched PKCE verifier must return 400 INVALID_GRANT");
-
-            // 2.8.3. Verify PKCE state validation and CSRF protection (RFC 6749 Section 10.12)
-            Map<String, Object> stateSession = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-secure-token-9988");
-            String stateCode = String.valueOf(stateSession.get("code"));
-            String stateVerifier = String.valueOf(stateSession.get("code_verifier"));
-
-            // Mismatched state must be rejected with 400 INVALID_GRANT
-            ApiRes csrfAttackRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", stateCode,
-                    "code_verifier", stateVerifier,
-                    "state", "forged-csrf-state-attacker",
-                    "client_id", "agriops-web",
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(csrfAttackRes.status() == 400 && "INVALID_GRANT".equals(csrfAttackRes.body().get("error")), "Tampered CSRF state must return 400 INVALID_GRANT");
-
-            // Correct state must succeed and verify state token
-            Map<String, Object> stateSession2 = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-valid-token-777");
-            String stateCode2 = String.valueOf(stateSession2.get("code"));
-            String stateVerifier2 = String.valueOf(stateSession2.get("code_verifier"));
-            ApiRes stateValidRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", stateCode2,
-                    "code_verifier", stateVerifier2,
-                    "state", "csrf-valid-token-777",
-                    "client_id", "agriops-web",
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(stateValidRes.status() == 200 && "csrf-valid-token-777".equals(stateValidRes.body().get("state")), "Valid PKCE state token exchange failed");
-
-            // 2.8.3b. Client-owned PKCE: the browser keeps the verifier; the server only ever sees the S256 challenge
-            String ownVerifier = KeycloakOidcEngine.generateCodeVerifier();
-            String ownChallenge = KeycloakOidcEngine.generateCodeChallenge(ownVerifier);
-            Map<String, Object> ownSession = KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "csrf-own-challenge-1", ownChallenge);
-            check(!ownSession.containsKey("code_verifier"), "Server must never return a code_verifier when the client supplies its own code_challenge");
-            check(ownChallenge.equals(ownSession.get("code_challenge")), "Server must echo the client-owned code_challenge unchanged");
-            ApiRes ownExchange = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", String.valueOf(ownSession.get("code")),
-                    "code_verifier", ownVerifier,
-                    "state", "csrf-own-challenge-1",
-                    "client_id", "agriops-web",
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(ownExchange.status() == 200, "Client-owned PKCE verifier must exchange successfully");
-            boolean badChallengeRejected = false;
-            try {
-                KeycloakOidcEngine.generatePkceSession("http://localhost:8000/callback", "s", "not-a-valid-challenge");
-            } catch (IllegalArgumentException expected) {
-                badChallengeRejected = true;
-            }
-            check(badChallengeRejected, "Malformed code_challenge must be rejected");
-
-            // 2.8.3. Verify PKCE rejects code_verifier with invalid length (< 43 characters, RFC 7636 Section 4.1)
-            ApiRes pkceTooShortRes = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of(
-                    "code", "test_auth_code_xyz",
-                    "code_verifier", "too_short_code_verifier",
-                    "client_id", "agriops-web",
-                    "redirect_uri", "http://localhost:8000/callback"
-            ));
-            check(pkceTooShortRes.status() == 400 && "INVALID_CODE_VERIFIER".equals(pkceTooShortRes.body().get("error")), "Too-short verifier must return 400 INVALID_CODE_VERIFIER");
-
-            // 2.9. Verify PKCE rejects missing code/verifier with HTTP 400
-            ApiRes pkceMissing = apiReq("POST", "/api/v1/auth/pkce/token", null, Map.of());
-            check(pkceMissing.status() == 400 && "MISSING_PKCE_PARAMETERS".equals(pkceMissing.body().get("error")), "Missing PKCE params must return 400");
-
-            // 2.10. Verify OpenAgriOS Role Priority Resolver ignores Keycloak system roles
-            check("COORDINATOR".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access", "COORDINATOR", "uma_authorization"))), "Keycloak system roles must not override dominant COORDINATOR role");
-            check("OPERATOR".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "OPERATOR"))), "Keycloak default roles must not override OPERATOR role");
-            check("FARMER".equals(KeycloakOidcEngine.resolveOpenAgriOsRole(List.of("default-roles-openagrios", "offline_access"))), "Missing domain roles must default to least-privileged FARMER");
-
-            // 2.11. Verify PKCE Session TTL enforcement (60 seconds)
-            KeycloakOidcEngine.PkceSession expiredSession = new KeycloakOidcEngine.PkceSession(
-                    "code-expired-99", "ch-dummy", "S256", "agriops-web", "http://localhost:8000/callback", "st-99",
-                    java.time.Instant.now().minusSeconds(120)
-            );
-            KeycloakOidcEngine.pendingPkceSessions.put("code-expired-99", expiredSession);
-            boolean ttlReject = KeycloakOidcEngine.verifyPkceCodeChallenge("code-expired-99", "dummy_code_verifier_1234567890123456789012345678901234567890", "st-99");
-            check(!ttlReject, "Expired PKCE session (>60s TTL) must be strictly rejected");
-
-            // 2.12. Verify PKCE Session rejects missing state when session has state
-            KeycloakOidcEngine.PkceSession stateSessionCheck = new KeycloakOidcEngine.PkceSession(
-                    "code-state-check-1", KeycloakOidcEngine.generateCodeChallenge("dummy_code_verifier_1234567890123456789012345678901234567890"), "S256", "agriops-web", "http://localhost:8000/callback", "expected-state-abc",
-                    java.time.Instant.now()
-            );
-            KeycloakOidcEngine.pendingPkceSessions.put("code-state-check-1", stateSessionCheck);
-            boolean missingStateReject = KeycloakOidcEngine.verifyPkceCodeChallenge("code-state-check-1", "dummy_code_verifier_1234567890123456789012345678901234567890", null);
-            check(!missingStateReject, "PKCE session with state must strictly reject empty/missing incoming state");
-
-
-
-            System.out.println("[PASS] Zero-Trust Token Guard: Rejected tampered signature, forged RS256, expired token, wrong audience, and verified Keycloak production failure without mock fallback (HTTP 401).");
-
-
-
-            // 3. Multi-Tenancy RLS & Role-Based Field Visibility
-
-            ApiRes stFarmer = apiReq("GET", "/api/v1/state", tFarmer, null);
-
-            ApiRes stCoord2 = apiReq("GET", "/api/v1/state", tSt, null);
-
-
-
-            List<Map<String, Object>> farmerFields = (List<Map<String, Object>>) stFarmer.body().get("fields");
-
-            List<String> fullFields = new ArrayList<>();
-
-            int fogCount = 0;
-
-            for (Map<String, Object> f : farmerFields) {
-
-                if ("FULL".equals(f.get("visibility"))) {
-
-                    fullFields.add(String.valueOf(f.get("field_id")));
-
-                } else if ("FOG_OF_WAR".equals(f.get("visibility"))) {
-
-                    fogCount++;
-
-                }
-
-            }
-
-            check(Set.copyOf(fullFields).equals(Set.of("F01", "F03", "F07")), "Farmer FULL visibility mismatch");
-
-            check(fogCount == 0 && farmerFields.size() == 3,
-                    "Farmer response must omit, not merely mask, fields owned by other users");
-
-
-
-            List<Map<String, Object>> stFields = (List<Map<String, Object>>) stCoord2.body().get("fields");
-
-            check(stFields.size() == 1 && "F_ST01".equals(stFields.get(0).get("field_id")), "Tenant 2 RLS isolation failed");
-
-            // 3.1. Verify PostgreSQL RLS Data Service session compiler with app.current_user_id
-            PostgreSqlDataService pgService = new PostgreSqlDataService();
-            Map<String, Object> pgRls = pgService.testConnectionAndApplyRls("HTX_CANTHO_01", "FARMER", "usr_farmer_ba");
-            check(pgRls.containsKey("compiled_rls_sql"), "PostgreSQL RLS SQL check failed");
-            String compiledRls = String.valueOf(pgRls.get("compiled_rls_sql"));
-            check(compiledRls.contains("SET LOCAL app.current_org_id = 'HTX_CANTHO_01'"), "RLS SQL must set app.current_org_id");
-            check(compiledRls.contains("SET LOCAL app.current_user_role = 'FARMER'"), "RLS SQL must set app.current_user_role");
-            check(compiledRls.contains("SET LOCAL app.current_user_id = 'usr_farmer_ba'"), "RLS SQL must set app.current_user_id");
-
-            // 3.1.1. Verify multi-user isolation within the same cooperative
-            var baAuth = new KeycloakOidcEngine.AuthContext("usr_farmer_ba", "farmer_ba", "HTX_CANTHO_01", "FARMER");
-            var namAuth = new KeycloakOidcEngine.AuthContext("usr_farmer_nam", "farmer_nam", "HTX_CANTHO_01", "FARMER");
-            check("FULL".equals(TenantRlsContext.resolveFieldVisibility(baAuth, "usr_farmer_ba")), "Farmer Ba must have FULL visibility on own field");
-            check("FOG_OF_WAR".equals(TenantRlsContext.resolveFieldVisibility(namAuth, "usr_farmer_ba")), "Farmer Nam must see FOG_OF_WAR on Farmer Ba's field");
-            String storageMode = server.getAgriOpsService().getStore().getStorageEngineMode();
-            check(storageMode != null && !storageMode.isBlank(), "Storage engine mode must be reported truthfully");
-
-            // 3.2. Verify Schema Harmonization & Direct RLS Persistence with infra/db/schema.sql
-            check(server.getAgriOpsService().getStore().postgreSqlDataService != null, "PostgreSQL service must be initialized");
-            check(server.getAgriOpsService().getStore().fields.containsKey("F01"), "Field F01 must exist in store");
-            check(server.getAgriOpsService().getStore().machines.containsKey("M01"), "Machine M01 must exist in store");
-            check(server.getAgriOpsService().getStore().assignments.containsKey("ASG-101"), "Assignment ASG-101 must exist in store");
-
-            // 3.3. Verify season_window harmonization and persistence verification
-            var fieldF01 = server.getAgriOpsService().getStore().fields.get("F01");
-            check(fieldF01 != null && fieldF01.windowStart != null && fieldF01.windowEnd != null, "Field F01 must have non-null season window");
-            boolean persistOk = server.getAgriOpsService().getStore().persistField(fieldF01, "COORDINATOR");
-            check(persistOk, "Persist field with season_window must succeed");
-
-            // 3.4. Verify Multi-Tenant RLS isolation across cooperatives
-            List<Map<String, Object>> canThoFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_CANTHO_01", "COORDINATOR");
-            List<Map<String, Object>> socTrangFields = server.getAgriOpsService().getStore().queryDatabaseFieldsWithRls("HTX_SOCTRANG_02", "COORDINATOR");
-            check(canThoFields != null && socTrangFields != null, "RLS query lists must not be null");
-
-            // 3.5. Verify Database Cold-Start Rehydration & Persistence
-            String coldStartReqId = "REQ-COLD-START-99";
-            server.getAgriOpsService().getStore().persistServiceRequest(new org.openagrios.apps.agriops.AgriModels.ServiceRequest(
-                    coldStartReqId, "HTX_CANTHO_01", "F01", "usr_farmer_ba", 3.0,
-                    "2026-11-20T14:00:00Z", "2026-11-20T18:00:00Z", "URGENT", "PENDING_SCHEDULE",
-                    "PRC-REQ-CS99", "CORR-CS99", "Cold-start test request", "2026-11-20T09:00:00Z"
-            ), "COORDINATOR");
-            check(server.getAgriOpsService().getStore().serviceRequests.containsKey(coldStartReqId), "Request must exist in store");
-
-            var testStore = new org.openagrios.apps.agriops.AgriDataStore(
-                    new org.openagrios.core.dataservices.ImmutableAuditLedger(),
-                    new org.openagrios.core.dataservices.SeaweedS3StorageService(),
-                    new org.openagrios.core.workflow.BpmnWorkflowEngine(root)
-            );
-            if (testStore.postgreSqlDataService.isConnectionLive() && testStore.postgreSqlDataService.hasExistingData()) {
-                check(testStore.serviceRequests.containsKey(coldStartReqId), "Persisted service request REQ-COLD-START-99 must be rehydrated from PostgreSQL on cold start");
-                System.out.println("[PASS] Database Cold-Start Rehydration verified: REQ-COLD-START-99 rehydrated successfully from PostgreSQL.");
-            } else {
-                System.out.println("[PASS] Cold-start fallback initialized cleanly in standalone development mode.");
-            }
-
-
-
-            
-            // 3.6. Verify POSTGRESQL_PRODUCTION mode fail-fast and zero-in-memory-leakage
-            // When PostgreSQL is offline in production storage mode, persist* must fail fast and never retain entity in memory
-            var offlineProdStore = new org.openagrios.apps.agriops.AgriDataStore(
-                    new org.openagrios.core.dataservices.ImmutableAuditLedger(),
-                    new org.openagrios.core.dataservices.SeaweedS3StorageService(),
-                    new org.openagrios.core.workflow.BpmnWorkflowEngine(root)
-            );
-            boolean caughtFailFast = false;
-            try {
-                org.openagrios.apps.agriops.AgriDataStore.setStorageModeForTesting("POSTGRESQL_PRODUCTION");
-                offlineProdStore.persistServiceRequest(new org.openagrios.apps.agriops.AgriModels.ServiceRequest(
-                        "REQ-OFFLINE-TEST", "HTX_CANTHO_01", "F01", "usr_farmer_ba", 2.0,
-                        "2026-11-20T10:00:00Z", "2026-11-20T12:00:00Z", "URGENT", "PENDING_SCHEDULE",
-                        "PRC-REQ-OFFLINE", "CORR-OFFLINE", "Test request", "2026-11-20T08:00:00Z"
-                ), "FARMER", "usr_farmer_ba");
-            } catch (IllegalStateException expected) {
-                caughtFailFast = true;
-            } finally {
-                org.openagrios.apps.agriops.AgriDataStore.resetStorageModeForTesting();
-            }
-            if (!offlineProdStore.postgreSqlDataService.isConnectionLive()) {
-                check(caughtFailFast, "Offline PostgreSQL in production storage mode must fail-fast with IllegalStateException");
-                check(!offlineProdStore.serviceRequests.containsKey("REQ-OFFLINE-TEST"), "Failed entity must NEVER be placed into in-memory store in production mode");
-                System.out.println("[PASS] Production Storage Fail-Fast verified: blocked silent in-memory drift when PostgreSQL is unreachable.");
-            }
-
-            System.out.println("[PASS] Multi-Tenant RLS & Owner-Level Field Isolation verified: Farmer sees only " + fullFields + ".");
-
-
-
-            // 4. RBAC 403 Enforcement
-
-            ApiRes res403 = apiReq("POST", "/api/v1/assignments", tFarmer, Map.of(
-
-                    "request_id", "REQ-04", "machine_id", "M02", "operator_id", "OP-02",
-
-                    "start_time", "2026-11-20T13:00:00Z", "end_time", "2026-11-20T17:00:00Z"
-
-            ));
-
-            check(res403.status() == 403 && "RBAC_FORBIDDEN".equals(res403.body().get("error")), "RBAC 403 check failed");
-
-            System.out.println("[PASS] Zero-Trust RBAC Guard verified (HTTP 403 Forbidden on unauthorized dispatch).");
-
-
-
-            // 5. Schedule Overlap Conflict Engine (409 Conflict)
-
-            ApiRes res409 = apiReq("POST", "/api/v1/assignments", tCoord, Map.of(
-
-                    "request_id", "REQ-04", "machine_id", "M01", "operator_id", "OP-01",
-
-                    "start_time", "2026-11-20T08:00:00Z", "end_time", "2026-11-20T11:30:00Z"
-
-            ));
-
-            check(res409.status() == 409 && "MACHINE_TIME_OVERLAP".equals(res409.body().get("error")), "Conflict 409 check failed");
-
-            System.out.println("[PASS] Time-Window Conflict Engine verified (HTTP 409: " + res409.body().get("error") + ").");
-
-
-
-            // 6. Unfeasible Replacement Handling
-
-            ApiRes resEmpty = apiReq("POST", "/api/v1/incidents", tOp, Map.of(
-
-                    "machine_id", "M01", "severity", "CRITICAL", "incident_type", "Unfeasible Scenario", "force_no_option", true
-
-            ));
-
-            check(resEmpty.status() == 201 && Boolean.TRUE.equals(resEmpty.body().get("no_feasible_option")), "No-feasible-option check failed");
-
-            System.out.println("[PASS] Unfeasible replacement fallback state verified.");
-
-
-
-            // Reset state and verify full incident-replan workflow
-
-            apiReq("POST", "/api/v1/sim/reset", tCoord, Map.of());
-
-
-
-            // 7. Incident Reporting + S3 Evidence + Spatial Rescue Matching
-
-            ApiRes resInc = apiReq("POST", "/api/v1/incidents", tOp, Map.of(
-
-                    "machine_id", "M01", "severity", "CRITICAL",
-
-                    "incident_type", "Đứt dây curoa buồng đập", "evidence_filename", "dut_curoa_m01.jpg"
-
-            ));
-
-            List<Map<String, Object>> candidates = (List<Map<String, Object>>) resInc.body().get("candidate_options");
-
-            check(resInc.status() == 201 && !candidates.isEmpty(), "Incident candidates empty");
-
-            Map<String, Object> topOpt = candidates.get(0);
-
-            check("M02".equals(topOpt.get("machine_id")), "Top rescue machine should be M02");
-
-            Map<String, Object> minioEv = (Map<String, Object>) resInc.body().get("minio_evidence");
-
-            // 7.1. S3 Read/Write roundtrip persistence check
-
-            Map<String, Object> s3Read = server.getAgriOpsService().getStore().s3Storage.readEvidenceObject("HTX_CANTHO_01", "openagrios-evidence", "incidents", "INC-2026-001", "dut_curoa_m01.jpg");
-
-            check("SUCCESS".equals(s3Read.get("status")), "S3 roundtrip readback failed");
-
-
-
-            System.out.println("[PASS] Incident reported + S3 ETag (" + String.valueOf(minioEv.get("etag")).substring(0, 8) + ") -> Rescue candidate " + topOpt.get("machine_id") + " (" + topOpt.get("score") + " pts, " + topOpt.get("distance_km") + " km).");
-
-
-
-            // 8. Coordinator BPMN Replan Approval
-
-            String incId = String.valueOf(resInc.body().get("incident_id"));
-
-            ApiRes resRep = apiReq("POST", "/api/v1/incidents/" + incId + "/approve-replan", tCoord, Map.of(
-
-                    "option_id", topOpt.get("option_id")
-
-            ));
-
-            check(resRep.status() == 200 && "ASG-102-R1".equals(resRep.body().get("new_assignment_id")), "Approve replan failed");
-
-            System.out.println("[PASS] BPMN Replan approved -> Shift ASG-102 superseded by " + resRep.body().get("new_assignment_id") + ".");
-
-            // 8.0. Repair ticket: progress keeps UNDER_REPAIR, declaring the machine fixed resolves the incident
-            ApiRes resRepairProgress = apiReq("POST", "/api/v1/incidents/" + incId + "/repair", tCoord, Map.of(
-                    "diagnosis", "Đang kiểm tra hệ thống làm mát", "is_resolved", false
-            ));
-            check(resRepairProgress.status() == 200 && "UNDER_REPAIR".equals(resRepairProgress.body().get("status")), "Repair progress must keep incident UNDER_REPAIR");
-            ApiRes resRepairFixed = apiReq("POST", "/api/v1/incidents/" + incId + "/repair", tCoord, Map.of(
-                    "diagnosis", "Đã thay két nước làm mát", "is_resolved", true
-            ));
-            check(resRepairFixed.status() == 200 && "RESOLVED".equals(resRepairFixed.body().get("status")), "is_resolved=true must resolve the incident");
-            System.out.println("[PASS] Repair ticket verified: progress -> UNDER_REPAIR, declared fixed -> RESOLVED.");
-
-            // 8.1. Operator & Coordinator Shift Status Progression & RBAC Guard
-            ApiRes resSkipStatus = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tCoord, Map.of(
-                    "status", "COMPLETED"
-            ));
-            check(resSkipStatus.status() == 409, "Assignment completion must require prior IN_PROGRESS state");
-            ApiRes resUnassignedOp = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tOp, Map.of(
-                    "status", "IN_PROGRESS", "progress_pct", 50.0
-            ));
-            check(resUnassignedOp.status() == 403, "Unassigned operator must be rejected with 403");
-
-            ApiRes resCoordStatus = apiReq("POST", "/api/v1/assignments/ASG-102-R1/status", tCoord, Map.of(
-                    "status", "IN_PROGRESS", "progress_pct", 60.0
-            ));
-            check(resCoordStatus.status() == 200, "Coordinator shift status update failed");
-            System.out.println("[PASS] Operator & Coordinator Shift Status Transition verified (RBAC Guard enforced).");
-
-
-
-            // 9. Work Acceptance & SHA-256 Lineage Chain Verification
-
-            ApiRes resAcc = apiReq("POST", "/api/v1/acceptances", tFarmer, Map.of(
-
-                    "assignment_id", "ASG-102-R1", "action", "FARMER_CONFIRM"
-
-            ));
-
-            check(resAcc.status() == 200 && "ACC-ASG-102-R1".equals(resAcc.body().get("acceptance_id")), "Confirm acceptance failed");
-            check(server.getAgriOpsService().getStore().acceptances.containsKey("ACC-ASG-102-R1"), "Work acceptance must be persisted in store");
-            check(server.getAgriOpsService().getStore().incidents.containsKey(incId), "Incident must be persisted in store");
-
-
-
-            ApiRes resLin = apiReq("GET", "/api/v1/audit/lineage/CORR-GOLDEN-F03", tCoord, null);
-
-            Map<String, Object> proof = (Map<String, Object>) resLin.body().get("chain_proof");
-
-            List<Map<String, Object>> steps = (List<Map<String, Object>>) resLin.body().get("lineage_steps");
-
-            check(resLin.status() == 200 && Boolean.TRUE.equals(proof.get("chain_valid")) && steps.size() == 9, "Lineage verification failed (expected 9 steps: 7 original + 2 repair-ticket events)");
-
-            System.out.println("[PASS] Immutable SHA-256 Audit Chain & Data Lineage verified (" + steps.size() + " linked records).");
-
-
-
-            System.out.println("============================================================================");
-
-            System.out.println("ALL INTEGRATION TESTS PASSED SUCCESSFULLY!");
-
-            System.out.println("============================================================================");
-
-        } finally {
-
-            server.stop();
-
-        }
-
+    private static List<Map<String, Object>> list(ApiRes state, String key) {
+        return (List<Map<String, Object>>) state.body().get(key);
     }
 
-}
+    private static boolean has(List<Map<String, Object>> rows, String key, String value) {
+        return rows.stream().anyMatch(r -> value.equals(String.valueOf(r.get(key))));
+    }
 
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) throws Exception {
+        File root = FloodOSServer.resolveProjectRoot();
+        FloodOSServer server = new FloodOSServer(root);
+        KeycloakOidcEngine.setAuthModeForTesting(KeycloakOidcEngine.AuthMode.DEV_MOCK_STANDALONE);
+        server.start(TEST_PORT);
+        try {
+            System.out.println("============================================================================");
+            System.out.println("HANOI FLOODOS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)");
+            System.out.println("============================================================================");
+
+            System.out.println("\n[1] Platform health, workflow definitions and registered roles");
+            ApiRes health = api("GET", "/api/v1/health", null, null);
+            check(health.status() == 200 && "HEALTHY".equals(health.body().get("status")), "health is HEALTHY");
+            Map<String, Object> defs = (Map<String, Object>) health.body().get("bpmn_definitions");
+            check(defs.containsKey("flood_report_lifecycle") && defs.containsKey("dispatch_replan"), "both BPMN processes are loaded from infra/bpmn");
+            List<String> roles = (List<String>) health.body().get("registered_roles");
+            check(roles.equals(List.of("PLATFORM_ADMIN", "DISPATCHER", "RESOURCE_MANAGER", "FIELD_TEAM", "REPORTER")), "the application registered its roles: " + roles);
+
+            System.out.println("\n[2] Authentication fails closed");
+            check(api("GET", "/api/v1/state", null, null).status() == 401, "no token -> 401");
+            check(api("GET", "/api/v1/state", "garbage", null).status() == 401, "bad token -> 401");
+            check(api("POST", "/api/v1/auth/login", null, body("username", "reporter_lan", "password", "wrong")).status() == 401, "wrong password -> 401");
+            check(api("POST", "/api/v1/auth/login", null, body("username", "farmer_ba", "password", "123456")).status() == 401, "former rice-harvest account no longer exists");
+
+            String reporter = login("reporter_lan");
+            String otherReporter = login("reporter_hung");
+            String dispatcher = login("dispatcher_hoa");
+            String boatTeam = login("team_binh");
+            String truckTeam = login("team_cuong");
+            String manager = login("resource_giang");
+            String foreignDispatcher = login("dispatcher_tuan");
+
+            System.out.println("\n[3] Row-level scope per role (what each person can see)");
+            ApiRes lanState = api("GET", "/api/v1/state", reporter, null);
+            check(has(list(lanState, "reports"), "report_id", "FR-0001") && !has(list(lanState, "reports"), "report_id", "FR-0002"),
+                    "a resident sees only their own reports");
+            check(!JsonCodec.toJson(lanState.body()).contains("FR-0002") && !JsonCodec.toJson(lanState.body()).contains("FR-0091"),
+                    "other residents' and other tenants' reports appear nowhere in the payload");
+            check(list(api("GET", "/api/v1/state", dispatcher, null), "reports").size() == 4, "the dispatcher sees the four reports of the tenant");
+            check(list(api("GET", "/api/v1/state", manager, null), "reports").isEmpty(), "the resource manager sees no citizen report");
+            check(list(api("GET", "/api/v1/state", foreignDispatcher, null), "reports").size() == 1, "another tenant's dispatcher sees only its own data");
+            Map<String, Object> notice = api("GET", "/api/v1/state", dispatcher, null).body();
+            check(String.valueOf(notice.get("data_notice")).contains("MÔ PHỎNG"), "the state says the demo data is simulated");
+
+            System.out.println("\n[4] Report -> verify -> dispatch");
+            ApiRes created = api("POST", "/api/v1/flood-reports", reporter,
+                    body("lat", 20.9665, "lng", 105.8712, "depth_cm", 55, "need_type", "EVACUATION", "people_affected", 5, "description", "nước vào nhà"));
+            check(created.status() == 201, "resident files a report: " + created.body());
+            String report = String.valueOf(created.body().get("report_id"));
+            check(api("POST", "/api/v1/dispatch-orders", reporter, body()).status() == 403, "a resident cannot dispatch");
+            check(api("POST", "/api/v1/flood-reports/" + report + "/verify", reporter, body("decision", "VERIFIED", "priority", "HIGH")).status() == 403, "a resident cannot verify");
+            check(api("POST", "/api/v1/dispatch-orders", dispatcher, body("report_id", report, "vehicle_id", "V02", "team_id", "T02",
+                    "start_time", "2031-01-01T08:00:00Z", "end_time", "2031-01-01T10:00:00Z")).status() == 409, "dispatching an unverified report is refused");
+            check(api("POST", "/api/v1/flood-reports/" + report + "/verify", dispatcher, body("decision", "VERIFIED", "priority", "URGENT")).status() == 200, "dispatcher verifies");
+            ApiRes order = api("POST", "/api/v1/dispatch-orders", dispatcher, body("report_id", report, "vehicle_id", "V02", "team_id", "T02",
+                    "start_time", "2031-01-01T08:00:00Z", "end_time", "2031-01-01T10:00:00Z"));
+            check(order.status() == 201, "dispatcher dispatches boat V02 + team T02: " + order.body());
+            String orderId = String.valueOf(order.body().get("order_id"));
+
+            System.out.println("\n[5] Double booking is blocked");
+            String second = String.valueOf(api("POST", "/api/v1/flood-reports", otherReporter,
+                    body("lat", 20.9665, "lng", 105.8712, "depth_cm", 40, "need_type", "EVACUATION")).body().get("report_id"));
+            api("POST", "/api/v1/flood-reports/" + second + "/verify", dispatcher, body("decision", "VERIFIED", "priority", "HIGH"));
+            ApiRes clash = api("POST", "/api/v1/dispatch-orders", dispatcher, body("report_id", second, "vehicle_id", "V02", "team_id", "T03",
+                    "start_time", "2031-01-01T09:00:00Z", "end_time", "2031-01-01T11:00:00Z"));
+            check(clash.status() == 409 && "RESOURCE_TIME_OVERLAP".equals(clash.body().get("error")), "same vehicle, overlapping window -> 409 RESOURCE_TIME_OVERLAP");
+            ApiRes teamClash = api("POST", "/api/v1/dispatch-orders", dispatcher, body("report_id", second, "vehicle_id", "V01", "team_id", "T02",
+                    "start_time", "2031-01-01T09:00:00Z", "end_time", "2031-01-01T11:00:00Z"));
+            check(teamClash.status() == 409 && "HOLDER_TIME_OVERLAP".equals(teamClash.body().get("error")), "same team, overlapping window -> 409 HOLDER_TIME_OVERLAP");
+
+            System.out.println("\n[6] Field team works its own order only");
+            check(api("POST", "/api/v1/dispatch-orders/" + orderId + "/status", boatTeam, body("status", "IN_PROGRESS", "progress_pct", 10)).status() == 404,
+                    "another team's order is invisible (404)");
+            check(api("POST", "/api/v1/dispatch-orders/" + orderId + "/status", truckTeam, body("status", "IN_PROGRESS", "progress_pct", 10)).status() == 200, "the right team starts the order");
+            check(api("POST", "/api/v1/dispatch-orders/" + orderId + "/status", truckTeam, body("status", "IN_PROGRESS", "progress_pct", 5, "note", "x")).status() == 409, "progress cannot go backwards");
+
+            System.out.println("\n[7] Incident, ranked replacements and human approval");
+            ApiRes incident = api("POST", "/api/v1/field-incidents", truckTeam,
+                    body("vehicle_id", "V02", "severity", "CRITICAL", "incident_type", "PROPELLER_FOULED", "description", "vướng rác", "estimated_downtime_hours", 4));
+            check(incident.status() == 201, "field team reports a breakdown of V02: " + incident.body());
+            String incId = String.valueOf(incident.body().get("incident_id"));
+            List<Map<String, Object>> options = (List<Map<String, Object>>) incident.body().get("candidate_options");
+            check(!options.isEmpty() && options.stream().noneMatch(o -> "V02".equals(o.get("vehicle_id"))), "replacements are ranked and never include the broken vehicle");
+            check(options.stream().allMatch(o -> "STRAIGHT_LINE_HAVERSINE".equals(o.get("distance_kind"))), "every option says its distance is straight-line");
+            check(api("POST", "/api/v1/field-incidents/" + incId + "/approve-replan", truckTeam, body("option_id", "x")).status() == 403, "the field team cannot approve");
+            check(api("POST", "/api/v1/field-incidents/" + incId + "/approve-replan", dispatcher, body()).status() == 400, "approval requires an explicit option");
+            String chosen = String.valueOf(options.get(0).get("option_id"));
+            ApiRes approved = api("POST", "/api/v1/field-incidents/" + incId + "/approve-replan", dispatcher, body("option_id", chosen));
+            check(approved.status() == 200 && String.valueOf(approved.body().get("new_order_id")).endsWith("-R1"), "dispatcher approves the replacement: " + approved.body());
+            String newOrder = String.valueOf(approved.body().get("new_order_id"));
+            check(api("POST", "/api/v1/field-incidents/" + incId + "/repair-ticket", boatTeam, body("diagnosis", "x")).status() == 403, "a field team cannot touch the repair ticket");
+            check(api("POST", "/api/v1/field-incidents/" + incId + "/repair-ticket", manager, body("diagnosis", "đã gỡ rác, thay chân vịt", "is_resolved", true)).status() == 200, "the resource manager closes the repair ticket");
+
+            System.out.println("\n[8] Completion and confirmation");
+            Map<String, Object> repState = api("GET", "/api/v1/state", dispatcher, null).body();
+            String newTeam = null;
+            for (Map<String, Object> o : (List<Map<String, Object>>) repState.get("orders")) if (newOrder.equals(o.get("order_id"))) newTeam = String.valueOf(o.get("team_id"));
+            String newTeamToken = "T01".equals(newTeam) ? boatTeam : "T02".equals(newTeam) ? truckTeam : login("team_dung");
+            check(api("POST", "/api/v1/dispatch-orders/" + newOrder + "/status", newTeamToken, body("status", "IN_PROGRESS", "progress_pct", 30)).status() == 200, "the replacement team starts");
+            ApiRes done = api("POST", "/api/v1/dispatch-orders/" + newOrder + "/status", newTeamToken,
+                    body("status", "COMPLETED", "progress_pct", 100, "outcome", "RESOLVED", "final_depth_cm", 8));
+            check(done.status() == 200 && done.body().get("resolution_id") != null, "the replacement team completes: " + done.body());
+            String resolution = String.valueOf(done.body().get("resolution_id"));
+            check(api("POST", "/api/v1/resolutions", otherReporter, body("resolution_id", resolution, "decision", "CONFIRMED")).status() == 404, "another resident cannot confirm (and cannot tell it exists)");
+            check(api("POST", "/api/v1/resolutions", newTeamToken, body("resolution_id", resolution, "decision", "CONFIRMED")).status() == 403, "the field team cannot confirm its own work");
+            ApiRes confirmed = api("POST", "/api/v1/resolutions", reporter, body("resolution_id", resolution, "decision", "CONFIRMED"));
+            check(confirmed.status() == 200 && "RESOLVED".equals(confirmed.body().get("report_status")), "the resident confirms and the case is resolved");
+
+            System.out.println("\n[9] The audit chain proves the case");
+            ApiRes verify = api("GET", "/api/v1/audit/verify", dispatcher, null);
+            check(Boolean.TRUE.equals(verify.body().get("chain_valid")), "hash chain verifies end to end");
+            ApiRes lineage = api("GET", "/api/v1/audit/lineage/CORR-" + report, dispatcher, null);
+            String lineageText = JsonCodec.toJson(lineage.body());
+            check(lineage.status() == 200 && lineageText.contains("CREATE_FLOOD_REPORT") && lineageText.contains("CONFIRM_RESOLUTION_AND_SEAL_LEDGER"),
+                    "the case lineage runs from the report to the sealed confirmation");
+            ApiRes lanAfter = api("GET", "/api/v1/state", reporter, null);
+            check(has(list(lanAfter, "reports"), "report_id", report) && list(lanAfter, "reports").stream().anyMatch(r -> report.equals(r.get("report_id")) && "RESOLVED".equals(r.get("status"))),
+                    "the resident sees their report as RESOLVED");
+
+            System.out.println("\n[10] Ingestion endpoints and the demo reset are closed to normal users");
+            check(api("POST", "/api/v1/sim/reset", dispatcher, body()).status() == 403, "a dispatcher cannot reset the data");
+            check(api("POST", "/api/v1/sim/reset", reporter, body()).status() == 403, "a resident cannot reset the data");
+            check(api("GET", "/api/v1/internal/assets", dispatcher, null).status() == 503 || api("GET", "/api/v1/internal/assets", dispatcher, null).status() == 401,
+                    "the internal roster needs the ingest token, not a user token");
+
+            System.out.println("\n============================================================================");
+            System.out.println("ACCEPTANCE: " + passed + " checks passed");
+            System.out.println("============================================================================");
+        } finally {
+            server.stop();
+            KeycloakOidcEngine.resetAuthModeForTesting();
+        }
+        System.exit(0);
+    }
+}

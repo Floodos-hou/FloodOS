@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -78,6 +78,13 @@ public final class ImmutableAuditLedger {
 
     private final List<AuditRecord> ledger = new ArrayList<>();
     private PostgreSqlDataService postgreSqlDataService;
+    private EventBusPublisher eventBus = EventBusPublisher.disabled();
+    /** Distinguishes event-id sequences across simulator resets so the cold lake can de-duplicate safely. */
+    private String ledgerEpoch = UUID.randomUUID().toString();
+
+    public void setEventBus(EventBusPublisher eventBus) {
+        this.eventBus = eventBus != null ? eventBus : EventBusPublisher.disabled();
+    }
 
     public void setPostgreSqlDataService(PostgreSqlDataService postgreSqlDataService) {
         this.postgreSqlDataService = postgreSqlDataService;
@@ -85,11 +92,22 @@ public final class ImmutableAuditLedger {
 
     public synchronized void clear() {
         ledger.clear();
+        ledgerEpoch = UUID.randomUUID().toString();
     }
 
     public synchronized void rehydrateLedger(List<AuditRecord> records) {
+        rehydrateLedger(records, null);
+    }
+
+    /** Restores a persisted chain and continues it in the same epoch (a null epoch starts a fresh one). */
+    public synchronized void rehydrateLedger(List<AuditRecord> records, String epoch) {
         ledger.clear();
         ledger.addAll(records);
+        ledgerEpoch = (epoch != null && !epoch.isBlank()) ? epoch : UUID.randomUUID().toString();
+    }
+
+    public synchronized String getLedgerEpoch() {
+        return ledgerEpoch;
     }
 
     public static String sha256Hex(String input) {
@@ -153,11 +171,22 @@ public final class ImmutableAuditLedger {
         );
         ledger.add(rec);
 
+        if (eventBus.isEnabled()) {
+            Map<String, Object> event = rec.toFullMap();
+            event.put("event_type", "audit.v1");
+            event.put("ledger_epoch", ledgerEpoch);
+            // exact hashed bytes: lets independent consumers (Tier-3 traceability) recompute the SHA-256 chain
+            event.put("before_canonical", beforeJson);
+            event.put("after_canonical", afterJson);
+            eventBus.publish(EventBusPublisher.TOPIC_AUDIT, organizationId, event);
+        }
+
         if (postgreSqlDataService != null && postgreSqlDataService.isConnectionLive()) {
             postgreSqlDataService.syncAuditRecord(
-                    organizationId, actorRole, eventId, correlationId,
+                    organizationId, actorRole, actorUserId, eventId, correlationId,
                     entityType, entityId, action, actorUserId, actorRole,
-                    beforeJson, afterJson, prevHash, recordHash
+                    beforeJson, afterJson, prevHash, recordHash,
+                    ledgerEpoch, nextSeq, ts, gatewayStatus
             );
         }
 
