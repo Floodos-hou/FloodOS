@@ -101,12 +101,16 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <button
               type="button"
-              onClick={onReset}
+              onClick={() => {
+                if (window.confirm('Khôi phục dữ liệu mô phỏng về ca trực ban đầu? Thao tác này chỉ dùng khi chuẩn bị lại buổi trực.')) {
+                  onReset();
+                }
+              }}
               className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-slate-300 hover:bg-slate-700 hover:text-white transition"
-              title="Khôi phục trạng thái mô phỏng ban đầu"
+              title="Dữ liệu mô phỏng: Khôi phục trạng thái trực ban đầu"
             >
               <RotateCcw className="h-3 w-3" />
-              <span>Reset</span>
+              <span>Khôi phục mẫu</span>
             </button>
           </div>
         )}
@@ -153,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                 <div className="pt-2.5 px-1">
                   <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Chuyển nhanh tài khoản demo
+                    Chuyển vai trò tác chiến
                   </div>
                   <div className="space-y-1 max-h-56 overflow-y-auto">
                     {DELEGATION_PROFILES.map((p) => {

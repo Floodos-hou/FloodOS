@@ -2,59 +2,19 @@
 // Copyright 2026 FloodOS Contributors
 
 import type { TacticalState, UserAccount, CandidateRescueOption } from '../types';
+import { requestJson } from './http';
+export { ApiError } from './http';
 
 const API_BASE = import.meta.env.VITE_API_GATEWAY_URL
   ? `${import.meta.env.VITE_API_GATEWAY_URL}/api/v1`
   : '/api/v1';
-
-export class ApiError extends Error {
-  status: number;
-  code: string;
-  details?: any;
-
-  constructor(status: number, code: string, message: string, details?: any) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.details = details;
-  }
-}
 
 async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string | null
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
-  const headers = new Headers(options.headers || {});
-
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  const response = await fetch(url, { ...options, headers });
-
-  if (!response.ok) {
-    let errorData: any = {};
-    try {
-      errorData = await response.json();
-    } catch {
-      errorData = { message: response.statusText };
-    }
-    throw new ApiError(
-      response.status,
-      errorData.error || `HTTP_${response.status}`,
-      errorData.message || 'Lỗi khi gọi API hệ thống',
-      errorData
-    );
-  }
-
-  return response.json();
+  return requestJson<T>(API_BASE, path, options, token);
 }
 
 export const api = {
@@ -287,14 +247,25 @@ export const api = {
     token: string,
     reportId: string,
     payload: {
+      decision?: 'VERIFIED' | 'REJECTED';
       action?: 'VERIFIED' | 'REJECTED';
       priority?: string;
+      note?: string;
       verification_note?: string;
     }
   ) {
+    const decision = (payload.decision || payload.action || 'VERIFIED').toUpperCase();
+    const body: Record<string, any> = { decision };
+    if (decision === 'VERIFIED') {
+      body.priority = (payload.priority || 'NORMAL').toUpperCase();
+    }
+    const note = payload.note ?? payload.verification_note;
+    if (note !== undefined && note !== null) {
+      body.note = note;
+    }
     return request(`/flood-reports/${reportId}/verify`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }, token);
   },
 
@@ -327,13 +298,29 @@ export const api = {
     payload: {
       status: 'IN_PROGRESS' | 'COMPLETED';
       progress_pct?: number;
-      outcome?: string;
+      note?: string;
+      outcome?: 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED' | string;
       final_depth_cm?: number;
+      evidence_filename?: string;
+      evidence_data_url?: string;
     }
   ) {
+    const body: Record<string, any> = {
+      status: payload.status,
+      progress_pct: payload.status === 'COMPLETED' ? 100 : (payload.progress_pct ?? 50),
+    };
+    if (payload.note) body.note = payload.note;
+    if (payload.status === 'COMPLETED') {
+      body.outcome = (payload.outcome || 'RESOLVED').toUpperCase();
+      if (payload.final_depth_cm !== undefined) body.final_depth_cm = payload.final_depth_cm;
+      if (payload.evidence_data_url) {
+        body.evidence_data_url = payload.evidence_data_url;
+        body.evidence_filename = payload.evidence_filename;
+      }
+    }
     return request(`/dispatch-orders/${orderId}/status`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }, token);
   },
 
@@ -380,13 +367,23 @@ export const api = {
     token: string,
     incidentId: string,
     payload: {
-      action?: 'IN_PROGRESS' | 'RESOLVED';
+      diagnosis?: string;
+      is_resolved?: boolean;
+      action?: 'IN_PROGRESS' | 'RESOLVED' | string;
       notes?: string;
     }
   ) {
+    const isResolved = payload.is_resolved !== undefined
+      ? payload.is_resolved
+      : (payload.action === 'RESOLVED');
+    const diagnosis = payload.diagnosis || payload.notes || 'Đã kiểm tra và xử lý kỹ thuật phương tiện.';
+    const body = {
+      diagnosis,
+      is_resolved: isResolved,
+    };
     return request(`/field-incidents/${incidentId}/repair-ticket`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }, token);
   },
 
@@ -399,9 +396,15 @@ export const api = {
       assignment_id?: string; // legacy fallback
     }
   ) {
+    const resolutionId = payload.resolution_id || (payload.assignment_id ? `RES-${payload.assignment_id}` : '');
+    const body: Record<string, any> = {
+      resolution_id: resolutionId,
+      decision: payload.decision,
+    };
+    if (payload.notes) body.notes = payload.notes;
     return request('/resolutions', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }, token);
   },
 

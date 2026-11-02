@@ -24,13 +24,19 @@
 
 [Tổng quan](#-1-floodos-là-ứng-dụng-gì-và-giúp-người-dùng-việc-gì) •
 [Kiến trúc 3 tầng](#-kiến-trúc-hệ-thống-dx-os-open-core) •
-[Giao diện tác chiến](#-trung-tâm-chỉ-huy-tác-chiến-giao-diện-demo) •
+[Giao diện tác chiến](#️-trung-tâm-chỉ-huy-tác-chiến-không-gian-năng-lực-tầng-2) •
 [Phân quyền 5 vai trò](#-bảng-phân-quyền-tác-chiến-5-vai-trò) •
 [Minh bạch dữ liệu](#-bản-đồ-trạng-thái-minh-bạch-honesty-matrix) •
 [Cài đặt nhanh](#-khởi-chạy-nhanh-trong-3-phút) •
 [Kiểm thử](#-kiểm-thử-toàn-diện)
 
 </div>
+
+<br>
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-overview.png" alt="Trung tâm tác chiến số điều hành ứng phó ngập lụt FloodOS trên nền bản đồ Hà Nội" width="100%">
+</p>
 
 
 
@@ -142,16 +148,45 @@ Trung tâm tác chiến số tại [`apps/web`](apps/web) được xây dựng t
 ### 🗺️ 1. Bản đồ tác chiến số thời gian thực (Tactical Command Map)
 - **Không gian địa lý Hà Nội:** Tích hợp bản đồ nền số MapLibre GL trực quan, định vị chính xác các khu vực ngập úng, điểm tin báo khẩn cấp, trạm đo mực nước thủy văn và các điểm sơ tán an toàn.
 - **Giám sát phương tiện di động:** Hiển thị vị trí, hướng di chuyển và trạng thái (`IDLE`, `EN_ROUTE`, `RESCUING`, `BREAKDOWN`) của xuồng cứu hộ và xe bơm lưu động qua kênh truyền thông IoT/MQTT Mosquitto.
+- **Lớp dữ liệu bản đồ:** Cho phép bật/tắt linh hoạt các lớp (Tin ngập, Phương tiện, Điểm trú, Trạm đo) kèm tính năng định vị nhanh về tâm bản đồ tác chiến.
 
-### 📊 2. Thanh chỉ số tác chiến (KPI Strip) & Dòng sự kiện (Event Ticker)
-- Cập nhật thời gian thực các chỉ số sống: Số tin khẩn cấp chờ xử lý, số ca cứu nạn đang triển khai, số lượng phương tiện sẵn sàng và số trạm đo vượt ngưỡng báo động.
-- Dòng tin tức sự kiện nghiệp vụ (Event Ticker) trích xuất trực tiếp từ nhật ký kiểm toán bất biến có xác thực mã hóa.
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-overview.png" alt="Bản đồ tác chiến số thời gian thực FloodOS" width="100%">
+</p>
 
-### ⚡ 3. Radar xếp hạng cứu nạn & Phục hồi sự cố đứt gãy
-- Khi phương tiện gặp trục trặc kỹ thuật giữa dòng, động cơ xếp hạng tự động tính điểm và đề xuất danh sách phương tiện chi viện tối ưu dựa trên 4 tiêu chí minh bạch có giải thích rõ ràng.
-- Điều phối viên chủ động kiểm tra lý do và bấm duyệt; lệnh cũ chuyển `SUPERSEDED`, lệnh mới `-R1` kế thừa mã vụ việc.
+### 📋 2. Trung tâm điều phối PCTT (Dispatcher Command Center)
+- **Tiếp nhận & Thẩm định:** Điều phối viên kiểm tra tin báo mới từ người dân, xem vị trí trên bản đồ, xác minh tin (`VERIFIED` / `REJECTED`) và gán mức ưu tiên (`CRITICAL`, `URGENT`, `NORMAL`).
+- **Điều động & Chặn trùng lịch 409 GiST:** Phân công đội cứu hộ và phương tiện (xuồng/xe bơm). Cơ chế RLS và ràng buộc loại trừ GiST ở database tự động phát hiện và chặn các xung đột lịch trình.
 
-### 🔍 4. Trình kiểm chứng bằng chứng mật mã (Proof Inspector)
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-dispatcher.png" alt="Trung tâm điều phối PCTT FloodOS" width="100%">
+</p>
+
+### 🧑‍🚒 3. Ca tác chiến cơ động của Đội cứu hộ (Field Team Cockpit)
+- **Tác nghiệp di động:** Đội trưởng nhận lệnh điều động trực tiếp trên điện thoại di động, cập nhật tiến độ theo từng mốc (`IN_PROGRESS`), nắm rõ tọa độ và số người cần cứu hộ.
+- **Báo sự cố khẩn cấp & Bàn giao:** Khi gặp sự cố kỹ thuật (chân vịt vướng rác, chết máy), bấm báo sự cố để chuyển giao thức SOP-02; khi cứu hộ xong, nhập biên bản kết quả và bấm hoàn tất (`COMPLETED`).
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-field-team.png" alt="Ca tác chiến cơ động của Đội cứu hộ FloodOS" width="100%">
+</p>
+
+### 🙋‍♀️ 4. Cổng tiếp nhận cứu trợ & Nghiệm thu Người dân (Citizen Reporting Portal)
+- **Gửi tin báo ngập:** Người dân gửi tọa độ GPS, mức nước ngập (cm), số người bị mắc kẹt, nhu cầu cứu hộ và ảnh chụp hiện trường (tự động quét ClamAV).
+- **Theo dõi & Nghiệm thu an toàn:** Người dân theo dõi tiến độ xử lý tin của mình (chỉ thấy tin của chính mình nhờ PostgreSQL RLS). Khi đội hoàn thành, người dân bấm **Xác nhận đã an toàn** để chính thức đóng hồ sơ vụ việc.
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-reporter.png" alt="Cổng tiếp nhận cứu trợ và nghiệm thu Người dân FloodOS" width="100%">
+</p>
+
+### ⚡ 5. Radar chi viện & Phục hồi đứt gãy sự cố (SOP-02 Replan Radar)
+- **Xếp hạng cứu hộ đa tiêu chí:** Khi phương tiện gặp sự cố giữa dòng, động cơ xếp hạng tự động tính điểm các phương án thay thế khả dụng theo 4 tiêu chí minh bạch có giải thích rõ ràng: *Khoảng cách Haversine (40đ) + Loại phương tiện (25đ) + Sức chứa/Công suất (20đ) + Đánh giá đội (15đ)*.
+- **Phê duyệt tái điều phối:** Điều phối viên chủ động kiểm tra lý do và bấm duyệt; lệnh cũ chuyển `SUPERSEDED`, lệnh mới `-R1` kế thừa mã vụ việc, bảo đảm tính liên tục của nhiệm vụ.
+
+<p align="center">
+  <img src="docs/assets/screenshots/floodos-replan-radar.png" alt="Radar chi viện và phục hồi đứt gãy sự cố FloodOS" width="100%">
+</p>
+
+### 🔍 6. Trình kiểm chứng bằng chứng mật mã (Proof Inspector)
 - Tích hợp cửa sổ kiểm chứng chuỗi băm SHA-256 trực quan ngay trên giao diện: đối soát phả hệ dữ liệu (`lineage`) và chứng minh tính toàn vẹn của chuỗi sự kiện nối liền từ Genesis block.
 
 ---
