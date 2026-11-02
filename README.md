@@ -1,6 +1,10 @@
 <div align="center">
 
-# 🌊 FloodOS
+<a href="https://github.com/Floodos-hou/FloodOS">
+  <img src="docs/assets/logo.png" alt="FloodOS Official Logo" width="160">
+</a>
+
+# FloodOS
 
 ### Hệ điều hành Chuyển đổi số mã nguồn mở (DX-OS Open-Core) điều phối ứng phó ngập lụt đô thị
 *An Open-Core Digital Transformation Operating System for Urban Flood Response Coordination*
