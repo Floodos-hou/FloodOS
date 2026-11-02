@@ -22,7 +22,7 @@
 *Chủ đề: Xây dựng Hệ điều hành Chuyển đổi số bằng Công nghệ Lõi nguồn mở (DX-OS Open-Core)*  
 **Địa bàn thí điểm:** Hà Nội | **Mã nguồn:** 100% Nguồn mở theo chuẩn Apache-2.0
 
-[Tổng quan](#-tổng-quan-và-câu-chuyện-ứng-cứu) •
+[Tổng quan](#-1-floodos-là-ứng-dụng-gì-và-giúp-người-dùng-việc-gì) •
 [Kiến trúc 3 tầng](#-kiến-trúc-hệ-thống-dx-os-open-core) •
 [Giao diện tác chiến](#-trung-tâm-chỉ-huy-tác-chiến-giao-diện-demo) •
 [Phân quyền 5 vai trò](#-bảng-phân-quyền-tác-chiến-5-vai-trò) •
@@ -32,11 +32,7 @@
 
 </div>
 
-<br>
 
-<p align="center">
-  <img src="docs/assets/screenshots/portal-01-ban-do-truc-tiep.png" alt="Trung tâm điều hành ứng phó ngập lụt FloodOS" width="100%">
-</p>
 
 ---
 
@@ -92,9 +88,7 @@ Kịch bản sử dụng một tình huống xuyên suốt, vận hành hoàn to
 
 FloodOS tuân thủ tuyệt đối quy tắc **tách biệt ranh giới** theo đề thi OLP 2026: Lõi nền tảng PaaS không chứa bất kỳ thuật ngữ hay bảng dữ liệu nào của nghiệp vụ ngập lụt.
 
-<p align="center">
-  <img src="docs/assets/architecture_diagram.svg" alt="Sơ đồ kiến trúc 3 tầng DX-OS Open-Core" width="100%">
-</p>
+
 
 ```mermaid
 flowchart TD
@@ -141,30 +135,24 @@ flowchart TD
 
 ---
 
-## 🖥️ Trung tâm chỉ huy tác chiến (Giao diện Demo)
+## 🖥️ Trung tâm chỉ huy tác chiến (Không gian năng lực Tầng 2)
 
-Ứng dụng web tại `apps/web` được xây dựng bằng **React 19**, **TypeScript**, **TailwindCSS** và **MapLibre GL**, kết nối trực tiếp 100% với API backend thật qua cổng APISIX Gateway:
+Trung tâm tác chiến số tại [`apps/web`](apps/web) được xây dựng trên nền tảng **React 19**, **TypeScript**, **TailwindCSS** và **MapLibre GL**, kết nối 100% với API backend thật qua APISIX Zero-Trust Gateway:
 
-### 1. Bản đồ tác chiến số & Thanh chỉ số KPI thời gian thực
-Bản đồ trung tâm hiển thị toàn diện các thực thể tác chiến tại Hà Nội: khu vực ngập lụt, tin báo khẩn cấp, xuồng/xe cứu hộ di chuyển thời gian thực, trạm đo mực nước thủy văn và điểm trú ẩn an toàn.
+### 🗺️ 1. Bản đồ tác chiến số thời gian thực (Tactical Command Map)
+- **Không gian địa lý Hà Nội:** Tích hợp bản đồ nền số MapLibre GL trực quan, định vị chính xác các khu vực ngập úng, điểm tin báo khẩn cấp, trạm đo mực nước thủy văn và các điểm sơ tán an toàn.
+- **Giám sát phương tiện di động:** Hiển thị vị trí, hướng di chuyển và trạng thái (`IDLE`, `EN_ROUTE`, `RESCUING`, `BREAKDOWN`) của xuồng cứu hộ và xe bơm lưu động qua kênh truyền thông IoT/MQTT Mosquitto.
 
-<p align="center">
-  <img src="docs/assets/screenshots/portal-01-ban-do-truc-tiep.png" alt="Bản đồ tác chiến trực tiếp FloodOS" width="100%">
-</p>
+### 📊 2. Thanh chỉ số tác chiến (KPI Strip) & Dòng sự kiện (Event Ticker)
+- Cập nhật thời gian thực các chỉ số sống: Số tin khẩn cấp chờ xử lý, số ca cứu nạn đang triển khai, số lượng phương tiện sẵn sàng và số trạm đo vượt ngưỡng báo động.
+- Dòng tin tức sự kiện nghiệp vụ (Event Ticker) trích xuất trực tiếp từ nhật ký kiểm toán bất biến có xác thực mã hóa.
 
-### 2. Quản lý sự cố, Thanh chỉ số tác chiến và Bảng phân tích phương án
-Thanh KPI cập nhật tự động số lượng tin khẩn cấp, tài nguyên sẵn sàng và các vụ việc đang giải quyết. Bảng chi tiết bên phải cho phép điều phối viên xem căn cứ xếp hạng cứu hộ và duyệt phương án thay thế.
+### ⚡ 3. Radar xếp hạng cứu nạn & Phục hồi sự cố đứt gãy
+- Khi phương tiện gặp trục trặc kỹ thuật giữa dòng, động cơ xếp hạng tự động tính điểm và đề xuất danh sách phương tiện chi viện tối ưu dựa trên 4 tiêu chí minh bạch có giải thích rõ ràng.
+- Điều phối viên chủ động kiểm tra lý do và bấm duyệt; lệnh cũ chuyển `SUPERSEDED`, lệnh mới `-R1` kế thừa mã vụ việc.
 
-<p align="center">
-  <img src="docs/assets/screenshots/portal-02-kpi-su-co.png" alt="Thanh KPI tác chiến và điều phối sự cố" width="100%">
-</p>
-
-### 3. Cổng truy xuất vụ việc công khai & Kiểm chứng chuỗi băm độc lập (Tầng 3)
-Cho phép người dân và cơ quan thanh tra tra cứu toàn bộ hành trình ứng phó của một vụ việc qua mã QR, đối chiếu dấu vết phả hệ dữ liệu và tự động xác minh tính toàn vẹn của chuỗi băm mật mã SHA-256 độc lập với cơ sở dữ liệu.
-
-<p align="center">
-  <img src="docs/assets/screenshots/tang3-truy-xuat-nguon-goc.png" alt="Cổng truy xuất vụ việc công khai Tầng 3" width="100%">
-</p>
+### 🔍 4. Trình kiểm chứng bằng chứng mật mã (Proof Inspector)
+- Tích hợp cửa sổ kiểm chứng chuỗi băm SHA-256 trực quan ngay trên giao diện: đối soát phả hệ dữ liệu (`lineage`) và chứng minh tính toàn vẹn của chuỗi sự kiện nối liền từ Genesis block.
 
 ---
 
