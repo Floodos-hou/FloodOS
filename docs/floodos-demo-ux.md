@@ -1,50 +1,54 @@
-# FloodOS — yêu cầu UX cho bản demo
+# FloodOS — Đặc tả Trải nghiệm Người dùng (UX) & Trung tâm Tác chiến
 
-> Tài liệu này là đích thiết kế, không xác nhận các chức năng đã có trong mã nguồn. Chỉ đánh dấu hoàn thành sau khi có triển khai và kiểm chứng.
+Tài liệu này xác lập tiêu chuẩn thiết kế trải nghiệm người dùng (UX) cho **FloodOS**, hiện thực hóa tại [`apps/web`](../apps/web) (React 19 + TypeScript + MapLibre GL + TailwindCSS) và kết nối trực tiếp với backend API qua APISIX Zero-Trust Gateway.
 
-## Luồng demo chính
+---
 
-`Gửi tin báo → Điều phối xác minh → Phân công đội/phương tiện → Đội hiện trường cập nhật → Điều phối lại nếu có sự cố → Xác nhận xử lý và đóng vụ việc`.
+## 1. Mục tiêu và Nguyên tắc Thiết kế Giao diện
 
-| Bước | Người dùng | Trải nghiệm cần có |
+- **Bản đồ tình huống + Dòng thời gian vụ việc + Hành động tiếp theo:** Ưu tiên số một là không gian tác chiến trực quan, loại bỏ tư duy xây dựng các bảng quản trị CRUD có các nút thêm/sửa/xóa làm trải nghiệm chính.
+- **Ngữ cảnh tức thời:** Mỗi màn hình trả lời nhanh 4 câu hỏi:
+  1. Người dùng đang xem vụ việc nào?
+  2. Trạng thái hiện tại của vụ việc là gì?
+  3. Nguồn dữ liệu và thời điểm cập nhật ra sao?
+  4. Người dùng có thẩm quyền thực hiện bước nào tiếp theo?
+- **Trực quan hóa 2D/3D trung thực:** Bản đồ thể hiện rõ vị trí và tương quan nguồn lực; mọi điểm đánh dấu, trạng thái và chuyển động bắt nguồn từ dữ liệu API thật hoặc bộ mô phỏng IoT/MQTT đã gắn nhãn nguồn.
+- **Minh bạch nhãn nguồn dữ liệu:** Mọi dữ liệu mô phỏng (`SIMULATOR`, `SEED`) được đánh dấu rõ ràng. Không tự tạo số liệu, địa danh, trạng thái xe chạy hoặc tiến độ ảo chỉ để làm giao diện sinh động.
+- **Thiết kế hướng tới demo thật:** Người trình bày đăng nhập đúng vai trò (Keycloak OIDC PKCE) và thao tác tuần tự qua toàn bộ luồng nghiệp vụ bằng các lệnh gọi API backend thật.
+
+---
+
+## 2. Kịch bản tiêu biểu 7 bước trình diễn
+
+Chu trình điều phối khép kín của một vụ việc trên giao diện:
+
+`Báo tin → Xác minh/Ưu tiên → Phân công Xuồng/Đội → Đội hiện trường cập nhật → Báo sự cố & Điều phối lại → Xác nhận & Niêm phong sổ cái`
+
+| Bước | Người dùng | Trải nghiệm tác chiến trên giao diện |
 |---|---|---|
-| Báo tin | Người dân/người báo tin | Chọn vị trí, mức ngập hoặc ảnh hưởng, nhu cầu hỗ trợ; gửi ảnh; nhận mã theo dõi và xem trạng thái. |
-| Xác minh | Điều phối viên | Xem hàng đợi tin mới, nguồn và thời điểm dữ liệu; xác minh thông tin; gán mức ưu tiên và ghi lý do. |
-| Điều phối | Điều phối viên | Xem đội/phương tiện sẵn sàng, vị trí và thời gian; kiểm tra trùng lịch; xác nhận lệnh hoặc thấy rõ lý do không thể phân công. |
-| Tác nghiệp | Đội hiện trường | Xem nhiệm vụ trên điện thoại; bắt đầu, cập nhật tiến độ, ghi nhận kết quả hoặc báo sự cố bằng thao tác ngắn. |
-| Điều phối lại | Điều phối viên và đội hiện trường | Ghi nhận sự cố, xem nguồn lực thay thế và căn cứ gợi ý; điều phối viên duyệt thay đổi; lưu lại lịch sử lệnh cũ/mới. |
-| Đóng vụ việc | Điều phối viên/người xác nhận phù hợp | Ghi kết quả, xác nhận hoàn tất theo quy trình đã chọn và xem mã vụ việc cùng lịch sử kiểm toán. |
+| **1. Báo tin** | Người dân (`REPORTER`) | Chọn tọa độ trên bản đồ Hà Nội, nhập độ sâu ngập (cm), số người cần hỗ trợ, nhu cầu (sơ tán, y tế, lương thực); chụp/gửi ảnh hiện trường (quét ClamAV); nhận mã tin báo `FR-...` và theo dõi trực tiếp tiến trình. |
+| **2. Xác minh** | Điều phối viên (`DISPATCHER`) | Xem hàng đợi tin mới, nguồn và thời điểm dữ liệu; đối soát vị trí trên bản đồ tác chiến; thẩm định thông tin, gán mức ưu tiên (`CRITICAL`, `URGENT`, `NORMAL`) và ghi chú hiện trường. |
+| **3. Điều phối** | Điều phối viên (`DISPATCHER`) | Xem danh sách đội và xuồng/xe cứu hộ sẵn sàng; kiểm tra xung đột lịch; nếu phân công trùng giờ, hệ thống giải thích rõ ràng lý do từ chối (409 GiST Exclusion) mà không làm mất dữ liệu biểu mẫu. Ban hành lệnh điều động `ORD-...`. |
+| **4. Tác nghiệp** | Đội hiện trường (`FIELD_TEAM`) | Nhận nhiệm vụ trên điện thoại, xem vị trí người dân cần hỗ trợ; bấm **Bắt đầu** (`IN_PROGRESS`); khi gặp sự cố kỹ thuật (chân vịt vướng rác, chết máy), bấm **Báo sự cố** bằng thao tác nhanh. |
+| **5. Điều phối lại** | Điều phối viên (`DISPATCHER`) | Radar chi viện phân tích và xếp hạng các phương án thay thế khả dụng theo 4 tiêu chí minh bạch (Haversine 40đ, loại xe 25đ, công suất 20đ, đánh giá đội 15đ). Điều phối viên bấm duyệt phương án; lệnh cũ chuyển `SUPERSEDED`, lệnh mới `-R1` kế thừa mã vụ việc. |
+| **6. Hoàn tất** | Đội chi viện (`FIELD_TEAM`) | Đội tiếp quản cập nhật tiến độ hiện trường, xác nhận nước rút an toàn và bấm **Hoàn tất nhiệm vụ** (`COMPLETED`). |
+| **7. Nghiệm thu** | Người dân & Thanh tra | Người báo tin bấm **Xác nhận đã an toàn** (`CONFIRMED`). Mở Proof Inspector để kiểm chứng chuỗi băm mật mã SHA-256 từ Genesis block. |
 
-## Màn hình theo vai trò
+---
 
-- **Người báo tin:** trang chủ với nút báo tin dễ thấy, yêu cầu của chính người dùng và tiến trình từng yêu cầu; bản đồ chỉ nhận dữ liệu mà API đã cho phép.
-- **Điều phối viên:** tổng quan tin chưa xác minh, mức ưu tiên, nguồn lực, điều phối đang chạy và sự cố; bản đồ tác chiến; màn hình chi tiết quyết định/lịch sử.
-- **Đội hiện trường:** nhiệm vụ hiện tại, địa điểm, chỉ dẫn đã được hệ thống hỗ trợ, nút bắt đầu/cập nhật/báo sự cố và trạng thái đồng bộ.
-- **Quản lý nguồn lực:** danh mục phương tiện, đội, vật tư, điểm tập kết, trạng thái sẵn sàng và lịch sử sử dụng; quyền duyệt phải được cấp riêng.
-- **Quản trị đơn vị:** thành viên, vai trò và phạm vi dữ liệu; không mặc nhiên có quyền vượt chính sách tenant.
+## 3. Không gian làm việc theo vai trò (Workspaces)
 
-Tên vai trò và quyền trên giao diện phải lấy từ hợp đồng RBAC thực tế. Ẩn nút không thay thế kiểm tra quyền tại API và cơ sở dữ liệu.
+- **Người báo tin (`REPORTER`):** Giao diện tối ưu di động với nút báo tin khẩn cấp nổi bật; danh sách tin của chính mình; bản đồ chỉ hiển thị tin của mình, trạm đo và điểm trú an toàn (cách ly hoàn toàn dữ liệu người khác bằng PostgreSQL RLS).
+- **Điều phối viên (`DISPATCHER`):** Trung tâm chỉ huy toàn diện: Bản đồ tác chiến MapLibre GL, thanh KPI khẩn cấp, hàng đợi tin chờ duyệt, quản lý đội/xe, radar chi viện sự cố và phân tích kho lạnh DuckDB.
+- **Đội hiện trường (`FIELD_TEAM`):** Giao diện tập trung vào nhiệm vụ hiện tại: tọa độ mục tiêu, nút thao tác lớn (tối thiểu 48px) dễ bấm bằng một tay khi cơ động, cập nhật tiến độ hoặc báo sự cố tức thì.
+- **Quản lý nguồn lực (`RESOURCE_MANAGER`):** Quản lý trạng thái đội, phương tiện, sức chứa điểm sơ tán; cập nhật và đóng phiếu sửa chữa kỹ thuật (`repair-ticket`). Không can thiệp duyệt điều động.
+- **Quản trị nền tảng (`PLATFORM_ADMIN`):** Giám sát tình trạng hạ tầng, đối soát phả hệ dữ liệu và kiểm chứng chuỗi khối kiểm toán SHA-256.
 
-## Trạng thái và thao tác hiện trường
+---
 
-Mọi trang dữ liệu cần có trạng thái tải, lỗi có thể thử lại, rỗng và dữ liệu cũ. Nếu mất kết nối, giao diện phải báo rõ dữ liệu được cập nhật lần cuối và thao tác nào chưa được gửi. Không hiển thị “địa bàn an toàn” khi dữ liệu cũ hoặc chưa đủ.
+## 4. Minh bạch dữ liệu & Tiêu chí nghiệm thu UX
 
-Trên điện thoại, mục tiêu là nút chính cao ít nhất 48 px, vùng chạm tách biệt, lựa chọn nhanh thay vì nhập dài, chụp ảnh trực tiếp và hành động chính trong tầm ngón tay cái. Hỗ trợ lưu ngoại tuyến và tự đồng bộ là yêu cầu riêng; chỉ quảng bá sau khi đã triển khai cơ chế hàng đợi bền vững, giải quyết gửi trùng/xung đột và kiểm thử trên thiết bị.
-
-## Bản đồ và độ tin cậy của dữ liệu
-
-- Gắn nhãn rõ dữ liệu quan trắc có nguồn, do người dùng khai báo, dữ liệu seed và dữ liệu mô phỏng; kèm thời điểm cập nhật.
-- Nếu tọa độ phương tiện do simulator phát, giao diện phải nói rõ là mô phỏng. Nếu khoảng cách dùng Haversine, ghi “khoảng cách đường chim bay”; không gọi đó là tuyến đường cứu hộ thực tế.
-- Lọc dữ liệu theo quyền ở backend trước khi gửi đến trình duyệt. Không gửi tọa độ bị hạn chế rồi che marker bằng CSS.
-- Gợi ý cứu viện phải trình bày tiêu chí và đầu vào dùng để xếp hạng. Không tự động điều động; người có quyền xác nhận lệnh.
-
-## Tiêu chí nghiệm thu UX
-
-1. Người báo tin không thể đọc yêu cầu hoặc tọa độ ngoài phạm vi được cấp, kể cả gọi API trực tiếp.
-2. Vai trò không có quyền điều phối nhận `403` khi gọi API điều phối trực tiếp.
-3. Lỗi xung đột lịch được giải thích rõ và không làm mất dữ liệu biểu mẫu.
-4. Đội hiện trường có thể cập nhật/báo sự cố bằng lựa chọn ngắn; giao diện phản ánh chính xác trạng thái lưu và đồng bộ.
-5. Dữ liệu cũ, mất mạng và dữ liệu mô phỏng được phân biệt dễ thấy; không suy diễn tình trạng an toàn.
-6. Sau khi đóng vụ việc, người có quyền xem được chuỗi sự kiện và kết quả xác minh audit từ API thật.
-
-Các tiêu chí API, RLS, BPMN, lưu tệp và audit cần có kiểm thử tích hợp tương ứng; tài liệu UX không thay thế kiểm thử đó.
+1. **Minh bạch nhãn nguồn:** Mọi vị trí xe và mực nước trạm đo đều hiển thị nhãn nguồn (`SIMULATOR` hoặc `DEVICE`) và thời điểm cập nhật. Khoảng cách cứu trợ ghi rõ “đường chim bay (Haversine)”, không gọi là tuyến đường bộ thực tế.
+2. **Bảo mật phân quyền nghiêm ngặt:** Người báo tin không thể xem dữ liệu ngoài phạm vi được cấp; vai trò không đủ quyền nhận lỗi `403 Forbidden` khi gọi API trực tiếp.
+3. **Phản hồi lỗi rõ ràng:** Xung đột lịch (409) hoặc tệp nhiễm mã độc (422) giải thích nguyên nhân cụ thể và không làm mất dữ liệu người dùng đã nhập.
+4. **Kiểm chứng độc lập:** Sau khi đóng vụ việc, người dùng có thể tra cứu và xác minh chuỗi băm SHA-256 độc lập từ cổng Tầng 3 mà không cần tin vào máy chủ cơ sở dữ liệu.
