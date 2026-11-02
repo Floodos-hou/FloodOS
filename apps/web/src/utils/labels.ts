@@ -9,11 +9,11 @@
 export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
 
 export const TONE_CLASS: Record<Tone, string> = {
-  good: 'border-emerald-300 bg-emerald-50 text-emerald-950',
-  warn: 'border-amber-300 bg-amber-50 text-amber-950',
-  bad: 'border-rose-300 bg-rose-50 text-rose-950',
-  info: 'border-sky-300 bg-sky-50 text-sky-950',
-  neutral: 'border-slate-300 bg-slate-100 text-slate-800',
+  good: 'border-emerald-500/40 bg-emerald-950/80 text-emerald-300',
+  warn: 'border-amber-500/40 bg-amber-950/80 text-amber-300',
+  bad: 'border-rose-500/40 bg-rose-950/80 text-rose-300',
+  info: 'border-sky-500/40 bg-sky-950/80 text-sky-300',
+  neutral: 'border-slate-700 bg-slate-800/90 text-slate-300',
 };
 
 export { formatLocalDateTime, formatLocalTime } from './dateTime';

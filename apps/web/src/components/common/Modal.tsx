@@ -30,13 +30,13 @@ export const Modal: React.FC<ModalProps> = ({ title, onClose, children, size = '
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-sm p-0 sm:p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${size} max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl`}>
-        <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
-          <h3 id={titleId} className="font-display text-xl font-bold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Đóng" className="grid h-11 w-11 place-items-center rounded-full text-slate-500 hover:bg-slate-100">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${size} max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-slate-950 border border-slate-800 shadow-2xl text-slate-100`}>
+        <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+          <h3 id={titleId} className="font-display text-xl font-bold text-white">{title}</h3>
+          <button type="button" onClick={onClose} aria-label="Đóng" className="grid h-11 w-11 place-items-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800">
             <X aria-hidden="true" className="h-6 w-6" />
           </button>
         </div>

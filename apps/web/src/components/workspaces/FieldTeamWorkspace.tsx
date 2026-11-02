@@ -65,8 +65,8 @@ interface FieldTeamWorkspaceProps {
   onSelectReport?: (report: FloodReport) => void;
 }
 
-const INPUT_STYLE = 'w-full rounded-xl border-2 border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-200 transition-all';
-const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700';
+const INPUT_STYLE = 'w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-white outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all';
+const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-300';
 
 export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
   currentUserId,
@@ -229,13 +229,13 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
 
       {/* ACTIVE MISSION COCKPIT */}
       {activeOrder ? (
-        <div className="bg-white rounded-2xl border-2 border-blue-300 p-6 shadow-lg space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6 text-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-600 block mb-0.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 block mb-0.5">
                 Nhiệm Vụ Tác Chiến Hiện Tại
               </span>
-              <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-xl font-black text-white flex items-center gap-2">
                 Lệnh #{activeOrder.order_id}
               </h3>
             </div>
@@ -244,12 +244,12 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
 
           {/* Target Info Card */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2 text-slate-200">
               <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
                 <MapPin className="w-4 h-4" />
                 {targetReport?.address_hint || `Khu vực ngập [${(targetReport?.latitude ?? targetReport?.lat ?? 0).toFixed(4)}, ${(targetReport?.longitude ?? targetReport?.lng ?? 0).toFixed(4)}]`}
               </div>
-              <div className="text-xs text-slate-600 space-y-1">
+              <div className="text-xs text-slate-400 space-y-1">
                 <div>Nhu cầu: <strong className="text-slate-900">{targetReport ? needType(targetReport.need_type).text : 'Cứu trợ khẩn cấp'}</strong></div>
                 <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport ? reportDepthCm(targetReport) : 0} cm</strong></div>
                 <div>Số người cần cứu: <strong className="text-slate-900">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
@@ -267,7 +267,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
             </div>
 
             {/* Vehicle & Telemetry Card */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2 text-slate-200">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase text-slate-500 flex items-center gap-1.5">
                   <Truck className="w-4 h-4 text-blue-600" />
@@ -277,10 +277,10 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                   {assignedVehicle ? vehicleType(assignedVehicle.vehicle_type) : 'Xuồng cứu nạn'}
                 </span>
               </div>
-              <div className="text-sm font-bold text-slate-800">
+              <div className="text-sm font-bold text-white">
                 {assignedVehicle?.vehicle_name || activeOrder.vehicle_id}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-1">
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 pt-1">
                 <div className="flex items-center gap-1">
                   <Fuel className="w-3.5 h-3.5 text-amber-500" />
                   Nhiên liệu: <strong>{assignedVehicle?.fuel_percent || 100}%</strong>
@@ -311,14 +311,14 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
 
             <div className="space-y-4">
               {/* Progress visual bar */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                   <span>Tiến độ ca tác chiến hiện tại:</span>
-                  <span className="text-blue-700 text-sm">{Math.round(activeOrder.progress_pct || 0)}%</span>
+                  <span className="text-cyan-400 text-sm font-mono">{Math.round(activeOrder.progress_pct || 0)}%</span>
                 </div>
-                <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-cyan-500 to-sky-500 rounded-full transition-all duration-500"
                     style={{ width: `${Math.max(5, Math.min(100, activeOrder.progress_pct || 0))}%` }}
                   />
                 </div>
@@ -333,7 +333,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                       progress_pct: 25,
                       note: 'Đội đã nhận lệnh và bắt đầu cơ động đến hiện trường.'
                     })}
-                    className="py-4 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+                    className="py-4 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-lg shadow-cyan-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
                   >
                     <Navigation className="w-5 h-5 animate-bounce" />
                     🚀 Xuất Phát Đến Hiện Trường (IN_PROGRESS)
@@ -342,7 +342,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsIncidentModalOpen(true)}
-                    className="py-4 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-300 text-rose-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    className="py-4 px-4 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
                     <AlertOctagon className="w-5 h-5 text-rose-600" />
                     🚨 Báo Sự Cố Kỹ Thuật
@@ -416,7 +416,7 @@ export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
 
       {/* RECENT INCIDENTS / SỰ CỐ VỪA BÁO */}
       {incidents.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3 text-slate-100">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <AlertOctagon className="w-4 h-4 text-rose-500" />
             Nhật ký sự cố hiện trường gần nhất:

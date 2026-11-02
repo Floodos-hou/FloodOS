@@ -7,15 +7,17 @@
  */
 
 export interface MachineLike {
-  machine_id: string;
+  vehicle_id?: string;
+  machine_id?: string;
+  name?: string;
   status: string;
-  fuel_pct: number;
+  fuel_pct?: number;
   current_lat: number;
   current_lng: number;
 }
 
 export interface FieldLike {
-  harvest_progress_pct: number;
+  harvest_progress_pct?: number;
   visibility?: string;
 }
 
@@ -92,9 +94,9 @@ export function computeKpis(machines: MachineLike[], fields: FieldLike[], assign
     broken: count('BREAKDOWN'),
     maintenance: count('MAINTENANCE'),
     moving: count('MOVING') + count('EN_ROUTE'),
-    avgFuelPct: Math.round(avg(machines.map((m) => m.fuel_pct)) * 10) / 10,
-    lowFuel: machines.filter((m) => m.fuel_pct < 25).length,
-    avgHarvestPct: Math.round(avg(visible.map((f) => f.harvest_progress_pct)) * 10) / 10,
+    avgFuelPct: Math.round(avg(machines.map((m) => m.fuel_pct ?? 100)) * 10) / 10,
+    lowFuel: machines.filter((m) => (m.fuel_pct ?? 100) < 25).length,
+    avgHarvestPct: Math.round(avg(visible.map((f) => f.harvest_progress_pct ?? 0)) * 10) / 10,
     activeShifts: assignments.filter((a) => a.status === 'IN_PROGRESS' || a.status === 'DISPATCHED' || a.status === 'ON_SCENE').length,
   };
 }
@@ -112,24 +114,26 @@ export interface FleetEvent {
 export function detectFleetEvents(prev: Map<string, string>, machines: MachineLike[]): FleetEvent[] {
   const events: FleetEvent[] = [];
   for (const m of machines) {
-    const before = prev.get(m.machine_id);
+    const id = m.vehicle_id || m.machine_id || 'PT';
+    const name = m.name || id;
+    const before = prev.get(id);
     if (before === undefined || before === m.status) continue; // first sight is not an event
-    const key = `${m.machine_id}:${before}->${m.status}`;
+    const key = `${id}:${before}->${m.status}`;
     if (m.status === 'BREAKDOWN') {
-      events.push({ key, tone: 'danger', icon: '⚠️', text: `${m.machine_id} gặp sự cố, tạm dừng tác chiến` });
+      events.push({ key, tone: 'danger', icon: '⚠️', text: `${name} gặp sự cố, tạm dừng tác chiến` });
     } else if (m.status === 'WORKING' || m.status === 'DISPATCHED') {
-      events.push({ key, tone: 'info', icon: '🚤', text: `${m.machine_id} bắt đầu ca cứu hộ` });
+      events.push({ key, tone: 'info', icon: '🚤', text: `${name} bắt đầu ca cứu hộ` });
     } else if (m.status === 'MOVING' || m.status === 'EN_ROUTE') {
-      events.push({ key, tone: 'info', icon: '🛣️', text: `${m.machine_id} đang di chuyển tới điểm ngập` });
+      events.push({ key, tone: 'info', icon: '🛣️', text: `${name} đang di chuyển tới điểm ngập` });
     } else if (m.status === 'MAINTENANCE') {
-      events.push({ key, tone: 'warn', icon: '🛠️', text: `${m.machine_id} vào bảo dưỡng kỹ thuật` });
+      events.push({ key, tone: 'warn', icon: '🛠️', text: `${name} vào bảo dưỡng kỹ thuật` });
     } else if (m.status === 'IDLE' || m.status === 'AVAILABLE') {
       const recovered = before === 'BREAKDOWN' || before === 'MAINTENANCE';
       events.push({
         key,
         tone: 'success',
         icon: '✅',
-        text: recovered ? `${m.machine_id} đã sửa xong, sẵn sàng` : `${m.machine_id} xong ca, sẵn sàng`,
+        text: recovered ? `${name} đã sửa xong, sẵn sàng` : `${name} xong ca, sẵn sàng`,
       });
     }
   }
@@ -137,5 +141,5 @@ export function detectFleetEvents(prev: Map<string, string>, machines: MachineLi
 }
 
 export function snapshotStatuses(machines: MachineLike[]): Map<string, string> {
-  return new Map(machines.map((m) => [m.machine_id, m.status]));
+  return new Map(machines.map((m) => [m.vehicle_id || m.machine_id || '', m.status]));
 }

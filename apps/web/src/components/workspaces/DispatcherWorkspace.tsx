@@ -207,175 +207,145 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Quick Counters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 to-indigo-950 p-5 rounded-2xl border border-slate-800 text-white shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-amber-500/20 rounded-xl text-amber-400 border border-amber-500/30">
-            <Radio className="w-6 h-6 animate-pulse" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">Trung Tâm Điều Phối Ứng Cứu</h2>
-            <p className="text-xs text-slate-400">
-              Tiếp nhận tin khẩn cấp • Thẩm định mức ưu tiên • Điều động đội xung kích &amp; phương tiện
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <div className="px-3 py-1.5 bg-rose-500/20 border border-rose-500/40 rounded-xl flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
-            <span className="text-xs text-rose-300 font-semibold">{unverifiedReports.length} chờ thẩm định</span>
-          </div>
-          <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-500/40 rounded-xl flex items-center gap-2">
-            <Truck className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-300 font-semibold">{readyDispatchReports.length} sẵn sàng điều</span>
-          </div>
-          <div className="px-3 py-1.5 bg-blue-500/20 border border-blue-500/40 rounded-xl flex items-center gap-2">
-            <Navigation className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-blue-300 font-semibold">{activeOrders.length} ca hiện trường</span>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Main Cockpit Split Layout (Queue on Left, Tactical Map on Right) */}
-      <div className={mapElement ? "grid grid-cols-1 xl:grid-cols-[480px_minmax(0,1fr)] gap-4 items-start" : "space-y-4"}>
+      <div className={mapElement ? "grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] gap-4 items-start" : "space-y-4"}>
         <div className="space-y-3 min-w-0">
           {/* Tabs Bar */}
-      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-2">
-        <button
-          onClick={() => setActiveTab('UNVERIFIED')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'UNVERIFIED'
-              ? 'bg-rose-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          Chờ thẩm định ({unverifiedReports.length})
-        </button>
+          <div className="flex items-center gap-1.5 border-b border-slate-800 overflow-x-auto pb-2">
+            <button
+              onClick={() => setActiveTab('UNVERIFIED')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                activeTab === 'UNVERIFIED'
+                  ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/60'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-300" />
+              Chờ thẩm định ({unverifiedReports.length})
+            </button>
 
-        <button
-          onClick={() => setActiveTab('READY_DISPATCH')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'READY_DISPATCH'
-              ? 'bg-amber-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          Cần điều phối ({readyDispatchReports.length})
-        </button>
+            <button
+              onClick={() => setActiveTab('READY_DISPATCH')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                activeTab === 'READY_DISPATCH'
+                  ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-950/60'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5 text-amber-300" />
+              Cần điều phối ({readyDispatchReports.length})
+            </button>
 
-        <button
-          onClick={() => setActiveTab('ACTIVE_ORDERS')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'ACTIVE_ORDERS'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Navigation className="w-4 h-4" />
-          Ca đang chạy ({activeOrders.length})
-        </button>
+            <button
+              onClick={() => setActiveTab('ACTIVE_ORDERS')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                activeTab === 'ACTIVE_ORDERS'
+                  ? 'bg-cyan-600 text-white border-cyan-500 shadow-lg shadow-cyan-950/60'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Navigation className="w-3.5 h-3.5 text-cyan-300" />
+              Ca đang chạy ({activeOrders.length})
+            </button>
 
-        {activeIncidents.length > 0 && (
-          <button
-            onClick={() => setActiveTab('INCIDENTS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-              activeTab === 'INCIDENTS'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-purple-600 hover:bg-purple-50'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 animate-bounce" />
-            Sự cố &amp; Chi viện ({activeIncidents.length})
-          </button>
-        )}
+            {activeIncidents.length > 0 && (
+              <button
+                onClick={() => setActiveTab('INCIDENTS')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                  activeTab === 'INCIDENTS'
+                    ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-950/60'
+                    : 'bg-slate-900 text-purple-300 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 animate-pulse text-purple-400" />
+                Sự cố &amp; Chi viện ({activeIncidents.length})
+              </button>
+            )}
 
-        <button
-          onClick={() => setActiveTab('ALL')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'ALL'
-              ? 'bg-slate-800 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Filter className="w-4 h-4" />
-          Tất cả tin báo ({reports.length})
-        </button>
-      </div>
+            <button
+              onClick={() => setActiveTab('ALL')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border ${
+                activeTab === 'ALL'
+                  ? 'bg-slate-800 text-white border-slate-700 shadow-lg'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              Tất cả ({reports.length})
+            </button>
+          </div>
 
       {/* Main Tab Content */}
-      <div className={mapElement ? "max-h-[calc(100vh-270px)] overflow-y-auto pr-1 space-y-3" : "grid grid-cols-1 gap-4"}>
+      <div className={mapElement ? "max-h-[calc(100vh-230px)] overflow-y-auto pr-1 space-y-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"}>
         {/* TAB 1: UNVERIFIED */}
         {activeTab === 'UNVERIFIED' && (
-          <div>
+          <div className="space-y-3">
             {unverifiedReports.length === 0 ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center text-emerald-800">
-                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                <h3 className="font-bold text-lg">Không có tin báo chờ thẩm định</h3>
-                <p className="text-sm text-emerald-600 mt-1">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
+                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+                <h3 className="font-bold text-white text-base">Không có tin báo chờ thẩm định</h3>
+                <p className="text-xs text-slate-400 mt-1">
                   Mọi tin báo khẩn cấp từ người dân đã được thẩm định và phân loại ưu tiên.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={mapElement ? "space-y-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"}>
                 {unverifiedReports.map((report) => (
                   <div
                     key={report.report_id}
-                    className="bg-white rounded-2xl border-2 border-rose-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                    className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl hover:border-slate-700 transition flex flex-col justify-between text-slate-100"
                   >
                     <div>
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <span className="font-mono text-xs font-bold text-slate-500">#{report.report_id}</span>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="font-mono text-xs font-bold text-slate-400">#{report.report_id}</span>
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={report.status} type="report" />
-                          <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-700">
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-rose-950 text-rose-300 border border-rose-800/80">
                             {priorityLabel(report.priority).text}
                           </span>
                         </div>
                       </div>
 
-                      <h4 className="font-bold text-slate-900 text-base mb-2 flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
-                        {report.address_hint || `Khu vực toạ độ [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}
+                      <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>{report.address_hint || `Khu vực toạ độ [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}</span>
                       </h4>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
                         <div>
-                          <span className="text-slate-400 block">Nhu cầu cứu trợ:</span>
-                          <span className="font-semibold text-slate-800">{needType(report.need_type).text}</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Nhu cầu cứu trợ:</span>
+                          <span className="font-semibold text-slate-200">{needType(report.need_type).text}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Độ ngập ước tính:</span>
-                          <span className="font-semibold text-rose-600">{reportDepthCm(report)} cm</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Độ ngập ước tính:</span>
+                          <span className="font-bold text-rose-400 font-mono">{reportDepthCm(report)} cm</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Người cần sơ tán:</span>
-                          <span className="font-semibold text-slate-800">{reportPeopleAffected(report)} người</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Người cần cứu:</span>
+                          <span className="font-semibold text-slate-200">{reportPeopleAffected(report)} người</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Thời gian gửi:</span>
-                          <span className="font-semibold text-slate-800">
+                          <span className="text-slate-400 text-[10px] block uppercase">Thời gian gửi:</span>
+                          <span className="font-semibold text-slate-300 font-mono">
                             {new Date(report.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>
 
                       {report.notes && (
-                        <p className="text-xs text-slate-600 italic bg-amber-50 border-l-4 border-amber-400 p-2 rounded mb-4">
+                        <p className="text-xs text-amber-200 italic bg-amber-950/40 border-l-2 border-amber-500 p-2 rounded mb-3">
                           &ldquo;{report.notes}&rdquo;
                         </p>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
                       {onSelectReport && (
                         <button
                           type="button"
                           onClick={() => onSelectReport(report)}
-                          className="flex-1 py-2 px-3 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+                          className="flex-1 py-1.5 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
                         >
                           Xem bản đồ
                         </button>
@@ -383,7 +353,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                       <button
                         type="button"
                         onClick={() => openVerify(report)}
-                        className="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 py-1.5 px-3 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950 flex items-center justify-center gap-1.5 transition"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Thẩm định ngay
@@ -398,64 +368,64 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
         {/* TAB 2: READY FOR DISPATCH */}
         {activeTab === 'READY_DISPATCH' && (
-          <div>
+          <div className="space-y-3">
             {readyDispatchReports.length === 0 ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-600">
-                <Truck className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="font-bold text-lg">Không có tin báo chờ điều phối</h3>
-                <p className="text-sm text-slate-500 mt-1">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
+                <Truck className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+                <h3 className="font-bold text-white text-base">Không có tin báo chờ điều phối</h3>
+                <p className="text-xs text-slate-400 mt-1">
                   Tất cả các tin đã thẩm định đều đã được cấp lệnh điều động.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={mapElement ? "space-y-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"}>
                 {readyDispatchReports.map((report) => (
                   <div
                     key={report.report_id}
-                    className="bg-white rounded-2xl border-2 border-amber-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                    className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl hover:border-slate-700 transition flex flex-col justify-between text-slate-100"
                   >
                     <div>
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <span className="font-mono text-xs font-bold text-slate-500">#{report.report_id}</span>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="font-mono text-xs font-bold text-slate-400">#{report.report_id}</span>
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={report.status} type="report" />
-                          <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-amber-950 text-amber-300 border border-amber-800/80">
                             {priorityLabel(report.priority).text}
                           </span>
                         </div>
                       </div>
 
-                      <h4 className="font-bold text-slate-900 text-base mb-2 flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-amber-500 shrink-0" />
-                        {report.address_hint || `Khu vực [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}
+                      <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>{report.address_hint || `Khu vực [${(report.latitude ?? report.lat ?? 0).toFixed(4)}, ${(report.longitude ?? report.lng ?? 0).toFixed(4)}]`}</span>
                       </h4>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
                         <div>
-                          <span className="text-slate-400 block">Nhu cầu:</span>
-                          <span className="font-semibold text-slate-800">{needType(report.need_type).text}</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Nhu cầu:</span>
+                          <span className="font-semibold text-slate-200">{needType(report.need_type).text}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Độ sâu:</span>
-                          <span className="font-semibold text-amber-700">{reportDepthCm(report)} cm</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Độ sâu:</span>
+                          <span className="font-bold text-amber-400 font-mono">{reportDepthCm(report)} cm</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Sơ tán:</span>
-                          <span className="font-semibold text-slate-800">{reportPeopleAffected(report)} người</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Sơ tán:</span>
+                          <span className="font-semibold text-slate-200">{reportPeopleAffected(report)} người</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Người báo:</span>
-                          <span className="font-semibold text-slate-800">{report.reporter_name || report.reporter_phone}</span>
+                          <span className="text-slate-400 text-[10px] block uppercase">Người báo:</span>
+                          <span className="font-semibold text-slate-300">{report.reporter_name || report.reporter_phone}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
                       {onSelectReport && (
                         <button
                           type="button"
                           onClick={() => onSelectReport(report)}
-                          className="flex-1 py-2 px-3 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+                          className="flex-1 py-1.5 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
                         >
                           Vị trí
                         </button>
@@ -463,7 +433,7 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                       <button
                         type="button"
                         onClick={() => openDispatch(report)}
-                        className="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 py-1.5 px-3 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-950 flex items-center justify-center gap-1.5 transition"
                       >
                         <Send className="w-3.5 h-3.5" />
                         Xuất lệnh điều phối
@@ -478,17 +448,17 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
 
         {/* TAB 3: ACTIVE ORDERS */}
         {activeTab === 'ACTIVE_ORDERS' && (
-          <div>
+          <div className="space-y-3">
             {activeOrders.length === 0 ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-600">
-                <Navigation className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="font-bold text-lg">Không có ca điều phối nào đang hoạt động</h3>
-                <p className="text-sm text-slate-500 mt-1">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
+                <Navigation className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+                <h3 className="font-bold text-white text-base">Không có ca điều phối nào đang hoạt động</h3>
+                <p className="text-xs text-slate-400 mt-1">
                   Hiện các đội và phương tiện đang ở trạng thái trực sẵn sàng tại căn cứ.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={mapElement ? "space-y-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"}>
                 {activeOrders.map((order) => {
                   const targetReport = reports.find((r) => r.report_id === order.report_id);
                   const assignedVehicle = vehicles.find((v) => v.vehicle_id === order.vehicle_id);
@@ -497,60 +467,60 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                   return (
                     <div
                       key={order.order_id}
-                      className="bg-white rounded-2xl border-2 border-blue-200 p-5 shadow-sm flex flex-col justify-between"
+                      className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl hover:border-slate-700 transition flex flex-col justify-between text-slate-100"
                     >
                       <div>
-                        <div className="flex items-start justify-between gap-2 mb-3">
-                          <span className="font-mono text-xs font-bold text-slate-500">#{order.order_id}</span>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span className="font-mono text-xs font-bold text-slate-400">#{order.order_id}</span>
                           <StatusBadge status={order.status} type="order" />
                         </div>
 
-                        <h4 className="font-bold text-slate-900 text-base mb-2 flex items-center gap-2">
-                          <Navigation className="w-4 h-4 text-blue-500 shrink-0" />
-                          Mục tiêu: {targetReport?.address_hint || `Tin báo #${order.report_id}`}
+                        <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-1.5">
+                          <Navigation className="w-4 h-4 text-cyan-400 shrink-0" />
+                          <span>Mục tiêu: {targetReport?.address_hint || `Tin báo #${order.report_id}`}</span>
                         </h4>
 
-                        <div className="space-y-2 text-xs text-slate-700 mb-4 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                        <div className="space-y-1.5 text-xs mb-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-300">
                           <div className="flex justify-between items-center">
-                            <span className="text-slate-500 flex items-center gap-1">
+                            <span className="text-slate-400 flex items-center gap-1 text-[11px]">
                               <Truck className="w-3.5 h-3.5" /> Phương tiện:
                             </span>
-                            <span className="font-bold text-blue-900">
+                            <span className="font-bold text-cyan-300 font-mono">
                               {assignedVehicle ? `${assignedVehicle.vehicle_name} (${vehicleType(assignedVehicle.vehicle_type) || assignedVehicle.vehicle_type})` : order.vehicle_id}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-slate-500 flex items-center gap-1">
+                            <span className="text-slate-400 flex items-center gap-1 text-[11px]">
                               <Users className="w-3.5 h-3.5" /> Đội cứu hộ:
                             </span>
-                            <span className="font-bold text-slate-800">
-                              {assignedTeam ? `${assignedTeam.team_name} (Đội trưởng ${assignedTeam.leader_name})` : order.team_id}
+                            <span className="font-bold text-slate-200">
+                              {assignedTeam ? `${assignedTeam.team_name} (${assignedTeam.leader_name})` : order.team_id}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-slate-500 flex items-center gap-1">
+                            <span className="text-slate-400 flex items-center gap-1 text-[11px]">
                               <Clock className="w-3.5 h-3.5" /> Xuất phát:
                             </span>
-                            <span className="font-semibold text-slate-700">
+                            <span className="font-semibold text-slate-300 font-mono">
                               {new Date(order.dispatched_at || order.created_at).toLocaleTimeString('vi-VN')}
                             </span>
                           </div>
                         </div>
 
                         {order.notes && (
-                          <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 mb-3">
-                            <span className="font-semibold text-slate-700">Chỉ đạo:</span> {order.notes}
+                          <p className="text-xs text-slate-300 bg-slate-950 p-2 rounded border border-slate-800 mb-2">
+                            <span className="font-semibold text-cyan-400">Chỉ đạo:</span> {order.notes}
                           </p>
                         )}
                       </div>
 
-                      <div className="text-xs text-slate-400 flex items-center justify-between pt-2 border-t border-slate-100">
-                        <span>Cập nhật gần nhất: {new Date(order.updated_at || order.created_at).toLocaleTimeString('vi-VN')}</span>
+                      <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800">
+                        <span>Cập nhật: {new Date(order.updated_at || order.created_at).toLocaleTimeString('vi-VN')}</span>
                         {targetReport && onSelectReport && (
                           <button
                             type="button"
                             onClick={() => onSelectReport(targetReport)}
-                            className="text-blue-600 hover:underline font-semibold"
+                            className="text-cyan-400 hover:text-cyan-300 hover:underline font-semibold"
                           >
                             Định vị trên bản đồ →
                           </button>

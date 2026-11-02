@@ -42,8 +42,8 @@ interface ResourceManagerWorkspaceProps {
 
 type SectionTab = 'VEHICLES' | 'SHELTERS' | 'GAUGES' | 'REPAIRS';
 
-const INPUT_STYLE = 'w-full rounded-xl border-2 border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-200 transition-all';
-const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700';
+const INPUT_STYLE = 'w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-white outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all';
+const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-300';
 
 export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> = ({
   vehicles,
@@ -129,13 +129,13 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-800 overflow-x-auto pb-2">
         <button
           onClick={() => setActiveTab('VEHICLES')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
             activeTab === 'VEHICLES'
-              ? 'bg-teal-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
+              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           <Truck className="w-4 h-4" />
@@ -146,8 +146,8 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
           onClick={() => setActiveTab('SHELTERS')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
             activeTab === 'SHELTERS'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
+              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           <Home className="w-4 h-4" />
@@ -158,8 +158,8 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
           onClick={() => setActiveTab('GAUGES')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
             activeTab === 'GAUGES'
-              ? 'bg-indigo-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-cyan-600 border border-cyan-500 text-white shadow-lg shadow-cyan-950'
+              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           <Waves className="w-4 h-4" />
@@ -170,8 +170,8 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
           onClick={() => setActiveTab('REPAIRS')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shrink-0 ${
             activeTab === 'REPAIRS'
-              ? 'bg-rose-600 text-white shadow-md'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-rose-600 border border-rose-500 text-white shadow-lg shadow-rose-950'
+              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           <Wrench className="w-4 h-4" />
@@ -187,8 +187,8 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
             return (
               <div
                 key={v.vehicle_id}
-                className={`bg-white rounded-2xl border-2 p-5 shadow-sm flex flex-col justify-between transition-all ${
-                  isBroken ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 hover:border-teal-300'
+                className={`bg-slate-900/90 rounded-2xl border p-5 shadow-xl text-slate-100 flex flex-col justify-between transition-all ${
+                  isBroken ? 'border-rose-800 bg-rose-950/30' : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <div>
@@ -207,36 +207,36 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                     </span>
                   </div>
 
-                  <h3 className="font-bold text-slate-900 text-base mb-1">{v.vehicle_name}</h3>
-                  <div className="text-xs text-slate-500 mb-4">
+                  <h3 className="font-bold text-white text-base mb-1">{v.vehicle_name}</h3>
+                  <div className="text-xs text-slate-400 mb-4">
                     Loại: <strong>{vehicleType(v.vehicle_type) || v.vehicle_type}</strong>
                   </div>
 
-                  <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
+                  <div className="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-xs">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 flex items-center gap-1.5">
                         <Fuel className="w-3.5 h-3.5 text-amber-500" /> Nhiên liệu:
                       </span>
-                      <span className="font-bold text-slate-800">{v.fuel_percent}%</span>
+                      <span className="font-bold text-slate-200">{v.fuel_pct ?? v.fuel_percent ?? 0}%</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 flex items-center gap-1.5">
                         <HeartPulse className="w-3.5 h-3.5 text-emerald-500" /> Tình trạng máy:
                       </span>
-                      <span className="font-bold text-slate-800">{v.health_percent}%</span>
+                      <span className="font-bold text-slate-800">{v.health_pct ?? v.health_percent ?? 0}%</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 flex items-center gap-1.5">
                         <Activity className="w-3.5 h-3.5 text-blue-500" /> Nguồn toạ độ:
                       </span>
-                      <span className="font-medium text-slate-600">Mô phỏng IoT</span>
+                      <span className="font-medium text-slate-300">Mô phỏng IoT</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex justify-between items-center">
+                <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
                   <span>Toạ độ: [{v.current_lat.toFixed(4)}, {v.current_lng.toFixed(4)}]</span>
-                  {v.assigned_team_id && <span className="font-semibold text-slate-600">Đội: {v.assigned_team_id}</span>}
+                  {v.assigned_team_id && <span className="font-semibold text-slate-300">Đội: {v.assigned_team_id}</span>}
                 </div>
               </div>
             );
@@ -254,7 +254,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
             return (
               <div
                 key={s.shelter_id}
-                className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-sm hover:border-blue-300 transition-all flex flex-col justify-between"
+                className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl hover:border-slate-700 transition-all flex flex-col justify-between text-slate-100"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -275,15 +275,15 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                   <h3 className="font-bold text-slate-900 text-base mb-1">{s.shelter_name}</h3>
                   <p className="text-xs text-slate-600 mb-4">{s.address}</p>
 
-                  <div className="space-y-2 bg-blue-50/40 p-3 rounded-xl border border-blue-100 text-xs mb-3">
+                  <div className="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-xs mb-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-600 font-semibold">Công suất tiếp nhận:</span>
-                      <span className="font-bold text-blue-900">
+                      <span className="text-slate-400 font-semibold">Công suất tiếp nhận:</span>
+                      <span className="font-bold text-cyan-300">
                         {s.current_occupancy} / {s.capacity} người ({pct}%)
                       </span>
                     </div>
                     {/* Progress bar */}
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                       <div
                         className={`h-2 rounded-full transition-all ${
                           pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -297,12 +297,12 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
                   {onSelectShelter && (
                     <button
                       type="button"
                       onClick={() => onSelectShelter(s)}
-                      className="flex-1 py-2 px-3 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      className="flex-1 py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
                     >
                       Bản đồ
                     </button>
@@ -326,7 +326,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
       {/* TAB 3: GAUGES */}
       {activeTab === 'GAUGES' && (
         <div className="space-y-4">
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+          <div className="p-3 bg-amber-950/60 border border-amber-800/60 rounded-xl text-xs text-amber-300 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
             <span>
               <strong>Lưu ý minh bạch:</strong> Mực nước trạm quan trắc hiện được cấp bởi bộ mô phỏng IoT thủy văn Hà Nội để thử nghiệm kịch bản ngập cục bộ.
@@ -341,7 +341,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                 <div
                   key={g.station_id}
                   className={`bg-white rounded-2xl border-2 p-5 shadow-sm transition-all flex flex-col justify-between ${
-                    isDanger ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 hover:border-indigo-300'
+                    isDanger ? 'border-rose-800 bg-rose-950/30' : 'border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <div>
@@ -365,16 +365,16 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                     <h3 className="font-bold text-slate-900 text-base mb-1">{g.station_name}</h3>
                     <p className="text-xs text-slate-500 mb-4">Lưu vực: {g.river_stream || 'Sông Nhuệ / Kênh xả'}</p>
 
-                    <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                    <div className="space-y-2 bg-slate-950/70 p-4 rounded-xl border border-slate-800 text-xs">
                       <div className="flex justify-between items-center">
                         <span className="text-slate-500">Mực nước hiện tại:</span>
                         <span className="text-base font-black text-rose-600">{g.water_level_cm} cm</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-slate-500">Ngưỡng báo động:</span>
-                        <span className="font-bold text-slate-700">{g.warning_level_cm} cm</span>
+                        <span className="font-bold text-slate-200">{g.warning_level_cm} cm</span>
                       </div>
-                      <div className="flex justify-between items-center pt-1 border-t border-slate-200 text-slate-500">
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-800 text-slate-400">
                         <span className="flex items-center gap-1">
                           <BatteryCharging className="w-3.5 h-3.5 text-emerald-500" /> Pin trạm: {g.battery_pct}%
                         </span>
@@ -405,7 +405,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
       {activeTab === 'REPAIRS' && (
         <div className="space-y-4">
           {activeIncidents.length === 0 ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center text-emerald-800">
+            <div className="bg-slate-900/90 border border-emerald-900/60 rounded-2xl p-8 text-center text-emerald-300">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
               <h3 className="font-bold text-lg">Không có phương tiện cần bảo dưỡng khẩn cấp</h3>
               <p className="text-sm text-emerald-600 mt-1">

@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { MapEventTicker } from './MapEventTicker';
 import { nextHeading, screenRotation } from '../../utils/fleetInsights';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
+import { HANOI_TACTICAL_BASEMAP_GEOJSON } from './hanoiTacticalVector';
 setWorkerUrl(maplibreWorkerUrl);
 import type { FloodZone, RescueVehicle, FloodReport, DispatchOrder, GaugeStation, SafeShelter, CandidateRescueOption, UserRole } from '../../types';
-import { Compass, MapPin, AlertTriangle, ShieldCheck, Waves, Home, Crosshair, Layers, Maximize2, Minimize2 } from 'lucide-react';
+import { Crosshair, Maximize2, Minimize2 } from 'lucide-react';
 import type { MapSelection } from './MapDetailPanel';
 
 interface TacticalMapProps {
@@ -25,7 +26,6 @@ interface TacticalMapProps {
   trails?: Record<string, [number, number][]>;
   live?: LiveFleetInfo;
   onSelect?: (selection: MapSelection) => void;
-  // Legacy compatibility props for twin3d
   fields?: any[];
   machines?: any[];
   assignments?: any[];
@@ -33,8 +33,8 @@ interface TacticalMapProps {
   heightClass?: string;
 }
 
-// Center of pilot flood-response zone in Hanoi
-const HANOI_CENTER: [number, number] = [105.8710, 20.9660];
+// Center of pilot flood-response zone in Hanoi (Hoàng Mai / Thanh Trì / Sông Nhuệ)
+const HANOI_CENTER: [number, number] = [105.8450, 20.9780];
 
 const BASEMAPS = {
   dark: {
@@ -42,32 +42,105 @@ const BASEMAPS = {
     style: {
       version: 8,
       sources: {
-        osm_source: {
-          type: 'raster',
-          tiles: [
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ],
-          tileSize: 256,
-          attribution: '&copy; OpenStreetMap contributors',
-          maxzoom: 19,
+        tactical_hanoi_base: {
+          type: 'geojson',
+          data: HANOI_TACTICAL_BASEMAP_GEOJSON,
         },
       },
       layers: [
         {
-          id: 'osm-tactical-layer',
-          type: 'raster',
-          source: 'osm_source',
-          minzoom: 0,
-          maxzoom: 19,
+          id: 'tactical-bg',
+          type: 'background',
+          paint: {
+            'background-color': '#070d18',
+          },
+        },
+        {
+          id: 'districts-fill',
+          type: 'fill',
+          source: 'tactical_hanoi_base',
+          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'type', 'lake']],
+          paint: {
+            'fill-color': '#0e172a',
+            'fill-opacity': 0.88,
+          },
+        },
+        {
+          id: 'districts-line',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'type', 'lake']],
+          paint: {
+            'line-color': '#1e293b',
+            'line-width': 1.5,
+          },
+        },
+        {
+          id: 'tactical-grid',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['==', 'type', 'grid'],
+          paint: {
+            'line-color': '#1e293b',
+            'line-width': 1,
+            'line-dasharray': [2, 4],
+            'line-opacity': 0.5,
+          },
+        },
+        {
+          id: 'lakes-fill',
+          type: 'fill',
+          source: 'tactical_hanoi_base',
+          filter: ['==', 'type', 'lake'],
+          paint: {
+            'fill-color': '#0369a1',
+            'fill-opacity': 0.85,
+          },
+        },
+        {
+          id: 'lakes-outline',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['==', 'type', 'lake'],
+          paint: {
+            'line-color': '#0284c7',
+            'line-width': 2,
+          },
+        },
+        {
+          id: 'rivers-glow',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['in', 'type', 'river', 'canal'],
+          paint: {
+            'line-color': '#0284c7',
+            'line-width': 10,
+            'line-opacity': 0.35,
+            'line-blur': 4,
+          },
+        },
+        {
+          id: 'rivers-line',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['in', 'type', 'river', 'canal'],
+          paint: {
+            'line-color': '#38bdf8',
+            'line-width': 3.5,
+          },
         },
       ],
     },
   },
   voyager: {
-    name: 'Đô thị / Thủy hệ (Voyager)',
+    name: 'Đô thị / Thủy văn (Hybrid)',
     style: {
       version: 8,
       sources: {
+        tactical_hanoi_base: {
+          type: 'geojson',
+          data: HANOI_TACTICAL_BASEMAP_GEOJSON,
+        },
         osm_source: {
           type: 'raster',
           tiles: [
@@ -80,11 +153,31 @@ const BASEMAPS = {
       },
       layers: [
         {
-          id: 'osm-day-layer',
+          id: 'tactical-bg',
+          type: 'background',
+          paint: {
+            'background-color': '#0f172a',
+          },
+        },
+        {
+          id: 'osm-layer',
           type: 'raster',
           source: 'osm_source',
-          minzoom: 0,
-          maxzoom: 19,
+          paint: {
+            'raster-opacity': 0.75,
+          },
+        },
+        {
+          id: 'rivers-glow',
+          type: 'line',
+          source: 'tactical_hanoi_base',
+          filter: ['in', 'type', 'river', 'canal'],
+          paint: {
+            'line-color': '#0284c7',
+            'line-width': 8,
+            'line-opacity': 0.45,
+            'line-blur': 3,
+          },
         },
       ],
     },
@@ -107,9 +200,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   machines,
   assignments,
   className = '',
-  heightClass = 'min-h-[580px] h-[calc(100vh-230px)]',
+  heightClass = 'min-h-[580px] h-[calc(100vh-210px)]',
 }) => {
-  // Normalize lists between native FloodOS and legacy compatibility props
   const activeZones: FloodZone[] = zones.length > 0 ? zones : (fields as any[]) || [];
   const activeVehicles: RescueVehicle[] = vehicles.length > 0 ? vehicles : (machines as any[]) || [];
   const activeOrders: DispatchOrder[] = orders.length > 0 ? orders : (assignments as any[]) || [];
@@ -118,6 +210,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const map = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const headingsRef = useRef<Map<string, { lat: number; lng: number; heading: number }>>(new Map());
+
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapBearing, setMapBearing] = useState(0);
   const [basemap, setBasemap] = useState<'dark' | 'voyager'>('dark');
@@ -130,7 +223,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   const handleCenterHanoi = () => {
     if (map.current) {
-      map.current.flyTo({ center: HANOI_CENTER, zoom: 13.8, essential: true });
+      map.current.flyTo({ center: HANOI_CENTER, zoom: 13.5, essential: true });
     }
   };
 
@@ -156,7 +249,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           'WATCH', '#0284c7',
           '#38bdf8'
         ],
-        'fill-opacity': 0.32,
+        'fill-opacity': 0.35,
       },
     });
 
@@ -226,7 +319,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       container: mapContainer.current,
       style: BASEMAPS[basemap].style as any,
       center: HANOI_CENTER,
-      zoom: 13.8,
+      zoom: 13.5,
       attributionControl: false,
     });
 
@@ -242,7 +335,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
     map.current = m;
 
-    // Auto resize observer to guarantee the map never renders tiny or collapsed
     const ro = new ResizeObserver(() => {
       if (map.current) {
         map.current.resize();
@@ -308,8 +400,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       return;
     }
 
-    const v = activeVehicles.find((x) => x.vehicle_id === rescueCandidate.vehicle_id);
-    const destZone = activeZones[0]; // destination zone
+    const vId = (rescueCandidate as any).vehicle_id || rescueCandidate.machine_id;
+    const v = activeVehicles.find((x) => x.vehicle_id === vId || (x as any).machine_id === vId);
+    const destZone = activeZones[0];
     if (v && destZone) {
       src.setData({
         type: 'FeatureCollection',
@@ -330,7 +423,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     }
   }, [mapLoaded, rescueCandidate, activeVehicles, activeZones]);
 
-  // Update Markers on Map with Tactical Professional SVG Symbology
+  // Update Markers on Map with Crisp Tactical Symbology
   useEffect(() => {
     if (!map.current) return;
     const currentMap = map.current;
@@ -339,12 +432,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
     // 1. Rescue Vehicles & Boats
     if (showVehicles) activeVehicles.forEach((v) => {
-      const key = `veh:${v.vehicle_id}`;
+      const vId = v.vehicle_id || (v as any).machine_id || 'PT';
+      const key = `veh:${vId}`;
       touched.add(key);
 
-      const prev = headingsRef.current.get(v.vehicle_id) || null;
+      const prev = headingsRef.current.get(vId) || null;
       const next = nextHeading(prev, v.current_lat, v.current_lng);
-      headingsRef.current.set(v.vehicle_id, next);
+      headingsRef.current.set(vId, next);
       const rot = screenRotation(next.heading, mapBearing);
 
       let m = existing.get(key);
@@ -355,10 +449,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const isBoat = v.vehicle_type === 'RESCUE_BOAT';
         el.innerHTML = `
           <div class="relative flex flex-col items-center">
-            <div class="h-10 w-10 rounded-xl border-2 flex items-center justify-center shadow-2xl transition-all ${
+            <div class="h-9 w-9 rounded-xl border-2 flex items-center justify-center shadow-2xl transition-all ${
               isBreakdown
-                ? 'bg-red-950/95 border-red-500 text-red-400 ring-4 ring-red-500/30'
-                : 'bg-slate-900/95 border-sky-400 text-cyan-300 ring-2 ring-sky-500/20'
+                ? 'bg-red-950 border-red-500 text-red-400 ring-4 ring-red-500/40'
+                : 'bg-slate-900 border-cyan-400 text-cyan-300 ring-2 ring-cyan-500/30'
             }">
               <svg class="h-5 w-5 transform transition-transform" style="transform: rotate(${rot}deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 ${isBoat
@@ -367,8 +461,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 }
               </svg>
             </div>
-            <div class="mt-1 whitespace-nowrap rounded-md bg-slate-950/95 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-100 shadow border border-slate-700 flex items-center gap-1.5">
-              <span>${v.vehicle_id}</span>
+            <div class="mt-1 whitespace-nowrap rounded-md bg-slate-950 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-100 shadow border border-slate-700 flex items-center gap-1.5">
+              <span>${vId}</span>
               <span class="h-1.5 w-1.5 rounded-full ${isBreakdown ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}"></span>
             </div>
           </div>
@@ -389,17 +483,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       let m = existing.get(key);
       if (!m) {
         const el = document.createElement('div');
-        el.className = 'cursor-pointer transition-transform duration-200 hover:scale-110';
-        const isUrgent = r.priority === 'URGENT';
-        const isResolved = r.status === 'RESOLVED';
+        el.className = 'cursor-pointer hover:scale-110 transition';
+        const isUrgent = r.priority === 'URGENT' || r.priority === 'CRITICAL';
+        const isResolved = r.status === 'RESOLVED' || r.status === 'CLOSED';
         el.innerHTML = `
           <div class="relative flex flex-col items-center">
-            <div class="h-9 px-2.5 rounded-lg border-2 shadow-2xl flex items-center gap-1.5 font-bold ${
+            <div class="flex items-center gap-1.5 rounded-xl border px-2 py-1 shadow-2xl transition font-mono font-bold ${
               isResolved
-                ? 'bg-emerald-950/95 border-emerald-500 text-emerald-300'
+                ? 'bg-slate-900 border-slate-700 text-slate-400'
                 : isUrgent
-                ? 'bg-red-950/95 border-red-500 text-red-200 ring-4 ring-red-500/40'
-                : 'bg-amber-950/90 border-amber-500 text-amber-200'
+                ? 'bg-red-950 border-red-500 text-red-200 ring-4 ring-red-500/40 animate-pulse'
+                : 'bg-amber-950 border-amber-500 text-amber-200 ring-2 ring-amber-500/30'
             }">
               <svg class="h-4 w-4 shrink-0 text-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -411,7 +505,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 <span class="font-mono text-[11px] font-extrabold">${r.depth_cm}cm</span>
               </div>
             </div>
-            <div class="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[9px] font-mono text-slate-300 border border-slate-700 shadow">
+            <div class="mt-0.5 whitespace-nowrap rounded bg-slate-950 px-1.5 py-0.5 text-[9px] font-mono text-slate-300 border border-slate-800 shadow">
               #${r.report_id} · ${r.people_affected} người
             </div>
           </div>
@@ -434,7 +528,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const el = document.createElement('div');
         el.className = 'cursor-pointer hover:scale-105 transition';
         el.innerHTML = `
-          <div class="flex items-center gap-1.5 rounded-lg bg-emerald-950/95 border border-emerald-500/80 px-2 py-1 text-emerald-300 shadow-xl text-xs font-mono font-bold">
+          <div class="flex items-center gap-1.5 rounded-lg bg-emerald-950 border border-emerald-500/80 px-2 py-1 text-emerald-300 shadow-xl text-xs font-mono font-bold">
             <svg class="h-4 w-4 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <polyline points="9 22 9 12 15 12 15 22"/>
@@ -464,8 +558,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         el.className = 'cursor-pointer hover:scale-105 transition';
         const isWarn = g.alert_state === 'WARNING' || g.alert_state === 'CRITICAL';
         el.innerHTML = `
-          <div class="flex items-center gap-1.5 rounded-lg bg-slate-950/95 border px-2 py-1 shadow-xl text-xs font-mono font-bold ${
-            isWarn ? 'border-red-500 text-red-300 bg-red-950/80' : 'border-sky-500/70 text-sky-300'
+          <div class="flex items-center gap-1.5 rounded-lg bg-slate-950 border px-2 py-1 shadow-xl text-xs font-mono font-bold ${
+            isWarn ? 'border-red-500 text-red-300 bg-red-950/80 ring-2 ring-red-500/30' : 'border-cyan-500/70 text-cyan-300'
           }">
             <svg class="h-4 w-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
@@ -495,19 +589,15 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   return (
     <div className={`relative w-full overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950 ${heightClass} ${className} ${isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen min-h-screen' : ''}`}>
-      {/* Map Container */}
+      {/* Map Container - Zero Hacky CSS Filter */}
       <div 
         ref={mapContainer} 
-        className={`h-full w-full transition duration-300 ${
-          basemap === 'dark' 
-            ? '[&_.maplibregl-canvas]:brightness-[0.78] [&_.maplibregl-canvas]:invert-[0.93] [&_.maplibregl-canvas]:hue-rotate-180 [&_.maplibregl-canvas]:contrast-[1.25]' 
-            : ''
-        }`} 
+        className="h-full w-full bg-slate-950" 
       />
 
       {/* Top Left HUD: Map Info & Controls */}
-      <div className="absolute top-3 left-3 z-10 max-w-sm sm:max-w-md rounded-xl bg-slate-950/90 backdrop-blur-md p-3 text-xs text-slate-200 border border-slate-800 shadow-2xl space-y-2">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+      <div className="absolute top-3 left-3 z-10 max-w-sm sm:max-w-md rounded-xl bg-slate-950/95 backdrop-blur-md p-3 text-xs text-slate-200 border border-slate-800 shadow-2xl space-y-2">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
           <div className="flex items-center gap-2">
             <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="font-bold tracking-tight text-white uppercase text-[11px]">Bản đồ Tác chiến Thủy văn</span>
@@ -516,15 +606,15 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <button
               type="button"
               onClick={toggleBasemap}
-              className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-cyan-300 border border-slate-700 transition"
+              className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-cyan-300 border border-slate-700 transition"
               title="Đổi lớp bản đồ nền"
             >
-              {basemap === 'dark' ? '☀️ Ngày' : '🌙 Tác chiến'}
+              {basemap === 'dark' ? '☀️ Ngày / Ảnh vệ tinh' : '🌙 Tác chiến Vector'}
             </button>
             <button
               type="button"
               onClick={handleCenterHanoi}
-              className="px-2 py-0.5 rounded-md bg-sky-800/80 hover:bg-sky-700 text-[10px] font-bold text-sky-100 border border-sky-600/40 transition flex items-center gap-1"
+              className="px-2 py-0.5 rounded-md bg-sky-900 hover:bg-sky-800 text-[10px] font-bold text-sky-100 border border-sky-700 transition flex items-center gap-1"
               title="Căn tâm Hà Nội"
             >
               <Crosshair className="h-3 w-3" />
@@ -533,7 +623,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <button
               type="button"
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="px-1.5 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700"
+              className="px-1.5 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-300 transition border border-slate-700"
               title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
             >
               {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
@@ -548,8 +638,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             onClick={() => setShowReports(!showReports)}
             className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
               showReports
-                ? 'bg-red-950/90 text-red-300 border-red-500/60 shadow-inner'
-                : 'bg-slate-900/60 text-slate-500 border-slate-800'
+                ? 'bg-red-950 text-red-300 border-red-500/60 shadow-inner'
+                : 'bg-slate-900 text-slate-500 border-slate-800'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-red-400"></span>
@@ -560,8 +650,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             onClick={() => setShowVehicles(!showVehicles)}
             className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
               showVehicles
-                ? 'bg-sky-950/90 text-sky-300 border-sky-500/60 shadow-inner'
-                : 'bg-slate-900/60 text-slate-500 border-slate-800'
+                ? 'bg-sky-950 text-sky-300 border-sky-500/60 shadow-inner'
+                : 'bg-slate-900 text-slate-500 border-slate-800'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
@@ -572,8 +662,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             onClick={() => setShowShelters(!showShelters)}
             className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
               showShelters
-                ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60 shadow-inner'
-                : 'bg-slate-900/60 text-slate-500 border-slate-800'
+                ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60 shadow-inner'
+                : 'bg-slate-900 text-slate-500 border-slate-800'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
@@ -584,8 +674,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             onClick={() => setShowGauges(!showGauges)}
             className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition flex items-center gap-1 border ${
               showGauges
-                ? 'bg-blue-950/90 text-blue-300 border-blue-500/60 shadow-inner'
-                : 'bg-slate-900/60 text-slate-500 border-slate-800'
+                ? 'bg-blue-950 text-blue-300 border-blue-500/60 shadow-inner'
+                : 'bg-slate-900 text-slate-500 border-slate-800'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
