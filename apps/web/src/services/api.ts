@@ -58,6 +58,7 @@ export const api = {
     redirect_uri?: string;
     state?: string;
     client_id?: string;
+    username?: string;
   }): Promise<{
     access_token: string;
     id_token?: string;

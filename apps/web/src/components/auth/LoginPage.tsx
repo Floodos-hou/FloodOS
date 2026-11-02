@@ -56,14 +56,14 @@ export const LoginPage: React.FC = () => {
     try {
       await beginLogin();
     } catch (err: any) {
-      setLocalError(err?.message || 'Không thể kết nối tới trang đăng nhập SSO. Bạn thử lại sau ít phút.');
+      setLocalError(err?.message || 'Không thể kết nối tới máy chủ Keycloak SSO. Vui lòng thử lại sau.');
     }
   };
 
   const handleCredentialLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!username.trim()) {
-      setLocalError('Vui lòng nhập tên đăng nhập hoặc chọn tài khoản ủy quyền.');
+      setLocalError('Vui lòng nhập tên đăng nhập tài khoản.');
       return;
     }
     clearError();
@@ -73,14 +73,6 @@ export const LoginPage: React.FC = () => {
     } catch (err: any) {
       setLocalError(err?.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.');
     }
-  };
-
-  const handleSelectDelegation = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val) return;
-    setUsername(val);
-    setPassword(DEMO_PASSWORD);
-    setLocalError(null);
   };
 
   const shownError = error || localError;
@@ -133,7 +125,7 @@ export const LoginPage: React.FC = () => {
         <WaterBackgroundScene />
       </section>
 
-      {/* Login Right Column - Single Unified Login */}
+      {/* Login Right Column - Single Unified Form (No Demo Persona Switcher) */}
       <section className="flex flex-col items-center justify-center p-6 sm:p-12 lg:p-16">
         <div className="w-full max-w-md rounded-3xl bg-white p-8 sm:p-10 shadow-2xl border border-slate-200/80">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -156,30 +148,8 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Persona Delegation for Testing */}
-          <div className="mt-6 rounded-2xl bg-sky-50/60 border border-sky-100 p-4">
-            <label htmlFor="delegation-select" className="block text-xs font-bold uppercase tracking-wider text-sky-900 mb-1.5">
-              Chọn vai trò tác chiến (Ủy quyền OIDC):
-            </label>
-            <select
-              id="delegation-select"
-              value={username}
-              onChange={handleSelectDelegation}
-              className="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-            >
-              <option value="dispatcher_hoa">👩‍💼 Chị Hoa — Điều phối viên PCTT (Ban Chỉ huy)</option>
-              <option value="reporter_lan">🙋‍♀️ Chị Lan — Người dân vùng trũng (Báo tin ngập)</option>
-              <option value="reporter_hung">👨‍💼 Anh Hùng — Người dân cụm B (Báo tin cấp cứu)</option>
-              <option value="team_cuong">🧑‍🚒 Anh Cường — Đội trưởng Cơ động 02 (Xuồng V02)</option>
-              <option value="team_binh">👷 Anh Bình — Đội trưởng Xuồng 01 (Chi viện V01)</option>
-              <option value="team_dung">🧑‍🔧 Anh Dũng — Đội trưởng Bơm tiêu úng 03 (Máy bơm V04)</option>
-              <option value="resource_giang">📋 Chị Giang — Quản lý Nguồn lực & Sửa chữa</option>
-              <option value="platform_admin">🛡️ Quản trị Nền tảng (Sổ cái SHA-256)</option>
-            </select>
-          </div>
-
-          {/* Single Unified Login Form */}
-          <form onSubmit={handleCredentialLogin} className="mt-5 space-y-4">
+          {/* Standard Authentication Form */}
+          <form onSubmit={handleCredentialLogin} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1" htmlFor="username">
                 Tên đăng nhập
@@ -191,7 +161,7 @@ export const LoginPage: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                placeholder="Nhập tên tài khoản"
+                placeholder="Nhập tên tài khoản công vụ"
               />
             </div>
 

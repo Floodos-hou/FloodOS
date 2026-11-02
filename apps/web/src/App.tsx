@@ -393,17 +393,6 @@ export const App: React.FC = () => {
         onTick={handleSimTick}
         onReset={handleSimReset}
         onOpenProofInspector={() => setShowProofInspector(true)}
-        onSwitchPersona={async (uname) => {
-          try {
-            setIsLoading(true);
-            await loginWithCredentials(uname, '123456');
-            setNotice({ kind: 'ok', text: `Đã chuyển sang phiên làm việc của: ${uname}` });
-          } catch (err: any) {
-            setNotice({ kind: 'err', text: `Không thể chuyển phiên: ${err.message}` });
-          } finally {
-            setIsLoading(false);
-          }
-        }}
         showStaffTools={isStaff && import.meta.env.DEV}
         orgName={state?.auth_context?.organization_name}
       />
