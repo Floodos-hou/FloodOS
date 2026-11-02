@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 /**
  * Pure helpers behind the live map's visual feedback (heading, KPI strip, event ticker). No React or DOM imports,

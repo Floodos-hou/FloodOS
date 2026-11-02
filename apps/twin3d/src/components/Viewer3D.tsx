@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useRef, useState } from 'react';
 import type { FieldPlot, HarvesterMachine } from '../../../web/src/types';

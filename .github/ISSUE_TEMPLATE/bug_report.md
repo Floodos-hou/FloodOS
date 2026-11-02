@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a report to help us improve OpenAgriOS
+about: Create a report to help us improve FloodOS
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -14,12 +14,12 @@ A clear and concise description of what the bug is.
 - [ ] `core/api-gateway` (APISIX Zero-Trust)
 - [ ] `core/workflow` (BPMN 2.0 Engine)
 - [ ] `core/data-services` (RLS / Audit / S3 / NGSI-LD)
-- [ ] `apps/agriops` (AgriOps Service)
+- [ ] `apps/floodos` (FloodOS Service)
 - [ ] `infra/` (Docker / Database / Helm)
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Start server with `java -cp target/classes org.openagrios.apps.agriops.OpenAgriOsServer`
+1. Start server with `java -cp target/classes org.floodos.apps.floodos.FloodOSServer`
 2. Send request to endpoint `POST /api/v1/...` with payload `...`
 3. See error response.
 

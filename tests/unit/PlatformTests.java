@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
-import static org.openagrios.tests.unit.TestKit.*;
+import static org.floodos.tests.unit.TestKit.*;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.File;
@@ -19,26 +19,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.openagrios.apps.floodops.FloodDataStore;
-import org.openagrios.apps.floodops.FloodModels.DispatchOrder;
-import org.openagrios.apps.floodops.FloodModels.FloodReport;
-import org.openagrios.apps.floodops.FloodModels.FloodZone;
-import org.openagrios.apps.floodops.FloodModels.GaugeStation;
-import org.openagrios.apps.floodops.FloodModels.RescueVehicle;
-import org.openagrios.apps.floodops.FloodOpsServer;
-import org.openagrios.apps.floodops.FloodOpsService;
-import org.openagrios.apps.floodops.FloodOpsService.HttpResult;
-import org.openagrios.apps.floodops.FloodRepository;
-import org.openagrios.apps.floodops.FloodRoles;
-import org.openagrios.core.dataservices.AnalyticsLakeClient;
-import org.openagrios.core.dataservices.EventBusPublisher;
-import org.openagrios.core.dataservices.ImmutableAuditLedger;
-import org.openagrios.core.dataservices.JsonCodec;
-import org.openagrios.core.dataservices.SeaweedS3StorageService;
-import org.openagrios.core.identity.KeycloakOidcEngine;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthMode;
-import org.openagrios.core.workflow.BpmnWorkflowEngine;
+import org.floodos.apps.floodos.FloodDataStore;
+import org.floodos.apps.floodos.FloodModels.DispatchOrder;
+import org.floodos.apps.floodos.FloodModels.FloodReport;
+import org.floodos.apps.floodos.FloodModels.FloodZone;
+import org.floodos.apps.floodos.FloodModels.GaugeStation;
+import org.floodos.apps.floodos.FloodModels.RescueVehicle;
+import org.floodos.apps.floodos.FloodOSServer;
+import org.floodos.apps.floodos.FloodOSService;
+import org.floodos.apps.floodos.FloodOSService.HttpResult;
+import org.floodos.apps.floodos.FloodRepository;
+import org.floodos.apps.floodos.FloodRoles;
+import org.floodos.core.dataservices.AnalyticsLakeClient;
+import org.floodos.core.dataservices.EventBusPublisher;
+import org.floodos.core.dataservices.ImmutableAuditLedger;
+import org.floodos.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.SeaweedS3StorageService;
+import org.floodos.core.identity.KeycloakOidcEngine;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthMode;
+import org.floodos.core.workflow.BpmnWorkflowEngine;
 
 /** I/O adapters against local stand-in HTTP endpoints, application rules on the real in-memory store, and the HTTP layer. */
 final class PlatformTests {
@@ -112,7 +112,7 @@ final class PlatformTests {
                 eventually(5000, () -> count(p.status(), "published") == 1, "published counter");
                 FakeEndpoint.Seen s = ep.seen.get(0);
                 equal("POST", s.method(), "method");
-                equal("/topics/openagrios.audit.v1", s.path(), "topic path (trailing slash on base URL tolerated)");
+                equal("/topics/floodos.audit.v1", s.path(), "topic path (trailing slash on base URL tolerated)");
                 equal("application/vnd.kafka.json.v2+json", s.contentType(), "embedded JSON content type");
                 Map<String, Object> body = JsonCodec.parseObject(s.body());
                 Map<?, ?> rec = (Map<?, ?>) ((List<?>) body.get("records")).get(0);
@@ -284,13 +284,13 @@ final class PlatformTests {
         });
     }
 
-    // ------------------------------------------------------------------ Hanoi FloodOps application rules
+    // ------------------------------------------------------------------ FloodOS application rules
     private static final String ORG1 = "ORG_HN_PILOT_01";
     private static final String ORG2 = "ORG_HN_PILOT_02";
 
-    private static FloodOpsService newService() {
-        File bpmn = new File(FloodOpsServer.resolveProjectRoot(), "infra/bpmn");
-        return new FloodOpsService(new FloodDataStore(new ImmutableAuditLedger(), new SeaweedS3StorageService(), new BpmnWorkflowEngine(bpmn)));
+    private static FloodOSService newService() {
+        File bpmn = new File(FloodOSServer.resolveProjectRoot(), "infra/bpmn");
+        return new FloodOSService(new FloodDataStore(new ImmutableAuditLedger(), new SeaweedS3StorageService(), new BpmnWorkflowEngine(bpmn)));
     }
 
     private static AuthContext ctx(String username, String org, String role) {
@@ -321,7 +321,7 @@ final class PlatformTests {
     }
 
     /** Files a report as `who`, verifies it as the dispatcher and returns its id. */
-    private static String verifiedReport(FloodOpsService s, AuthContext who, String need) {
+    private static String verifiedReport(FloodOSService s, AuthContext who, String need) {
         HttpResult r = s.createFloodReport(who, reportBody(20.9665, 105.8712, 45, need));
         equal(201, r.status(), "report created: " + r.body());
         String id = String.valueOf(r.body().get("report_id"));
@@ -329,7 +329,7 @@ final class PlatformTests {
         return id;
     }
 
-    private static HttpResult dispatch(FloodOpsService s, String reportId, String vehicle, String team, String start, String end) {
+    private static HttpResult dispatch(FloodOSService s, String reportId, String vehicle, String team, String start, String end) {
         return s.createDispatchOrder(HOA, body("report_id", reportId, "vehicle_id", vehicle, "team_id", team, "start_time", start, "end_time", end));
     }
 
@@ -366,7 +366,7 @@ final class PlatformTests {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<String> stateIds(FloodOpsService s, AuthContext a, String section, String key) {
+    private static List<String> stateIds(FloodOSService s, AuthContext a, String section, String key) {
         return ids(s.getState(a).get(section), key);
     }
 
@@ -380,8 +380,8 @@ final class PlatformTests {
     }
 
     private static void telemetryRules() {
-        suite("FloodOpsService - telemetry ingestion (vehicles and gauges, source is mandatory)");
-        FloodOpsService svc = newService();
+        suite("FloodOSService - telemetry ingestion (vehicles and gauges, source is mandatory)");
+        FloodOSService svc = newService();
         final String TS = "2026-11-20T10:00:00Z";
 
         test("unknown vehicle -> 404, foreign tenant -> 409 (existence is not leaked across tenants)", () -> {
@@ -483,8 +483,8 @@ final class PlatformTests {
     }
 
     private static void reportAndDispatchRules() {
-        suite("FloodOpsService - intake, verification and dispatch (RBAC, validation, conflicts)");
-        FloodOpsService s = newService();
+        suite("FloodOSService - intake, verification and dispatch (RBAC, validation, conflicts)");
+        FloodOSService s = newService();
 
         test("a reporter files a report: the server picks the nearest zone and starts the workflow", () -> {
             HttpResult r = s.createFloodReport(LAN, reportBody(20.9665, 105.8712, 45, "EVACUATION"));
@@ -596,14 +596,14 @@ final class PlatformTests {
     }
 
     /** Back-to-back windows touching at an endpoint are allowed (half-open ranges, like the GiST constraint). */
-    private static void back2back(FloodOpsService s, String reportId) {
+    private static void back2back(FloodOSService s, String reportId) {
         HttpResult r = dispatch(s, reportId, "V02", "T02", W1E, "2030-01-01T12:00:00Z");
         equal(201, r.status(), "starts exactly when the previous order ends: " + r.body());
     }
 
     private static void fieldAndConfirmationRules() {
-        suite("FloodOpsService - field updates, completion and confirmation");
-        FloodOpsService s = newService();
+        suite("FloodOSService - field updates, completion and confirmation");
+        FloodOSService s = newService();
         String id = verifiedReport(s, LAN, "EVACUATION");
         String orderId = String.valueOf(dispatch(s, id, "V02", "T02", W1S, W1E).body().get("order_id"));
 
@@ -682,8 +682,8 @@ final class PlatformTests {
     }
 
     private static void incidentRules() {
-        suite("FloodOpsService - vehicle incident, ranked replacements and re-plan");
-        FloodOpsService s = newService();
+        suite("FloodOSService - vehicle incident, ranked replacements and re-plan");
+        FloodOSService s = newService();
         final HttpResult[] reported = new HttpResult[1];
 
         test("a field team can only report an incident on a vehicle it works with; others get 404", () -> {
@@ -761,7 +761,7 @@ final class PlatformTests {
             equal(409, s.updateRepairTicket(GIANG, inc, body("diagnosis", "again")).status(), "ticket is closed");
         });
         test("no feasible replacement is reported honestly (422) instead of dispatching something unsuitable", () -> {
-            FloodOpsService s2 = newService();
+            FloodOSService s2 = newService();
             for (String v : new String[]{"V02", "V03", "V04", "V05"}) s2.getStore().vehicles.get(v).status = "MAINTENANCE";
             HttpResult r = s2.reportFieldIncident(BINH, incidentBody("V01"));
             equal(201, r.status(), "reported");
@@ -777,8 +777,8 @@ final class PlatformTests {
 
     @SuppressWarnings("unchecked")
     private static void visibilityRules() {
-        suite("FloodOpsService - who sees what (mirrors the row-level security policies)");
-        FloodOpsService s = newService();
+        suite("FloodOSService - who sees what (mirrors the row-level security policies)");
+        FloodOSService s = newService();
 
         test("a reporter sees only their own reports, the zones of those reports, and the vehicle serving them", () -> {
             equal(List.of("FR-0001", "FR-0003"), stateIds(s, LAN, "reports", "report_id"), "own reports only");
@@ -857,14 +857,14 @@ final class PlatformTests {
             equal(403, s.resetDemo(HOA).status(), "dispatcher");
             equal(403, s.resetDemo(LAN).status(), "reporter");
             HttpResult r = s.resetDemo(ADMIN);
-            if (!"true".equalsIgnoreCase(System.getenv("OPENDXOS_ALLOW_DEMO_RESET"))) {
-                equal("RESET_DISABLED", r.body().get("error"), "disabled unless OPENDXOS_ALLOW_DEMO_RESET=true");
+            if (!"true".equalsIgnoreCase(System.getenv("FLOODOS_ALLOW_DEMO_RESET"))) {
+                equal("RESET_DISABLED", r.body().get("error"), "disabled unless FLOODOS_ALLOW_DEMO_RESET=true");
             }
         });
     }
 
     @SuppressWarnings("unchecked")
-    private static List<String> twinIds(FloodOpsService s, AuthContext a) {
+    private static List<String> twinIds(FloodOSService s, AuthContext a) {
         List<String> out = new ArrayList<>();
         for (Map<String, Object> e : (List<Map<String, Object>>) s.getDigitalTwinEntities(a).get("entities")) {
             String id = String.valueOf(e.get("id"));
@@ -876,8 +876,8 @@ final class PlatformTests {
     @SuppressWarnings("unchecked")
     private static void seedRules() {
         suite("Seed data and single sources of truth");
-        FloodOpsService s = newService();
-        File root = FloodOpsServer.resolveProjectRoot();
+        FloodOSService s = newService();
+        File root = FloodOSServer.resolveProjectRoot();
 
         test("every seeded zone is a closed ring that contains its own centre, and zones of a tenant do not overlap", () -> {
             var zones = new ArrayList<>(s.getStore().zones.values());
@@ -924,7 +924,7 @@ final class PlatformTests {
             s.getStore().shelters.values().forEach(sh -> equal("SEED", sh.occupancySource, "shelter " + sh.shelterId));
         });
         test("the Keycloak realm and the application seed define exactly the same users, roles and tenants", () -> {
-            Map<String, Object> realm = JsonCodec.parseObject(java.nio.file.Files.readString(new File(root, "infra/keycloak/openagrios-realm.json").toPath()));
+            Map<String, Object> realm = JsonCodec.parseObject(java.nio.file.Files.readString(new File(root, "infra/keycloak/floodos-realm.json").toPath()));
             List<Map<String, Object>> users = (List<Map<String, Object>>) realm.get("users");
             equal(s.getStore().usersByUsername.size(), users.size(), "same number of users");
             for (Map<String, Object> ru : users) {
@@ -958,7 +958,8 @@ final class PlatformTests {
             List<String> hits = new ArrayList<>();
             try (var walk = java.nio.file.Files.walk(new File(root, "core").toPath())) {
                 for (var p : (Iterable<java.nio.file.Path>) walk.filter(f -> f.toString().endsWith(".java"))::iterator) {
-                    String text = java.nio.file.Files.readString(p).toLowerCase(java.util.Locale.ROOT);
+                    // the project name (package org.floodos, FLOODOS_* settings) is not a business-domain word
+                    String text = java.nio.file.Files.readString(p).toLowerCase(java.util.Locale.ROOT).replace("floodos", "");
                     for (String word : forbidden) {
                         int at = text.indexOf(word);
                         while (at >= 0) {
@@ -985,7 +986,7 @@ final class PlatformTests {
     private static void httpLayer() throws Exception {
         suite("HTTP layer (real server on an ephemeral port)");
         KeycloakOidcEngine.setAuthModeForTesting(AuthMode.DEV_MOCK_STANDALONE);
-        FloodOpsServer server = new FloodOpsServer(FloodOpsServer.resolveProjectRoot());
+        FloodOSServer server = new FloodOSServer(FloodOSServer.resolveProjectRoot());
         int port;
         try (java.net.ServerSocket ss = new java.net.ServerSocket(0)) {
             port = ss.getLocalPort();
@@ -1019,7 +1020,7 @@ final class PlatformTests {
                 equal(404, http(base, "GET", "/api/v1/analytics/not-a-query", null, "Authorization", "Bearer " + tok).statusCode(), "unknown query name");
             });
             test("internal ingest endpoints fail closed when no ingest token is configured", () -> {
-                if (System.getenv("OPENAGRIOS_INGEST_TOKEN") != null && !System.getenv("OPENAGRIOS_INGEST_TOKEN").isBlank()) {
+                if (System.getenv("FLOODOS_INGEST_TOKEN") != null && !System.getenv("FLOODOS_INGEST_TOKEN").isBlank()) {
                     return; // environment deliberately provides a token; the guard is covered by the e2e suite
                 }
                 equal(503, http(base, "POST", "/api/v1/internal/telemetry", "{}").statusCode(), "telemetry");
@@ -1043,7 +1044,7 @@ final class PlatformTests {
             });
             test("every request of the Postman collection targets a route the server really has", () -> {
                 Map<String, Object> col = JsonCodec.parseObject(java.nio.file.Files.readString(
-                        new File(FloodOpsServer.resolveProjectRoot(), "tests/postman/OpenDXOS_FloodOps.postman_collection.json").toPath()));
+                        new File(FloodOSServer.resolveProjectRoot(), "tests/postman/FloodOS.postman_collection.json").toPath()));
                 int checked = 0;
                 for (Object folder : (List<?>) col.get("item")) {
                     for (Object item : (List<?>) ((Map<?, ?>) folder).get("item")) {

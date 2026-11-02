@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -61,15 +61,15 @@ public final class PostgreSqlDataService {
     public PostgreSqlDataService() {
         this(
                 System.getenv().getOrDefault("DATABASE_URL", ""),
-                System.getenv().getOrDefault("POSTGRES_APP_USER", System.getenv().getOrDefault("POSTGRES_USER", "openagrios_app")),
-                System.getenv().getOrDefault("POSTGRES_APP_PASSWORD", System.getenv().getOrDefault("POSTGRES_PASSWORD", "openagrios_app_dev_only"))
+                System.getenv().getOrDefault("POSTGRES_APP_USER", System.getenv().getOrDefault("POSTGRES_USER", "floodos_app")),
+                System.getenv().getOrDefault("POSTGRES_APP_PASSWORD", System.getenv().getOrDefault("POSTGRES_PASSWORD", "floodos_app_dev_only"))
         );
     }
 
     public PostgreSqlDataService(String dbUrl, String dbUser, String dbPassword) {
         this.dbUrl = dbUrl != null ? dbUrl.trim() : "";
-        this.dbUser = dbUser != null ? dbUser.trim() : "openagrios";
-        this.dbPassword = dbPassword != null ? dbPassword.trim() : "openagrios_dev_only";
+        this.dbUser = dbUser != null ? dbUser.trim() : "floodos";
+        this.dbPassword = dbPassword != null ? dbPassword.trim() : "floodos_dev_only";
 
         try {
             Class.forName("org.postgresql.Driver");

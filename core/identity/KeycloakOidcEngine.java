@@ -2,7 +2,7 @@
 
 
 
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 
 
@@ -10,7 +10,7 @@
 
 
 
-package org.openagrios.core.identity;
+package org.floodos.core.identity;
 
 
 
@@ -18,7 +18,7 @@ package org.openagrios.core.identity;
 
 
 
-import org.openagrios.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.JsonCodec;
 
 
 
@@ -109,7 +109,7 @@ import java.util.*;
 
 
 
- *    - Explicitly enabled via `OPENAGRIOS_AUTH_MODE=KEYCLOAK` or `PRODUCTION`.
+ *    - Explicitly enabled via `FLOODOS_AUTH_MODE=KEYCLOAK` or `PRODUCTION`.
 
 
 
@@ -242,22 +242,22 @@ public final class KeycloakOidcEngine {
 
 
 
-    public static final String DEFAULT_ISSUER = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/openagrios");
-    public static final String DEFAULT_PUBLIC_ISSUER = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", "http://localhost:8080/realms/openagrios");
+    public static final String DEFAULT_ISSUER = System.getenv().getOrDefault("KEYCLOAK_ISSUER", "http://localhost:8080/realms/floodos");
+    public static final String DEFAULT_PUBLIC_ISSUER = System.getenv().getOrDefault("KEYCLOAK_PUBLIC_ISSUER", "http://localhost:8080/realms/floodos");
 
 
 
-    public static final String DEFAULT_AUDIENCE = "agriops-web";
+    public static final String DEFAULT_AUDIENCE = "floodos-web";
 
     public static final String DEFAULT_INTROSPECTION_CLIENT_ID =
             System.getenv().getOrDefault("KEYCLOAK_INTROSPECTION_CLIENT_ID",
-                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_ID", "agriops-gateway"));
+                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_ID", "floodos-gateway"));
 
     public static final String DEFAULT_INTROSPECTION_CLIENT_SECRET =
             System.getenv().getOrDefault("KEYCLOAK_INTROSPECTION_CLIENT_SECRET",
-                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "agriops-gateway-secret-2026"));
+                    System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "floodos-gateway-secret-2026"));
     public static final String DEFAULT_CLIENT_SECRET =
-            System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "agriops-client-secret-2026");
+            System.getenv().getOrDefault("KEYCLOAK_CLIENT_SECRET", "floodos-client-secret-2026");
 
 
 
@@ -285,7 +285,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        String envSecret = System.getenv("OPENAGRIOS_JWT_SECRET");
+        String envSecret = System.getenv("FLOODOS_JWT_SECRET");
 
 
 
@@ -381,7 +381,7 @@ public final class KeycloakOidcEngine {
 
 
 
-     * Throws IllegalStateException if OPENAGRIOS_AUTH_MODE has an invalid/unrecognized value.
+     * Throws IllegalStateException if FLOODOS_AUTH_MODE has an invalid/unrecognized value.
 
 
 
@@ -405,7 +405,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        String raw = System.getenv("OPENAGRIOS_AUTH_MODE");
+        String raw = System.getenv("FLOODOS_AUTH_MODE");
 
 
 
@@ -441,7 +441,7 @@ public final class KeycloakOidcEngine {
 
 
 
-                    "Lỗi cấu hình OPENAGRIOS_AUTH_MODE không hợp lệ: '" + raw +
+                    "Lỗi cấu hình FLOODOS_AUTH_MODE không hợp lệ: '" + raw +
 
 
 
@@ -679,7 +679,7 @@ public final class KeycloakOidcEngine {
 
     ) {
         public AuthContext(String userId, String username, String organizationId, String role) {
-            this(userId, username, username, username + "@openagrios.vn", organizationId, role, Map.of());
+            this(userId, username, username, username + "@floodos.vn", organizationId, role, Map.of());
         }
 
 
@@ -870,7 +870,7 @@ public final class KeycloakOidcEngine {
 
 
 
-        header.put("kid", "openagrios-dev-key-01");
+        header.put("kid", "floodos-dev-key-01");
 
 
 
@@ -1162,7 +1162,7 @@ public final class KeycloakOidcEngine {
         } else if (audObj == null && azpObj != null && (String.valueOf(azpObj).equals(expectedAudience) || "account".equals(String.valueOf(azpObj)))) {
             // OpenID Connect Standard: if aud is absent in access token, match against azp (authorized party)
             audMatched = true;
-        } else if (audObj == null && "agriops-web".equals(expectedAudience)) {
+        } else if (audObj == null && "floodos-web".equals(expectedAudience)) {
             // Flexible match for Keycloak access token where audience is implicit
             audMatched = true;
         }
@@ -1390,7 +1390,7 @@ public final class KeycloakOidcEngine {
 
             Object realmAccess = payload.get("realm_access");
             List<?> realmRoles = realmAccess instanceof Map<?, ?> rm && rm.get("roles") instanceof List<?> l ? l : List.of();
-            String role = resolveOpenAgriOsRole(realmRoles);
+            String role = resolveFloodOSRole(realmRoles);
             if (role == null) {
                 return null; // no recognised business role: a role is never invented
             }
@@ -1533,8 +1533,8 @@ public final class KeycloakOidcEngine {
         try {
             String tokenEndpoint = issuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
             String targetClientId = (clientId != null && !clientId.isBlank()) ? clientId : DEFAULT_AUDIENCE;
-            // agriops-web is a public PKCE client and must never authenticate with a client secret.
-            String secret = "agriops-web".equals(targetClientId) ? null
+            // floodos-web is a public PKCE client and must never authenticate with a client secret.
+            String secret = "floodos-web".equals(targetClientId) ? null
                     : ((clientSecret != null && !clientSecret.isBlank()) ? clientSecret : DEFAULT_CLIENT_SECRET);
 
             String formBody = "grant_type=authorization_code"
@@ -1600,7 +1600,7 @@ public final class KeycloakOidcEngine {
     ) {
         try {
             String tokenEndpoint = keycloakIssuerUrl.replaceAll("/+$", "") + "/protocol/openid-connect/token";
-            String targetClientId = clientId != null && !clientId.isBlank() ? clientId : "agriops-web";
+            String targetClientId = clientId != null && !clientId.isBlank() ? clientId : "floodos-web";
 
             String formBody = "grant_type=password"
                     + "&username=" + URLEncoder.encode(username, StandardCharsets.UTF_8)
@@ -2177,10 +2177,10 @@ public final class KeycloakOidcEngine {
 
     /**
      * Resolves the dominant registered role from Keycloak realm roles. System roles such as
-     * 'default-roles-openagrios' or 'offline_access' never match. Returns null when no registered role is present:
+     * 'default-roles-floodos' or 'offline_access' never match. Returns null when no registered role is present:
      * the caller must deny the request.
      */
-    public static String resolveOpenAgriOsRole(List<?> rawRoles) {
+    public static String resolveFloodOSRole(List<?> rawRoles) {
         if (rawRoles == null || rawRoles.isEmpty()) {
             return null;
         }

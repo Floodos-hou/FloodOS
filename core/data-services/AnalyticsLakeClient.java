@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -19,7 +19,7 @@ import java.util.Set;
  * object storage and answers analytical queries with DuckDB; this core service is the only caller and
  * injects the tenant ({@code org}) from the verified token, so tenants never choose their own scope.
  *
- * <p>Configuration: {@code OPENAGRIOS_ANALYTICS_URL} (e.g. {@code http://lake-archiver:8090}).
+ * <p>Configuration: {@code FLOODOS_ANALYTICS_URL} (e.g. {@code http://lake-archiver:8090}).
  */
 public final class AnalyticsLakeClient {
 
@@ -32,7 +32,7 @@ public final class AnalyticsLakeClient {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 
     public AnalyticsLakeClient() {
-        this(System.getenv("OPENAGRIOS_ANALYTICS_URL"));
+        this(System.getenv("FLOODOS_ANALYTICS_URL"));
     }
 
     /** Client bound to an explicit endpoint ({@code null}/blank = disabled). */
@@ -68,7 +68,7 @@ public final class AnalyticsLakeClient {
         }
         if (baseUrl == null) {
             return new Result(503, error("analytics_disabled",
-                    "Cold analytics tier is not configured (OPENAGRIOS_ANALYTICS_URL is unset)."));
+                    "Cold analytics tier is not configured (FLOODOS_ANALYTICS_URL is unset)."));
         }
         try {
             URI uri = URI.create(baseUrl + "/analytics/" + name + "?org="

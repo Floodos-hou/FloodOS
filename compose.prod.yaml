@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 
 # ============================================================================
-# OPENAGRIOS — PRODUCTION COMPOSE OVERRIDE (compose.prod.yaml)
-# Production Hardening Profile for OpenAgriOS Headless Core PaaS Stack
+# FLOODOS — PRODUCTION COMPOSE OVERRIDE (compose.prod.yaml)
+# Production Hardening Profile for FloodOS Headless Core PaaS Stack
 #
 # Key Features:
 #   1. Mandatory Non-Default Secrets: Enforces ${VAR:?error} syntax — container
@@ -14,8 +14,8 @@
 #      the APISIX Zero-Trust Gateway (plus Keycloak SSO for browser login).
 #   3. Introspection Secret Synchronization: APISIX, Keycloak, and Core API
 #      all receive KEYCLOAK_INTROSPECTION_CLIENT_SECRET dynamically.
-#   4. Strict Production Mode: OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION and
-#      OPENAGRIOS_STORAGE_MODE=POSTGRESQL_PRODUCTION (no dev mock fallbacks).
+#   4. Strict Production Mode: FLOODOS_AUTH_MODE=KEYCLOAK_PRODUCTION and
+#      FLOODOS_STORAGE_MODE=POSTGRESQL_PRODUCTION (no dev mock fallbacks).
 #   5. High Availability: restart: always policy configured across all services.
 #
 # Usage:
@@ -29,10 +29,10 @@ services:
   postgres:
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-openagrios}
+      POSTGRES_USER: ${POSTGRES_USER:-floodos}
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?CRITICAL POSTGRES_PASSWORD must be explicitly provided in production}"
-      POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
-      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
+      POSTGRES_DB: ${POSTGRES_DB:-floodos_db}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-floodos_app}
       POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
     entrypoint: ["/bin/sh", "/entrypoint-sync.sh", "postgres"]
     ports: !reset []
@@ -103,23 +103,23 @@ services:
     environment:
       MQTT_USER: ${MQTT_INGESTOR_USER:-ingestor}
       MQTT_PASSWORD: "${MQTT_INGESTOR_PASSWORD:?CRITICAL MQTT_INGESTOR_PASSWORD must be explicitly provided in production}"
-      INGEST_TOKEN: "${OPENAGRIOS_INGEST_TOKEN:?CRITICAL OPENAGRIOS_INGEST_TOKEN must be explicitly provided in production}"
+      INGEST_TOKEN: "${FLOODOS_INGEST_TOKEN:?CRITICAL FLOODOS_INGEST_TOKEN must be explicitly provided in production}"
 
   core-api:
     restart: always
     environment:
-      OPENAGRIOS_INGEST_TOKEN: "${OPENAGRIOS_INGEST_TOKEN:?CRITICAL OPENAGRIOS_INGEST_TOKEN must be explicitly provided in production}"
-      OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
+      FLOODOS_INGEST_TOKEN: "${FLOODOS_INGEST_TOKEN:?CRITICAL FLOODOS_INGEST_TOKEN must be explicitly provided in production}"
+      FLOODOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       KEYCLOAK_PUBLIC_ISSUER: "${KEYCLOAK_PUBLIC_ISSUER:?CRITICAL KEYCLOAK_PUBLIC_ISSUER must match the Keycloak realm issuer}"
-      OPENAGRIOS_STORAGE_MODE: POSTGRESQL_PRODUCTION
+      FLOODOS_STORAGE_MODE: POSTGRESQL_PRODUCTION
       # The demo-data reset endpoint stays closed on a public deployment.
-      OPENDXOS_ALLOW_DEMO_RESET: "false"
+      FLOODOS_ALLOW_DEMO_RESET: "false"
       # fail-fast: the core refuses to start without a malware scanner in production
-      OPENAGRIOS_MALWARE_SCAN: REQUIRED
-      OPENAGRIOS_STRICT_RFC9700: "${OPENAGRIOS_STRICT_RFC9700:-true}"
-      POSTGRES_USER: ${POSTGRES_APP_USER:-openagrios_app}
+      FLOODOS_MALWARE_SCAN: REQUIRED
+      FLOODOS_STRICT_RFC9700: "${FLOODOS_STRICT_RFC9700:-true}"
+      POSTGRES_USER: ${POSTGRES_APP_USER:-floodos_app}
       POSTGRES_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"
-      KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
+      KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-floodos-gateway}
       KEYCLOAK_INTROSPECTION_CLIENT_SECRET: "${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:?CRITICAL KEYCLOAK_INTROSPECTION_CLIENT_SECRET must be explicitly provided in production}"
     ports: !reset []
 

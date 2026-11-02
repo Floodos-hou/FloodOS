@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 
 
-package org.openagrios.core.workflow;
+package org.floodos.core.workflow;
 
 
 
-import org.openagrios.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.JsonCodec;
 
 import org.w3c.dom.Document;
 
@@ -406,7 +406,7 @@ public final class BpmnWorkflowEngine {
             String deployUrl = flowableRestUrl + "/service/repository/deployments";
             String creds = flowableUser + ":" + flowablePassword;
             String basicAuth = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
-            String boundary = "----OpenAgriOsBpmnBoundary" + System.currentTimeMillis();
+            String boundary = "----FloodOSBpmnBoundary" + System.currentTimeMillis();
             byte[] fileBytes = Files.readAllBytes(f.toPath());
             // The deployment is named after the file CONTENT (SHA-256 prefix): an unchanged file is deployed once, ever,
             // however many times the platform restarts; a changed file becomes a new Flowable deployment (new version).
@@ -467,8 +467,8 @@ public final class BpmnWorkflowEngine {
 
     /** True when Flowable is mandatory (no silent fallback to the embedded mirror). */
     public static boolean isFlowableProduction() {
-        String mode = System.getenv().getOrDefault("OPENAGRIOS_WORKFLOW_MODE",
-                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_AUTH_MODE")) ? "FLOWABLE_PRODUCTION" : "EMBEDDED_DEV_MOCK");
+        String mode = System.getenv().getOrDefault("FLOODOS_WORKFLOW_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("FLOODOS_AUTH_MODE")) ? "FLOWABLE_PRODUCTION" : "EMBEDDED_DEV_MOCK");
         return "FLOWABLE_PRODUCTION".equalsIgnoreCase(mode);
     }
 
@@ -574,8 +574,8 @@ public final class BpmnWorkflowEngine {
 
 
 
-                String workflowMode = System.getenv().getOrDefault("OPENAGRIOS_WORKFLOW_MODE",
-                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_AUTH_MODE"))
+                String workflowMode = System.getenv().getOrDefault("FLOODOS_WORKFLOW_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("FLOODOS_AUTH_MODE"))
                         ? "FLOWABLE_PRODUCTION"
                         : "EMBEDDED_DEV_MOCK");
 

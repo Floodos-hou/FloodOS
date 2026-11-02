@@ -29,8 +29,8 @@ tmp/
 # Competition proposals & internal design documents (prevent leak)
 *.docx
 *.pptx
-OpenAgriOS_De_xuat*
-OpenAgriOS_Ke_hoach*
+FloodOS_De_xuat*
+FloodOS_Ke_hoach*
 
 # Postman local app workspace caches
 .postman/

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """Unit tests for the MQTT ingestor (validation, forwarding, metrics) and the device simulator helpers."""
 import json
 import os
@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import ingestor  # noqa: E402
 import simulator  # noqa: E402
 
-TOPIC = "openagrios/ORG_HN_PILOT_01/vehicles/V01/telemetry"
-GAUGE_TOPIC = "openagrios/ORG_HN_PILOT_01/gauges/G01/telemetry"
+TOPIC = "floodos/ORG_HN_PILOT_01/vehicles/V01/telemetry"
+GAUGE_TOPIC = "floodos/ORG_HN_PILOT_01/gauges/G01/telemetry"
 
 
 def good(**over):
@@ -120,17 +120,17 @@ class ValidationTests(unittest.TestCase):
     def test_topics_that_do_not_match_the_scheme_are_rejected(self):
         bad_topics = [
             "other/HTX/vehicles/V01/telemetry",
-            "openagrios/HTX/vehicles/V01/telemetry/extra",
-            "openagrios/HTX/vehicles/V01/status",
-            "openagrios//vehicles/V01/telemetry",
-            "openagrios/HTX/vehicles//telemetry",
-            "openagrios/../vehicles/V01/telemetry",
-            "openagrios/HTX ORG/vehicles/V01/telemetry",
-            "openagrios/HTX/vehicles/V01;DROP/telemetry",
-            "openagrios/#/vehicles/V01/telemetry",
-            "openagrios/+/vehicles/V01/telemetry",
-            "openagrios/HTX/machines/M01/telemetry",   # the former per-machine topic family no longer exists
-            "openagrios/HTX/sensors/S01/telemetry",
+            "floodos/HTX/vehicles/V01/telemetry/extra",
+            "floodos/HTX/vehicles/V01/status",
+            "floodos//vehicles/V01/telemetry",
+            "floodos/HTX/vehicles//telemetry",
+            "floodos/../vehicles/V01/telemetry",
+            "floodos/HTX ORG/vehicles/V01/telemetry",
+            "floodos/HTX/vehicles/V01;DROP/telemetry",
+            "floodos/#/vehicles/V01/telemetry",
+            "floodos/+/vehicles/V01/telemetry",
+            "floodos/HTX/machines/M01/telemetry",   # the former per-machine topic family no longer exists
+            "floodos/HTX/sensors/S01/telemetry",
         ]
         for t in bad_topics:
             payload, reason = ingestor.validate(t, good())
@@ -277,9 +277,9 @@ class OperationalTests(unittest.TestCase):
         ingestor.stats["forwarded"] = 5
         _, text = self.get("/metrics")
         for name in ("received", "forwarded", "rejected_invalid", "rejected_by_core", "forward_failed"):
-            self.assertIn(f"# TYPE openagrios_telemetry_{name}_total counter", text)
-        self.assertIn("openagrios_telemetry_forwarded_total 5", text)
-        self.assertIn("openagrios_telemetry_mqtt_connected 0", text)
+            self.assertIn(f"# TYPE floodos_telemetry_{name}_total counter", text)
+        self.assertIn("floodos_telemetry_forwarded_total 5", text)
+        self.assertIn("floodos_telemetry_mqtt_connected 0", text)
 
     def test_unknown_path_is_404(self):
         self.assertEqual(404, self.get("/secrets")[0])

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
@@ -12,7 +12,7 @@ import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 setWorkerUrl(maplibreWorkerUrl);
 import type { FieldPlot, HarvesterMachine, DispatchAssignment, CandidateRescueOption } from '../../types';
 import { EyeOff, Video, Compass, MapPin } from 'lucide-react';
-import { OpenAgriLogo } from '../common/OpenAgriLogo';
+import { FloodOsLogo } from '../common/FloodOsLogo';
 import { fieldStatus, machineStatus } from '../../utils/labels';
 
 interface TacticalMapProps {
@@ -1007,7 +1007,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       {/* Tactical Map Header Control Bar */}
       <div className="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <OpenAgriLogo size={24} />
+          <FloodOsLogo size={24} />
           <div>
             <h3 className="font-extrabold text-white text-sm sm:text-base tracking-tight flex items-center gap-2">
               <span>Bản đồ Tác chiến Nông nghiệp 3D</span>

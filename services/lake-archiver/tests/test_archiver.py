@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """Unit tests for the cold-tier archiver, run against real DuckDB + real Parquet files in a temp directory."""
 import json
 import os
@@ -224,8 +224,8 @@ class FlushTests(LakeTestCase):
 
     def test_offsets_are_committed_only_after_the_files_are_written(self):
         consumer = self.FakeConsumer()
-        archiver.flush(self.con, consumer, {"audit": [audit_event()], "asset_telemetry": []}, {("openagrios.audit.v1", 0): 41})
-        self.assertEqual([{("openagrios.audit.v1", 0): 41}], consumer.commits)
+        archiver.flush(self.con, consumer, {"audit": [audit_event()], "asset_telemetry": []}, {("floodos.audit.v1", 0): 41})
+        self.assertEqual([{("floodos.audit.v1", 0): 41}], consumer.commits)
         self.assertEqual(1, self.query("summary")[1]["audit"]["events"])
         self.assertEqual(1, archiver.state["rows_archived"]["audit"])
 
@@ -286,8 +286,8 @@ class HttpApiTests(LakeTestCase):
         status, body, ctype = self.get("/metrics")
         self.assertEqual(200, status)
         self.assertIn("text/plain", ctype)
-        self.assertIn('openagrios_lake_rows_archived_total{table="audit"}', body)
-        self.assertIn("# TYPE openagrios_lake_consumer_connected gauge", body)
+        self.assertIn('floodos_lake_rows_archived_total{table="audit"}', body)
+        self.assertIn("# TYPE floodos_lake_consumer_connected gauge", body)
 
     def test_analytics_requires_an_org(self):
         status, body, _ = self.get("/analytics/summary")

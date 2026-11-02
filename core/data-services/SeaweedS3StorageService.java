@@ -2,7 +2,7 @@
 
 
 
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 
 
@@ -10,7 +10,7 @@
 
 
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 
 
@@ -287,15 +287,15 @@ public final class SeaweedS3StorageService {
         public SeaweedS3StorageService(String s3Endpoint) {
         this(
                 s3Endpoint,
-                System.getenv().getOrDefault("S3_ACCESS_KEY", "openagrios-s3-access"),
-                System.getenv().getOrDefault("S3_SECRET_KEY", "openagrios-s3-secret")
+                System.getenv().getOrDefault("S3_ACCESS_KEY", "floodos-s3-access"),
+                System.getenv().getOrDefault("S3_SECRET_KEY", "floodos-s3-secret")
         );
     }
 
     public SeaweedS3StorageService(String s3Endpoint, String s3AccessKey, String s3SecretKey) {
         this.s3Endpoint = s3Endpoint != null ? s3Endpoint.replaceAll("/+$", "") : "http://localhost:9000";
-        this.s3AccessKey = (s3AccessKey != null && !s3AccessKey.isBlank()) ? s3AccessKey : "openagrios-s3-access";
-        this.s3SecretKey = (s3SecretKey != null && !s3SecretKey.isBlank()) ? s3SecretKey : "openagrios-s3-secret";
+        this.s3AccessKey = (s3AccessKey != null && !s3AccessKey.isBlank()) ? s3AccessKey : "floodos-s3-access";
+        this.s3SecretKey = (s3SecretKey != null && !s3SecretKey.isBlank()) ? s3SecretKey : "floodos-s3-secret";
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(1200))
                 .build();
@@ -467,8 +467,8 @@ public final class SeaweedS3StorageService {
 
 
 
-        String storageMode = System.getenv().getOrDefault("OPENAGRIOS_STORAGE_MODE",
-                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("OPENAGRIOS_AUTH_MODE"))
+        String storageMode = System.getenv().getOrDefault("FLOODOS_STORAGE_MODE",
+                "KEYCLOAK_PRODUCTION".equalsIgnoreCase(System.getenv("FLOODOS_AUTH_MODE"))
                         ? "S3_PRODUCTION"
                         : "EMBEDDED_DEV_MOCK");
 
@@ -477,7 +477,7 @@ public final class SeaweedS3StorageService {
             String pathUrl = s3Endpoint + "/" + bucket + "/" + orgId.toLowerCase(Locale.ROOT) + "/" + folder + "/" + recordId + "/" + filename;
             byte[] bodyBytes = (dataUrl != null && !dataUrl.isBlank())
                     ? dataUrl.getBytes(StandardCharsets.UTF_8)
-                    : ("OpenAgriOS S3 Evidence Record: " + filename + " | Org: " + orgId + " | TS: " + timestamp).getBytes(StandardCharsets.UTF_8);
+                    : ("FloodOS S3 Evidence Record: " + filename + " | Org: " + orgId + " | TS: " + timestamp).getBytes(StandardCharsets.UTF_8);
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(pathUrl))

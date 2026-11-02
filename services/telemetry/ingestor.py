@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """
-OpenDXOS OT telemetry ingestor.
+FloodOS OT telemetry ingestor.
 
 MQTT (Mosquitto) -> validate -> Core API internal endpoint -> digital twin + Kafka telemetry topic.
 
 Devices publish to
-    openagrios/<organization_id>/vehicles/<vehicle_id>/telemetry   {lat, lon, fuel_pct, [speed_kmh], source, [ts]}
-    openagrios/<organization_id>/gauges/<station_id>/telemetry     {level_cm, source, [ts]}
+    floodos/<organization_id>/vehicles/<vehicle_id>/telemetry   {lat, lon, fuel_pct, [speed_kmh], source, [ts]}
+    floodos/<organization_id>/gauges/<station_id>/telemetry     {level_cm, source, [ts]}
 Every message must say where it comes from ("source": SIMULATOR or DEVICE); a message without a known source is
 rejected, so a simulated value can never be stored as an observation.
 This service is the only MQTT subscriber (least-privilege ACL) and the only caller of the core's
@@ -36,8 +36,8 @@ CORE_URL = os.environ.get("CORE_URL", "http://core-api:8000").rstrip("/")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8091"))
 
-SUBSCRIPTIONS = ("openagrios/+/vehicles/+/telemetry", "openagrios/+/gauges/+/telemetry")
-TOPIC_RE = re.compile(r"^openagrios/([A-Za-z0-9_-]+)/(vehicles|gauges)/([A-Za-z0-9_-]+)/telemetry$")
+SUBSCRIPTIONS = ("floodos/+/vehicles/+/telemetry", "floodos/+/gauges/+/telemetry")
+TOPIC_RE = re.compile(r"^floodos/([A-Za-z0-9_-]+)/(vehicles|gauges)/([A-Za-z0-9_-]+)/telemetry$")
 KIND_BY_SEGMENT = {"vehicles": "vehicle", "gauges": "gauge"}
 ALLOWED_SOURCES = ("SIMULATOR", "DEVICE")
 MAX_PAYLOAD_BYTES = 2048
@@ -76,7 +76,7 @@ def validate(topic, raw):
     """Return (payload, None) or (None, reason)."""
     m = TOPIC_RE.match(topic)
     if not m:
-        return None, f"topic '{topic}' does not match openagrios/<org>/<vehicles|gauges>/<id>/telemetry"
+        return None, f"topic '{topic}' does not match floodos/<org>/<vehicles|gauges>/<id>/telemetry"
     org, segment, asset_id = m.groups()
     kind = KIND_BY_SEGMENT[segment]
     if len(raw) > MAX_PAYLOAD_BYTES:
@@ -179,10 +179,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/metrics":
             lines = []
             for name in ("received", "forwarded", "rejected_invalid", "rejected_by_core", "forward_failed"):
-                lines += [f"# TYPE openagrios_telemetry_{name}_total counter",
-                          f"openagrios_telemetry_{name}_total {snap[name]}"]
-            lines += ["# TYPE openagrios_telemetry_mqtt_connected gauge",
-                      f"openagrios_telemetry_mqtt_connected {snap['mqtt_connected']}"]
+                lines += [f"# TYPE floodos_telemetry_{name}_total counter",
+                          f"floodos_telemetry_{name}_total {snap[name]}"]
+            lines += ["# TYPE floodos_telemetry_mqtt_connected gauge",
+                      f"floodos_telemetry_mqtt_connected {snap['mqtt_connected']}"]
             self._send(200, "\n".join(lines) + "\n", "text/plain; version=0.0.4")
         else:
             self._send(404, {"error": "not_found"})
@@ -193,12 +193,12 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     if not INGEST_TOKEN:
-        sys.exit("INGEST_TOKEN is required (must equal the core's OPENAGRIOS_INGEST_TOKEN); failing fast")
+        sys.exit("INGEST_TOKEN is required (must equal the core's FLOODOS_INGEST_TOKEN); failing fast")
     if not MQTT_USER or not MQTT_PASSWORD:
         sys.exit("MQTT_USER and MQTT_PASSWORD are required; failing fast")
     threading.Thread(target=lambda: ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever(),
                      daemon=True).start()
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="openagrios-telemetry-ingestor")
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="floodos-telemetry-ingestor")
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     client.on_connect, client.on_disconnect, client.on_message = on_connect, on_disconnect, on_message
     client.reconnect_delay_set(min_delay=1, max_delay=30)

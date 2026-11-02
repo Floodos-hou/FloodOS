@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,13 +25,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * backoff; events that cannot be delivered are counted and logged (never silently dropped) and are
  * surfaced through {@link #status()} on {@code /api/v1/health}.
  *
- * <p>Configuration: {@code OPENAGRIOS_EVENT_BUS_URL} (e.g. {@code http://kafka-rest:8082}).
+ * <p>Configuration: {@code FLOODOS_EVENT_BUS_URL} (e.g. {@code http://kafka-rest:8082}).
  * When unset the publisher is explicitly {@code DISABLED} (standalone/dev without the stack).
  */
 public final class EventBusPublisher {
 
-    public static final String TOPIC_AUDIT = "openagrios.audit.v1";
-    public static final String TOPIC_TELEMETRY = "openagrios.telemetry.v1";
+    public static final String TOPIC_AUDIT = "floodos.audit.v1";
+    public static final String TOPIC_TELEMETRY = "floodos.telemetry.v1";
 
     private static final String CONTENT_TYPE = "application/vnd.kafka.json.v2+json";
     private static final int QUEUE_CAPACITY = 10_000;
@@ -67,7 +67,7 @@ public final class EventBusPublisher {
     }
 
     public static EventBusPublisher fromEnvironment() {
-        String url = System.getenv("OPENAGRIOS_EVENT_BUS_URL");
+        String url = System.getenv("FLOODOS_EVENT_BUS_URL");
         if (url == null || url.isBlank()) {
             return disabled();
         }

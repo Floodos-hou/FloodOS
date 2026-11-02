@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 #
 # Runs every fast, dependency-free unit suite (no running stack required):
 #   1. Java  : tests/unit/*  (JSON, scheduling, geodesy, tenancy, audit chain, JWT/PKCE, adapters, HTTP layer)
@@ -17,7 +17,7 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 find core apps tests -name '*.java' > "$OUT/sources.txt"
 javac -encoding UTF-8 -d "$OUT/classes" @"$OUT/sources.txt"
-java -Dfile.encoding=UTF-8 -cp "$OUT/classes" org.openagrios.tests.unit.UnitTestRunner || status=1
+java -Dfile.encoding=UTF-8 -cp "$OUT/classes" org.floodos.tests.unit.UnitTestRunner || status=1
 
 echo "=== [1b/2] Web logic tests (node --test) ==="
 if command -v node >/dev/null 2>&1; then

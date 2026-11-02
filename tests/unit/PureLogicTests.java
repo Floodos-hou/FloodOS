@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
-import static org.openagrios.tests.unit.TestKit.*;
+import static org.floodos.tests.unit.TestKit.*;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.openagrios.apps.floodops.RescueScoring;
-import org.openagrios.core.dataservices.JsonCodec;
-import org.openagrios.core.dataservices.NgsiLdTwinMapper;
-import org.openagrios.core.dataservices.ScheduleConflictEngine;
-import org.openagrios.core.dataservices.ScheduleConflictEngine.Booking;
-import org.openagrios.core.dataservices.SpatialMatchingEngine;
-import org.openagrios.core.dataservices.TenantRlsContext;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.apps.floodos.RescueScoring;
+import org.floodos.core.dataservices.JsonCodec;
+import org.floodos.core.dataservices.NgsiLdTwinMapper;
+import org.floodos.core.dataservices.ScheduleConflictEngine;
+import org.floodos.core.dataservices.ScheduleConflictEngine.Booking;
+import org.floodos.core.dataservices.SpatialMatchingEngine;
+import org.floodos.core.dataservices.TenantRlsContext;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
 
 /** Deterministic, side-effect-free logic: JSON, scheduling, geodesy/scoring, NGSI-LD, tenant helpers. */
 final class PureLogicTests {
@@ -271,7 +271,7 @@ final class PureLogicTests {
 
     // ------------------------------------------------------------------ RescueScoring (application level)
     private static void rescueScoring() {
-        suite("RescueScoring (Hanoi FloodOps ranking)");
+        suite("RescueScoring (FloodOS ranking)");
         test("a perfect candidate reaches 100 points", () ->
                 equal(100.0, RescueScoring.score(0, 1.0, 1.0, 5.0), "ceiling"));
         test("distance is straight-line, decreases the score and reaches zero at the ranked limit", () -> {

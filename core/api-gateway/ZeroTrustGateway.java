@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.gateway;
+package org.floodos.core.gateway;
 
-import org.openagrios.core.dataservices.ImmutableAuditLedger;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.dataservices.ImmutableAuditLedger;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
 
 import java.util.*;
 
@@ -22,7 +22,7 @@ public final class ZeroTrustGateway {
         headers.put("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
         headers.put("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Correlation-Id");
         headers.put("X-Gateway", "Apache-APISIX-ZeroTrust-v3.9");
-        headers.put("X-DXOS-Core", "OpenAgriOS-Java21-Headless-PaaS-v2.0");
+        headers.put("X-DXOS-Core", "FloodOS-Java21-Headless-PaaS-v2.0");
         if (auth != null) {
             headers.put("X-User-Id", auth.username());
             headers.put("X-Org-Id", auth.organizationId());

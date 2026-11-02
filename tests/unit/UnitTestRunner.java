@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
 /**
  * Entry point of the dependency-free unit suite:
- * {@code java -cp target/classes org.openagrios.tests.unit.UnitTestRunner}. Exit code 0 = all green.
+ * {@code java -cp target/classes org.floodos.tests.unit.UnitTestRunner}. Exit code 0 = all green.
  */
 public final class UnitTestRunner {
 

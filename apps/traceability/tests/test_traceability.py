@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """Unit tests for the Tier-3 traceability module, against real DuckDB + Parquet files in a temp directory."""
 import copy
 import json
@@ -326,7 +326,7 @@ class HttpTests(LakeCase):
         self.assertEqual("UP", json.loads(self.get("/health")[1])["status"])
         self.get("/trace/CORR-1.json")
         _, text, _ = self.get("/metrics")
-        self.assertIn("openagrios_trace_verified_total", text)
+        self.assertIn("floodos_trace_verified_total", text)
 
     def test_unknown_paths(self):
         self.assertEqual(404, self.get("/admin")[0])

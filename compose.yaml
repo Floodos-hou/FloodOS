@@ -1,24 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 
 # ============================================================================
-# OPENDXOS - HEADLESS CORE PaaS + Hanoi FloodOps (100% PERMISSIVE OPEN SOURCE)
+# FLOODOS - HEADLESS CORE PaaS + FLOOD-RESPONSE APPLICATION (100% PERMISSIVE OPEN SOURCE)
 # Toàn bộ các thành phần hạ tầng sử dụng giấy phép Apache-2.0 / BSD-style (PostgreSQL)
 # Tất cả phiên bản image đều được pin cố định (không dùng :latest)
 # ============================================================================
+
+name: floodos
 
 services:
 
   # 1. STRUCTURED DATA & RLS ENGINE (PostgreSQL 16 - Permissive BSD/MIT-style License)
   postgres:
     image: postgres:16.2-alpine
-    container_name: openagrios-postgres
+    container_name: floodos-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-openagrios}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
-      POSTGRES_DB: ${POSTGRES_DB:-openagrios_db}
-      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-openagrios_app}
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-openagrios_app_dev_only}
+      POSTGRES_USER: ${POSTGRES_USER:-floodos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-floodos_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-floodos_db}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-floodos_app}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-floodos_app_dev_only}
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
@@ -28,7 +30,7 @@ services:
       - pgdata:/var/lib/postgresql/data
     entrypoint: ["/bin/sh", "/entrypoint-sync.sh", "postgres"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openagrios} -d ${POSTGRES_DB:-openagrios_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-floodos} -d ${POSTGRES_DB:-floodos_db}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -36,7 +38,7 @@ services:
   # 2. IDENTITY / SSO / RBAC / MULTI-TENANCY (Keycloak 24 - Apache-2.0 License)
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.5
-    container_name: openagrios-keycloak
+    container_name: floodos-keycloak
     command: ["start-dev", "--import-realm"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
@@ -45,12 +47,12 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
       KC_HOSTNAME_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
-      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-floodos-gateway-secret-2026}
     ports:
       - "8080:8080"
     volumes:
-      - ./infra/keycloak/openagrios-realm.json:/opt/keycloak/data/import/openagrios-realm.json:ro
-      - ./infra/keycloak/themes/openagrios:/opt/keycloak/themes/openagrios:ro
+      - ./infra/keycloak/floodos-realm.json:/opt/keycloak/data/import/floodos-realm.json:ro
+      - ./infra/keycloak/themes/floodos:/opt/keycloak/themes/floodos:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
       interval: 10s
@@ -60,7 +62,7 @@ services:
   # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License, Pinned v3.64)
   object-storage:
     image: chrislusf/seaweedfs:3.64
-    container_name: openagrios-s3-storage
+    container_name: floodos-s3-storage
     command: "server -s3 -s3.port=9000 -dir=/data"
     ports:
       - "127.0.0.1:9000:9000"
@@ -76,13 +78,13 @@ services:
   # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License, Pinned v7.0.0)
   flowable:
     image: flowable/flowable-rest:7.0.0
-    container_name: openagrios-flowable
+    container_name: floodos-flowable
     environment:
       SERVER_PORT: 8081
       SPRING_DATASOURCE_DRIVER-CLASS-NAME: org.postgresql.Driver
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-openagrios_db}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-openagrios}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-openagrios_dev_only}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-floodos_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-floodos}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-floodos_dev_only}
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
@@ -92,10 +94,10 @@ services:
   # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License, Pinned v3.9.0)
   apisix:
     image: apache/apisix:3.9.0-debian
-    container_name: openagrios-apisix
+    container_name: floodos-apisix
     environment:
       APISIX_STAND_ALONE: "true"
-      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-floodos-gateway-secret-2026}
     ports:
       - "9080:9080"
     volumes:
@@ -105,36 +107,36 @@ services:
       - web-app
       - twin-app
 
-  # 6. OPENAGRIOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
+  # 6. FLOODOS HEADLESS CORE API (Java 21 LTS - Apache-2.0 License)
   core-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: openagrios-core-api
+    container_name: floodos-core-api
     environment:
       PORT: 8000
-      OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/openagrios
-      KEYCLOAK_PUBLIC_ISSUER: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/openagrios}
+      FLOODOS_AUTH_MODE: KEYCLOAK_PRODUCTION
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/floodos
+      KEYCLOAK_PUBLIC_ISSUER: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/floodos}
       S3_ENDPOINT: http://object-storage:9000
       FLOWABLE_REST_URL: http://flowable:8081/flowable-rest
       FLOWABLE_ENDPOINT: http://flowable:8081/flowable-rest
       FLOWABLE_REST_USER: ${FLOWABLE_REST_USER:-rest-admin}
       FLOWABLE_REST_PASSWORD: ${FLOWABLE_REST_PASSWORD:-test}
-      OPENAGRIOS_WORKFLOW_MODE: ${OPENAGRIOS_WORKFLOW_MODE:-FLOWABLE_PRODUCTION}
-      OPENAGRIOS_STORAGE_MODE: ${OPENAGRIOS_STORAGE_MODE:-POSTGRESQL_PRODUCTION}
-      DATABASE_URL: jdbc:postgresql://postgres:5432/openagrios_db
-      POSTGRES_USER: ${POSTGRES_APP_USER:-openagrios_app}
-      POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD:-openagrios_app_dev_only}
-      KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-agriops-gateway}
-      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-agriops-gateway-secret-2026}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
-      OPENAGRIOS_EVENT_BUS_URL: http://kafka-rest:8082
-      OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
+      FLOODOS_WORKFLOW_MODE: ${FLOODOS_WORKFLOW_MODE:-FLOWABLE_PRODUCTION}
+      FLOODOS_STORAGE_MODE: ${FLOODOS_STORAGE_MODE:-POSTGRESQL_PRODUCTION}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/floodos_db
+      POSTGRES_USER: ${POSTGRES_APP_USER:-floodos_app}
+      POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD:-floodos_app_dev_only}
+      KEYCLOAK_INTROSPECTION_CLIENT_ID: ${KEYCLOAK_INTROSPECTION_CLIENT_ID:-floodos-gateway}
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_INTROSPECTION_CLIENT_SECRET:-floodos-gateway-secret-2026}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-floodos-client-secret-2026}
+      FLOODOS_EVENT_BUS_URL: http://kafka-rest:8082
+      FLOODOS_ANALYTICS_URL: http://lake-archiver:8090
       CLAMAV_HOST: clamav
-      OPENAGRIOS_INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+      FLOODOS_INGEST_TOKEN: ${FLOODOS_INGEST_TOKEN:-ingest_dev_only_token}
       # POST /api/v1/sim/reset (PLATFORM_ADMIN only) wipes the demo data: allowed in development, closed in production.
-      OPENDXOS_ALLOW_DEMO_RESET: ${OPENDXOS_ALLOW_DEMO_RESET:-true}
+      FLOODOS_ALLOW_DEMO_RESET: ${FLOODOS_ALLOW_DEMO_RESET:-true}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -151,7 +153,7 @@ services:
       clamav:
         condition: service_started
 
-  # 7. OPENAGRIOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
+  # 7. FLOODOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
   web-app:
     build:
       context: ./apps/web
@@ -159,7 +161,7 @@ services:
       args:
         # Demo character picker + storyline panel; compose.prod.yaml turns it off
         VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
-    container_name: openagrios-web-app
+    container_name: floodos-web-app
     environment:
       VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:9080}
     ports:
@@ -173,7 +175,7 @@ services:
   # 8. EVENT BUS — HOT PATH (Apache Kafka 3.7, KRaft single node, no ZooKeeper - Apache-2.0 License)
   kafka:
     image: apache/kafka:3.7.1
-    container_name: openagrios-kafka
+    container_name: floodos-kafka
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -199,7 +201,7 @@ services:
   # 8b. Idempotent topic bootstrap (re-runs on every `up`; --if-not-exists makes it safe)
   kafka-init:
     image: apache/kafka:3.7.1
-    container_name: openagrios-kafka-init
+    container_name: floodos-kafka-init
     restart: "no"
     depends_on:
       kafka:
@@ -207,14 +209,14 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        for t in openagrios.audit.v1 openagrios.telemetry.v1; do
+        for t in floodos.audit.v1 floodos.telemetry.v1; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists             --topic $$t --partitions 1 --replication-factor 1 || exit 1
         done
 
   # 8c. Kafka REST Proxy (Karapace - Apache-2.0 License): HTTP produce/consume so the Java core needs no Kafka client
   kafka-rest:
     image: ghcr.io/aiven-open/karapace:4.1.0
-    container_name: openagrios-kafka-rest
+    container_name: floodos-kafka-rest
     entrypoint: ["/bin/sh", "-c", "/opt/karapace/start.sh rest"]
     environment:
       KARAPACE_BOOTSTRAP_URI: kafka:9092
@@ -235,12 +237,12 @@ services:
   lake-archiver:
     build:
       context: ./services/lake-archiver
-    container_name: openagrios-lake-archiver
+    container_name: floodos-lake-archiver
     restart: unless-stopped
     environment:
       EVENT_BUS_URL: http://kafka-rest:8082
       LAKE_S3_ENDPOINT: object-storage:9000
-      LAKE_BUCKET: ${LAKE_BUCKET:-openagrios-lake}
+      LAKE_BUCKET: ${LAKE_BUCKET:-floodos-lake}
       PORT: 8090
     depends_on:
       kafka-rest:
@@ -251,7 +253,7 @@ services:
   # 10. OT TELEMETRY BROKER (Eclipse Mosquitto 2 - EPL-2.0 / EDL-1.0). Users + ACL are regenerated on every start.
   mosquitto:
     image: eclipse-mosquitto:2.0.18
-    container_name: openagrios-mosquitto
+    container_name: floodos-mosquitto
     restart: unless-stopped
     environment:
       MQTT_DEVICE_USER: ${MQTT_DEVICE_USER:-device}
@@ -275,7 +277,7 @@ services:
   telemetry-ingestor:
     build:
       context: ./services/telemetry
-    container_name: openagrios-telemetry-ingestor
+    container_name: floodos-telemetry-ingestor
     restart: unless-stopped
     command: ["python", "ingestor.py"]
     environment:
@@ -283,7 +285,7 @@ services:
       MQTT_USER: ${MQTT_INGESTOR_USER:-ingestor}
       MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:-ingestor_dev_only}
       CORE_URL: http://core-api:8000
-      INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+      INGEST_TOKEN: ${FLOODOS_INGEST_TOKEN:-ingest_dev_only_token}
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -296,7 +298,7 @@ services:
     profiles: ["demo"]
     build:
       context: ./services/telemetry
-    container_name: openagrios-device-simulator
+    container_name: floodos-device-simulator
     restart: unless-stopped
     command: ["python", "simulator.py"]
     environment:
@@ -304,7 +306,7 @@ services:
       MQTT_USER: ${MQTT_DEVICE_USER:-device}
       MQTT_PASSWORD: ${MQTT_DEVICE_PASSWORD:-device_dev_only}
       CORE_URL: http://core-api:8000
-      INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
+      INGEST_TOKEN: ${FLOODOS_INGEST_TOKEN:-ingest_dev_only_token}
       # Demo time-lapse (1 = real speed): makes the SIMULATED rescue vehicles visibly move on the map
       SIM_TIMELAPSE: ${SIM_TIMELAPSE:-12}
     depends_on:
@@ -317,12 +319,12 @@ services:
   traceability:
     build:
       context: ./apps/traceability
-    container_name: openagrios-traceability
+    container_name: floodos-traceability
     restart: unless-stopped
     environment:
       PORT: 8095
       LAKE_S3_ENDPOINT: object-storage:9000
-      LAKE_BUCKET: ${LAKE_BUCKET:-openagrios-lake}
+      LAKE_BUCKET: ${LAKE_BUCKET:-floodos-lake}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:9080}
       TRACE_DISCLAIMER: "${TRACE_DISCLAIMER:-Dữ liệu minh họa - hệ thống đang chạy ở chế độ demo, thiết bị là mô phỏng.}"
     depends_on:
@@ -332,7 +334,7 @@ services:
   # 14. MALWARE GATE (ClamAV daemon - GPL-2.0 License). Client uploads are scanned over clamd INSTREAM, fail-closed.
   clamav:
     image: clamav/clamav:1.4.3
-    container_name: openagrios-clamav
+    container_name: floodos-clamav
     restart: unless-stopped
     volumes:
       - clamdb:/var/lib/clamav
@@ -350,7 +352,7 @@ services:
       dockerfile: twin3d/Dockerfile
       args:
         VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
-    container_name: openagrios-twin-app
+    container_name: floodos-twin-app
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz || exit 1"]

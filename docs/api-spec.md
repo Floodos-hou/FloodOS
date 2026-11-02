@@ -1,6 +1,6 @@
-# OpenDXOS / Hanoi FloodOps — Đặc tả REST API
+# FloodOS — Đặc tả REST API
 
-Hợp đồng của API do [`FloodOpsServer`](../apps/floodops/FloodOpsServer.java) phục vụ (Tầng 1 headless + ứng dụng FloodOps). Bộ Postman tương ứng, chạy được và được kiểm thử tự động so với danh sách route thật: [`tests/postman/OpenDXOS_FloodOps.postman_collection.json`](../tests/postman/OpenDXOS_FloodOps.postman_collection.json).
+Hợp đồng của API do [`FloodOSServer`](../apps/floodos/FloodOSServer.java) phục vụ (Tầng 1 headless + ứng dụng FloodOS). Bộ Postman tương ứng, chạy được và được kiểm thử tự động so với danh sách route thật: [`tests/postman/FloodOS.postman_collection.json`](../tests/postman/FloodOS.postman_collection.json).
 
 > **Dữ liệu demo là mô phỏng.** Phản hồi `GET /api/v1/state` luôn kèm `data_notice` và `data_sources`; từng vị trí xe/mực nước có nhãn nguồn (`SEED`, `SIMULATOR`, `REPORTED`, `DEVICE`). Khoảng cách trong phương án thay thế là **đường chim bay (Haversine)**, không phải tuyến đường.
 
@@ -23,7 +23,7 @@ Quy ước chung:
 | GET | `/api/v1/auth/pkce/authorize-url` | công khai | Tạo phiên PKCE; client tự giữ `code_verifier` và gửi `code_challenge` (S256) | 200 / 400 |
 | POST | `/api/v1/auth/pkce/authorize-code` | công khai | Cầu nối cho kiểm thử/CI: đăng nhập Keycloak thật, trả `code` | 200 / 401 |
 | POST | `/api/v1/auth/pkce/token` | công khai | Đổi `code` + `code_verifier` lấy access token (RFC 7636, RFC 9700) | 200 / 400 / 401 |
-| POST | `/api/v1/auth/login` | công khai | Đăng nhập mật khẩu (đã lỗi thời theo RFC 9700; có thể tắt bằng `OPENAGRIOS_STRICT_RFC9700`) | 200 / 401 / 410 |
+| POST | `/api/v1/auth/login` | công khai | Đăng nhập mật khẩu (đã lỗi thời theo RFC 9700; có thể tắt bằng `FLOODOS_STRICT_RFC9700`) | 200 / 401 / 410 |
 | GET | `/api/v1/auth/userinfo` | Bearer | Danh tính từ token | 200 |
 | GET | `/api/v1/state` | Bearer | Bức tranh trạng thái **đã lọc theo vai trò** (mục 3) | 200 |
 | GET | `/api/v1/digital-twin/entities` | Bearer | Thực thể NGSI-LD `RescueVehicle`, `WaterGaugeStation`, mỗi thực thể có `dataSource` | 200 |
@@ -40,7 +40,7 @@ Quy ước chung:
 | GET | `/api/v1/audit/lineage/{correlation_id}` | Bearer | Phả hệ các sự kiện của một vụ việc (`CORR-<report_id>`) | 200 |
 | GET | `/api/v1/analytics/{summary\|actions-by-day\|asset-utilization\|water-level-summary}` | DISPATCHER, PLATFORM_ADMIN | Phân tích trên kho lạnh Parquet bằng DuckDB, giới hạn theo `organization_id` của token | 200 / 403 / 404 / 503 |
 | GET | `/api/v1/stream/events` | Bearer | SSE: snapshot kiểm toán + nhịp tim | 200 |
-| POST | `/api/v1/sim/reset` | PLATFORM_ADMIN, **chỉ khi** `OPENDXOS_ALLOW_DEMO_RESET=true` | Khôi phục dữ liệu mô phỏng, bắt đầu epoch sổ cái mới | 200 / 403 |
+| POST | `/api/v1/sim/reset` | PLATFORM_ADMIN, **chỉ khi** `FLOODOS_ALLOW_DEMO_RESET=true` | Khôi phục dữ liệu mô phỏng, bắt đầu epoch sổ cái mới | 200 / 403 |
 | POST | `/api/v1/internal/telemetry` | `X-Ingest-Token` (nội bộ; **APISIX chặn 404 ở biên**) | Một mẫu `vehicle` hoặc `gauge` đã được ingestor xác thực | 200 / 400 / 401 / 404 / 409 / 503 |
 | GET | `/api/v1/internal/assets` | `X-Ingest-Token` (nội bộ, chặn ở biên) | Danh sách xe và trạm đo cho bộ mô phỏng, kèm đích đường thẳng | 200 / 401 / 503 |
 
@@ -127,7 +127,7 @@ Mã khác: `HOLDER_TIME_OVERLAP` (đội bận), `RESOURCE_UNAVAILABLE` (xe `BRE
  "explanations": ["Sẵn sàng: …", "Khoảng cách đường chim bay (Haversine): 0.12 km … không phải tuyến đường …", "…"]}
 ```
 
-Điểm (0–100) = 40 khoảng cách (về 0 ở 15 km) + 25 độ phù hợp loại xe với nhu cầu + 20 độ đáp ứng công suất + 15 đánh giá đội ([`RescueScoring`](../apps/floodops/RescueScoring.java)). Chỉ đưa ra xe **rảnh trong khung giờ**, **phù hợp nhu cầu** và **có đội**. Duyệt: `POST …/approve-replan` với `{"option_id": "…"}`; thiếu `option_id` là `400` (hệ thống không tự điều động); không có phương án là `422 NO_FEASIBLE_OPTION_AVAILABLE`.
+Điểm (0–100) = 40 khoảng cách (về 0 ở 15 km) + 25 độ phù hợp loại xe với nhu cầu + 20 độ đáp ứng công suất + 15 đánh giá đội ([`RescueScoring`](../apps/floodos/RescueScoring.java)). Chỉ đưa ra xe **rảnh trong khung giờ**, **phù hợp nhu cầu** và **có đội**. Duyệt: `POST …/approve-replan` với `{"option_id": "…"}`; thiếu `option_id` là `400` (hệ thống không tự điều động); không có phương án là `422 NO_FEASIBLE_OPTION_AVAILABLE`.
 
 ### 4.4. Hoàn thành và xác nhận
 
@@ -156,4 +156,4 @@ POST /api/v1/resolutions
 
 ## 5. Kênh MQTT (thiết bị → ingestor)
 
-`openagrios/<organization_id>/vehicles/<vehicle_id>/telemetry` và `openagrios/<organization_id>/gauges/<station_id>/telemetry`. Mosquitto yêu cầu xác thực; tài khoản thiết bị chỉ được **ghi** hai họ topic này, tài khoản ingestor chỉ được **đọc**. Họ topic cũ `…/machines/…` không còn tồn tại.
+`floodos/<organization_id>/vehicles/<vehicle_id>/telemetry` và `floodos/<organization_id>/gauges/<station_id>/telemetry`. Mosquitto yêu cầu xác thực; tài khoản thiết bị chỉ được **ghi** hai họ topic này, tài khoản ingestor chỉ được **đọc**. Họ topic cũ `…/machines/…` không còn tồn tại.

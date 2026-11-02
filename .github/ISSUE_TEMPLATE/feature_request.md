@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea or architectural enhancement for OpenAgriOS
+about: Suggest an idea or architectural enhancement for FloodOS
 title: '[FEAT] '
 labels: enhancement
 assignees: ''
