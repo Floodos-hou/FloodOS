@@ -20,6 +20,25 @@ routes:
           http_status: 404
           body: '{"error":"NOT_FOUND"}'
 
+  # 0b. Tier-3 public traceability pages (consumers scan a QR code: no login, read-only, rate limited, redacted by design)
+  - id: openagrios-public-trace-route
+    name: "Public rice traceability (Tier 3)"
+    priority: 30
+    uris:
+      - "/trace/*"
+    methods: ["GET", "OPTIONS"]
+    upstream:
+      type: roundrobin
+      nodes:
+        "traceability:8095": 1
+    plugins:
+      limit-req:
+        rate: 20
+        burst: 20
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+
   # 1. Public Discovery, Health, and Login Route (No Token Required)
   - id: openagrios-public-discovery-route
     name: "OpenAgriOS Public Manifest & Login Route"

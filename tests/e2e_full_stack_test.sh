@@ -384,7 +384,7 @@ if [ "${LAKE_EVENTS:-0}" -le 0 ]; then
 fi
 echo "    [OK] DuckDB counted $LAKE_EVENTS audit event(s) in the Parquet lake."
 
-PARQUET_KEYS=$(curl -s "http://localhost:9000/openagrios-lake?prefix=audit/" | grep -o 'audit/dt=[0-9-]*/part-[^<"]*\.parquet' | sort -u | wc -l)
+PARQUET_KEYS=$(curl -s "http://localhost:9000/openagrios-lake?prefix=audit/" | grep -oE 'audit/dt=[0-9-]+/(part|compact)-[^<"]*\.parquet' | sort -u | wc -l || true)
 if [ "$PARQUET_KEYS" -le 0 ]; then
     echo "[FAIL] Assertion 11: No .parquet objects found in the S3 lake bucket."
     exit 1
@@ -651,6 +651,61 @@ if [ "${EPOCHS:-0}" -lt 2 ]; then
 fi
 api POST /sim/reset '{}' >/dev/null
 echo "[PASS] Assertion 14: Audit chain verifiable after restarts and resets (epochs in DB: $EPOCHS; every record of the live epoch persisted)."
+
+# Assertion 15: Tier-3 traceability module (public, read-only, independently re-verifies the SHA-256 chain from the lake)
+echo "Verifying Tier-3 rice traceability module..."
+TRACE_ID="CORR-GOLDEN-F03"
+# give the lot a real journey: seeded request -> breakdown -> rescue replan approved
+api POST /sim/reset '{}' >/dev/null
+T_INC=$(api POST /incidents '{"machine_id":"M01","severity":"CRITICAL","incident_type":"Dong co qua nong","description":"e2e trace","estimated_downtime_hours":24,"evidence_filename":"e2e.jpg"}')
+T_INC_ID=$(echo "$T_INC" | json "d['incident_id']" || true)
+T_OPT=$(echo "$T_INC" | json "d['candidate_options'][0]['option_id']" || true)
+api POST "/incidents/$T_INC_ID/approve-replan" "{\"option_id\":\"$T_OPT\"}" >/dev/null
+TRACE_JSON=""
+TRACE_STATUS=""
+for i in {1..30}; do
+    TRACE_JSON=$(curl -s -m 60 "http://localhost:9080/trace/$TRACE_ID.json" || true)
+    TRACE_STATUS=$(echo "$TRACE_JSON" | json "d['verification']['status']" || true)
+    T_STEPS=$(echo "$TRACE_JSON" | json "d['summary']['steps']" || echo 0)
+    if [ "$TRACE_STATUS" = "VERIFIED" ] && [ "${T_STEPS:-0}" -ge 4 ]; then break; fi
+    sleep 3
+done
+if [ "$TRACE_STATUS" != "VERIFIED" ]; then
+    echo "Trace response: $TRACE_JSON" | cut -c1-600
+    echo "[FAIL] Assertion 15: public trace for $TRACE_ID is not VERIFIED (status='$TRACE_STATUS')."
+    exit 1
+fi
+T_STEPS=$(echo "$TRACE_JSON" | json "d['summary']['steps']" || echo 0)
+T_MATCH=$(echo "$TRACE_JSON" | json "d['verification']['records_match']==d['verification']['records_checked']" || echo False)
+if [ "${T_STEPS:-0}" -lt 4 ] || [ "$T_MATCH" != "True" ]; then
+    echo "[FAIL] Assertion 15: trace has too few steps ($T_STEPS, expected >= 4) or not every record hash matched."
+    exit 1
+fi
+if ! echo "$TRACE_JSON" | grep -q "Máy gặt gặp sự cố" || ! echo "$TRACE_JSON" | grep -q "xếp lại cho máy thay thế"; then
+    echo "[FAIL] Assertion 15: the public journey does not show the breakdown and the replacement shift."
+    exit 1
+fi
+echo "    [OK] $T_STEPS steps; every record hash recomputed independently and matched; ledger epoch continuous."
+if echo "$TRACE_JSON" | grep -qE 'usr_|actor_user_id'; then
+    echo "[FAIL] Assertion 15: public trace leaks user identities."
+    exit 1
+fi
+PAGE=$(curl -s "http://localhost:9080/trace/$TRACE_ID")
+if ! echo "$PAGE" | grep -q "ĐÃ XÁC MINH" || ! echo "$PAGE" | grep -q "<svg"; then
+    echo "[FAIL] Assertion 15: HTML trace page lacks the verified badge or the QR code."
+    exit 1
+fi
+if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9080/trace/CORR-NOPE-404.json)" != "404" ] \
+   || [ "$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost:9080/trace/a.json')" != "400" ]; then
+    echo "[FAIL] Assertion 15: unknown / malformed trace ids are not answered with 404 / 400."
+    exit 1
+fi
+if curl -s -m 3 -o /dev/null http://localhost:8095/health 2>/dev/null; then
+    echo "[FAIL] Assertion 15: traceability port 8095 is exposed on the host."
+    exit 1
+fi
+api POST /sim/reset '{}' >/dev/null   # leave the persistent volume in the clean seeded state
+echo "[PASS] Assertion 15: Tier-3 traceability verified (public page + QR, independent SHA-256 recomputation, identities redacted, ids validated, port not exposed)."
 
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

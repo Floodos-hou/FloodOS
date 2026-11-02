@@ -109,4 +109,18 @@ flowchart TD
   - Hiển thị nhật ký kiểm toán được làm mới mỗi 20 giây và sơ đồ phả hệ dữ liệu SHA-256.
 
 ### 2.3. Tầng 3: Ứng dụng Nghiệp vụ Mở rộng (Domain Business Apps)
-- Các module chuyên ngành cắm-rút phục vụ chuyển đổi số toàn diện: truy xuất nguồn gốc chuỗi giá trị lúa gạo, quản lý vật tư phân bón thông minh, điều phối đội bay drone phun thuốc bảo vệ thực vật.
+
+Tầng 3 là các module chuyên ngành **cắm-rút**: mỗi module là một dịch vụ riêng, chỉ dùng dữ liệu và API của Tầng 1, không sửa mã lõi.
+
+| Module | Trạng thái | Ghi chú |
+|---|---|---|
+| **Truy xuất nguồn gốc lúa gạo** (`apps/traceability`) | **Đã triển khai & kiểm thử** | Xem bên dưới |
+| Quản lý vật tư phân bón thông minh | Chưa làm | Hướng phát triển |
+| Điều phối đội bay drone phun thuốc | Chưa làm | Hướng phát triển |
+
+**Module truy xuất nguồn gốc** (`apps/traceability`, Python, giấy phép phụ thuộc: DuckDB MIT, segno BSD-3-Clause):
+- Chỉ **đọc kho lạnh** (Parquet trên S3 do Tầng 1 nạp qua Kafka); không có kết nối nào vào PostgreSQL hay lõi.
+- `GET /trace/{ma_lo}` (trang công khai có mã QR), `/trace/{ma_lo}.json`, `/trace/{ma_lo}/qr.svg`: đi qua APISIX không cần đăng nhập, chỉ đọc, giới hạn tốc độ; `ma_lo` là `correlation_id` của lô thu hoạch (nút "Truy xuất nguồn gốc" trong cửa sổ "Xem lịch sử dữ liệu").
+- **Tự xác minh độc lập:** lõi phát lên Kafka đúng chuỗi byte đã băm (`before_canonical`, `after_canonical`); dịch vụ truy xuất **tính lại SHA-256 của từng bản ghi** và kiểm tra toàn bộ chuỗi của epoch sổ cái liền mạch từ genesis. Kết quả: `VERIFIED` / `PARTIAL` (bản ghi cũ thiếu dữ liệu gốc) / `FAILED` (có bản ghi bị sửa, xóa hoặc đảo thứ tự). Công thức băm được khóa bằng một "vector vàng" dùng chung giữa Java và Python.
+- **Che danh tính:** chỉ hiển thị vai trò, mã thực thể và mã băm rút gọn; không có `actor_user_id`.
+- Giới hạn trung thực: dữ liệu minh họa khi chạy ở chế độ demo (trang có ghi chú); chưa có mô hình "lô lúa" riêng (mã lô = mã theo dõi nghiệp vụ); chưa gắn dữ liệu chất lượng/độ ẩm/khối lượng.

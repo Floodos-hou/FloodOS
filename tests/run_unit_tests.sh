@@ -4,7 +4,7 @@
 #
 # Runs every fast, dependency-free unit suite (no running stack required):
 #   1. Java  : tests/unit/*  (JSON, scheduling, geodesy, tenancy, audit chain, JWT/PKCE, adapters, HTTP layer)
-#   2. Python: services/lake-archiver/tests (real DuckDB + Parquet) and services/telemetry/tests
+#   2. Python: services/lake-archiver, services/telemetry and apps/traceability tests (real DuckDB + Parquet)
 # Python suites run in a throw-away python:3.12-slim container (same runtime as production images) unless
 # SKIP_PYTHON=1. Exit code is non-zero if any suite fails.
 set -euo pipefail
@@ -26,11 +26,12 @@ fi
 
 echo "=== [2/2] Python unit tests (container) ==="
 # MSYS_NO_PATHCONV keeps Git-Bash on Windows from rewriting the container paths.
-MSYS_NO_PATHCONV=1 docker run --rm -v "$PWD/services:/svc:ro" -w /svc python:3.12-slim sh -c '
-    pip install --quiet --no-cache-dir --disable-pip-version-check -r lake-archiver/requirements.txt -r telemetry/requirements.txt || exit 2
+MSYS_NO_PATHCONV=1 docker run --rm -v "$PWD:/repo:ro" -w /repo python:3.12-slim sh -c '
+    pip install --quiet --no-cache-dir --disable-pip-version-check         -r services/lake-archiver/requirements.txt -r services/telemetry/requirements.txt -r apps/traceability/requirements.txt || exit 2
     rc=0
-    (cd /svc/lake-archiver && python -B -m unittest discover -s tests -v 2>&1) || rc=1
-    (cd /svc/telemetry && python -B -m unittest discover -s tests -v 2>&1) || rc=1
+    for d in services/lake-archiver services/telemetry apps/traceability; do
+        (cd /repo/$d && python -B -m unittest discover -s tests -v 2>&1) || rc=1
+    done
     exit $rc
 ' || status=1
 
