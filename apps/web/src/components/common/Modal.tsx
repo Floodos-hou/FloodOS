@@ -10,19 +10,23 @@ interface ModalProps {
   children: React.ReactNode;
   /** Tailwind max-width class, e.g. "max-w-lg" */
   size?: string;
+  isOpen?: boolean;
 }
 
 /** Accessible dialog: Esc closes, backdrop click closes, labelled for screen readers. */
-export const Modal: React.FC<ModalProps> = ({ title, onClose, children, size = 'max-w-lg' }) => {
+export const Modal: React.FC<ModalProps> = ({ title, onClose, children, size = 'max-w-lg', isOpen = true }) => {
   const titleId = useId();
 
   useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [onClose]);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   return (
     <div

@@ -71,7 +71,7 @@ export const RepairTeamWorkspace: React.FC<RepairTeamWorkspaceProps> = ({ incide
                 <li key={inc.incident_id} className="flex flex-col rounded-3xl border-2 border-red-300 bg-white p-5 shadow-md">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900">{machineName(inc.machine_id)}</h3>
+                      <h3 className="text-xl font-bold text-slate-900">{machineName(inc.vehicle_id || inc.machine_id || '')}</h3>
                       <p className="mt-1 text-lg font-semibold text-red-800">{incidentType(inc.incident_type)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -101,7 +101,7 @@ export const RepairTeamWorkspace: React.FC<RepairTeamWorkspaceProps> = ({ incide
           <ul className="space-y-3">
             {done.map((inc) => (
               <li key={inc.incident_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-lg font-bold text-slate-900">{machineName(inc.machine_id)}: {incidentType(inc.incident_type)}</p>
+                <p className="text-lg font-bold text-slate-900">{machineName(inc.vehicle_id || inc.machine_id || '')}: {incidentType(inc.incident_type)}</p>
                 <StatusBadge label={incidentStatus(inc.status)} />
               </li>
             ))}
@@ -113,7 +113,7 @@ export const RepairTeamWorkspace: React.FC<RepairTeamWorkspaceProps> = ({ incide
         <Modal title="Ghi nhận sửa chữa" onClose={() => setSelected(null)}>
           <form onSubmit={submit} className="space-y-5">
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-lg font-bold text-slate-900">{machineName(selected.machine_id)}</p>
+              <p className="text-lg font-bold text-slate-900">{machineName(selected.vehicle_id || selected.machine_id || '')}</p>
               <p className="text-base font-semibold text-red-800">{incidentType(selected.incident_type)}</p>
               {selected.description && <p className="mt-1 text-base italic text-slate-600">“{selected.description}”</p>}
             </div>

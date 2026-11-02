@@ -72,7 +72,7 @@ export const MachineOwnerWorkspace: React.FC<MachineOwnerWorkspaceProps> = ({
 
               {/* Registered machine indicators */}
               <div className="p-4 space-y-4 flex-1">
-                <p className="text-xs text-slate-500">Thông số hồ sơ máy · bản ghi lúc {formatLocalDateTime(m.telemetry_updated_at)}</p>
+                <p className="text-xs text-slate-500">Thông số hồ sơ máy · bản ghi lúc {m.telemetry_updated_at ? formatLocalDateTime(m.telemetry_updated_at) : 'Hiện tại'}</p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                     <span className="text-sm text-slate-500 block">Gặt được khoảng:</span>

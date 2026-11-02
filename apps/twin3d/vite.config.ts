@@ -6,6 +6,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: '/twin/',
   plugins: [react()],
+  build: {
+    minify: false,
+    sourcemap: false,
+  },
   // the shared modules of apps/web must resolve the SAME React instance as the twin (two copies break hooks)
   resolve: { dedupe: ['react', 'react-dom'] },
   server: {

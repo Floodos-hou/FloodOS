@@ -20,7 +20,7 @@ export const FloodOsLogo: React.FC<FloodOsLogoProps> = ({
 }) => {
   return (
     <div className={`inline-flex items-center gap-3 ${className}`}>
-      {/* Official FloodOS Vector Logo from Repo */}
+      {/* Official FloodOS Vector Logo: Emergency Flood Defense Shield with Water Wave and Beacon */}
       <svg
         width={size}
         height={size}
@@ -31,46 +31,45 @@ export const FloodOsLogo: React.FC<FloodOsLogoProps> = ({
         aria-label="FloodOS Logo"
         className="shrink-0 transition-transform duration-300 hover:scale-105 drop-shadow-md"
       >
-        {/* Background Tile */}
-        <rect width="64" height="64" rx="14" fill="#2F5C22" />
-        <rect
-          x="1"
-          y="1"
-          width="62"
-          height="62"
-          rx="13"
-          stroke="#558B3E"
-          strokeWidth="1.5"
-          strokeOpacity="0.4"
+        <defs>
+          <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0369a1" />
+            <stop offset="50%" stopColor="#0284c7" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+          <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="50%" stopColor="#67e8f9" />
+            <stop offset="100%" stopColor="#bae6fd" />
+          </linearGradient>
+        </defs>
+
+        {/* Shield Outer Foundation */}
+        <path
+          d="M32 4L10 14V30C10 44 19.5 54.5 32 60C44.5 54.5 54 44 54 30V14L32 4Z"
+          fill="url(#shieldGrad)"
+          stroke="#38bdf8"
+          strokeWidth="2"
         />
 
-        {/* Golden Central Sprout Stem */}
+        {/* Wave 1: Dynamic Water Crest */}
         <path
-          d="M32 54V30"
-          stroke="#F2CB52"
-          strokeWidth="3.5"
+          d="M16 34C20 30 25 38 30 34C35 30 40 38 48 32V42C44 47 38 52 32 54C26 52 20 47 16 42V34Z"
+          fill="url(#waveGrad)"
+          opacity="0.85"
+        />
+
+        {/* Wave 2: Surface Ripple */}
+        <path
+          d="M18 28C22 25 26 31 31 28C36 25 41 31 46 27"
+          stroke="#ffffff"
+          strokeWidth="2.5"
           strokeLinecap="round"
         />
 
-        {/* Left Leaf (Soft Green) */}
-        <path
-          d="M32 32C23 32 18 26 18 18C27 18 32 24 32 32Z"
-          fill="#95C47B"
-        />
-
-        {/* Right Leaf (Vivid Green) */}
-        <path
-          d="M32 26C41 26 46 20 46 14C37 14 32 20 32 26Z"
-          fill="#6BA84E"
-        />
-
-        {/* Horizontal Soil / Earth Foundation Bar */}
-        <path
-          d="M16 54H48"
-          stroke="#BDDCAB"
-          strokeWidth="3.2"
-          strokeLinecap="round"
-        />
+        {/* Emergency Beacon at Center Top */}
+        <circle cx="32" cy="18" r="4.5" fill="#f59e0b" />
+        <circle cx="32" cy="18" r="7.5" stroke="#fef08a" strokeWidth="1.5" strokeDasharray="2 2" opacity="0.8" />
       </svg>
 
       {showText && (
@@ -83,12 +82,12 @@ export const FloodOsLogo: React.FC<FloodOsLogoProps> = ({
             >
               FloodOS
             </span>
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
           </div>
           {subtitle && (
             <p
               className={`mt-0.5 text-xs truncate ${
-                textVariant === 'white' ? 'text-emerald-100/90' : 'text-slate-500'
+                textVariant === 'white' ? 'text-cyan-100/90' : 'text-slate-500'
               }`}
             >
               {subtitle}
