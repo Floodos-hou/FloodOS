@@ -775,5 +775,34 @@ docker compose -f compose.yaml start clamav >/dev/null 2>&1
 api POST /sim/reset '{}' >/dev/null
 echo "[PASS] Assertion 16: Malware gate verified (EICAR -> 422 + audit + nothing stored; clean -> 201; ClamAV down -> 503 fail-closed)."
 
+# Assertion 17: Tier-2 app #2 ("Nông Trại Số") is served by the gateway next to the operations portal
+echo "Verifying the farm game (Tier-2 app #2)..."
+FARM_HTML=$(curl -s -m 20 http://localhost:9080/farm/ || true)
+if ! echo "$FARM_HTML" | grep -q "Nông Trại Số" || ! echo "$FARM_HTML" | grep -q 'id="root"'; then
+    echo "[FAIL] Assertion 17: /farm/ did not return the farm game page."
+    exit 1
+fi
+FARM_JS=$(echo "$FARM_HTML" | grep -oE '/farm/assets/[^"]+\.js' | head -1 || true)
+FARM_JS_CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}|%{content_type}' "http://localhost:9080$FARM_JS" || true)
+if [ -z "$FARM_JS" ] || [ "${FARM_JS_CODE%%|*}" != "200" ] || ! echo "$FARM_JS_CODE" | grep -qi javascript; then
+    echo "[FAIL] Assertion 17: the game bundle '$FARM_JS' is not served as JavaScript ($FARM_JS_CODE)."
+    exit 1
+fi
+if ! curl -s -m 20 http://localhost:9080/farm/some/deep/link | grep -q "Nông Trại Số"; then
+    echo "[FAIL] Assertion 17: SPA fallback under /farm/ is broken."
+    exit 1
+fi
+PORTAL_HTML=$(curl -s -m 20 http://localhost:9080/ || true)
+if echo "$PORTAL_HTML" | grep -q "Nông Trại Số" || ! echo "$PORTAL_HTML" | grep -q 'id="root"'; then
+    echo "[FAIL] Assertion 17: the operations portal at / was shadowed by the farm route."
+    exit 1
+fi
+# the game only talks to the protected API: with no token the same data call is refused
+if [ "$(curl -s -m 20 -o /dev/null -w '%{http_code}' http://localhost:9080/api/v1/state)" != "401" ]; then
+    echo "[FAIL] Assertion 17: /api/v1/state is reachable without a token."
+    exit 1
+fi
+echo "[PASS] Assertion 17: farm game served at /farm/ (bundle, SPA fallback), portal untouched at /, API still token-protected."
+
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

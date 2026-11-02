@@ -418,6 +418,7 @@ SKIP_PYTHON=1 bash tests/run_unit_tests.sh   # chỉ phần Java, không cần D
 |---|---|---|
 | Java — [`tests/unit/`](tests/unit/) | 150 |
 | Web — [`apps/web/tests/`](apps/web/tests/fleetInsights.test.ts) (`npm test`) | 13 | Hướng chạy của máy (la bàn, bù góc xoay bản đồ, chống xoay do nhiễu GPS), KPI (bỏ ruộng bị Fog of War), phát hiện sự kiện từ thay đổi trạng thái | JSON (parser nghiêm ngặt, `NaN`), xung đột lịch (biên nửa mở, cách ly tenant), Haversine & điểm cứu viện, NGSI-LD, RLS/SQL escaping, **chuỗi băm audit** (giả mạo/xóa/đảo thứ tự/đồng thời), RBAC, **JWT** (chữ ký, `alg=none`, RS256 giả, hết hạn, sai audience/issuer), **PKCE RFC 7636** (vector chuẩn, mã dùng một lần), bộ phát sự kiện (retry, lỗi vĩnh viễn, không chặn), lake client, quy tắc `AgriOpsService` (RBAC/tenant/telemetry), tầng HTTP thật |
+| Game — [`apps/farm/tests/`](apps/farm/tests/) (`npm test`) | 41 | Bố cục thế giới (khoảng cách tối thiểu, không chồng ruộng, hướng bắc-nam), nén khoảng cách máy ở xa, giai đoạn cây trồng, ngày/đêm, nhiệm vụ suy ra từ trạng thái quy trình thật, camera chừa chỗ cho HUD |
 | Python — [`services/lake-archiver/tests/`](services/lake-archiver/tests/) | 42 | **DuckDB + Parquet thật** trên thư mục tạm: khử trùng lặp, epoch, cách ly tenant, tham số hóa SQL, Haversine, *offset chỉ commit sau khi ghi xong*, sự kiện hỏng không làm kẹt lô |
 | Python — [`services/telemetry/tests/`](services/telemetry/tests/test_telemetry.py) | 29 |
 | Python — [`apps/traceability/tests/`](apps/traceability/tests/test_traceability.py) (Tầng 3) | 34 | Công thức băm (vector vàng chung với Java), phát hiện sửa/xóa/đảo bản ghi, chọn epoch mới nhất, che danh tính, chống XSS, kiểm tra mã lô | Kiểm tra topic/payload MQTT, chống giả mạo tenant, `NaN`/`bool`, giới hạn kích thước, hạch toán mọi kết quả, fail-fast |
@@ -442,6 +443,25 @@ docker compose --profile demo up -d --build     # profile `demo` bật thêm thi
 | **↺ Đặt lại dữ liệu** | `POST /api/v1/sim/reset` (xóa dữ liệu nghiệp vụ trong PostgreSQL rồi nạp lại dữ liệu mẫu) |
 
 Lưu ý trung thực: (1) thiết bị là **mô phỏng**, chạy time-lapse ×12 (`SIM_TIMELAPSE`) để chuyển động thấy được ở mức zoom 14; (2) nền bản đồ lấy tile OpenStreetMap nên cần Internet, mất mạng thì vẫn có nền xanh mặc định và dữ liệu trực tiếp vẫn cập nhật; (3) vùng “Hải Hậu (dữ liệu mẫu)” là dữ liệu cố định trong giao diện, không phải dữ liệu thật; (4) nông hộ và đội sửa chữa không thấy đội máy (Fog of War).
+
+### 8.0d. Tầng 2 (ứng dụng thứ hai) — Nông Trại Số
+
+```bash
+docker compose --profile demo up -d --build      # rồi mở  http://localhost:9080/farm/
+```
+
+Chọn nhân vật **Bác Ba** (nông hộ) để vào nông trại của bác: ruộng lúa lay động theo gió, máy gặt chạy theo vị trí thật, lúa vàng chuyển thành rạ theo tiến độ gặt, khói và tia lửa khi máy hỏng, đường cứu viện nhấp nháy, pháo giấy khi gặt xong, ban ngày/ban đêm có đèn pha, đom đóm, tiếng động cơ (âm thanh tổng hợp, mặc định tắt). Chọn **Chị Lan** (điều phối viên) để thấy cả 10 thửa và bấm **⚡ Sự kiện bất ngờ: máy hỏng**: kịch bản gọi API thật (báo sự cố → đề xuất máy thay → duyệt → máy thay tới ruộng).
+
+| Yếu tố "game" | Dữ liệu thật phía sau |
+|---|---|
+| Ruộng, giai đoạn lúa, thanh tiến độ | `fields`: `readiness_status`, `harvest_progress_pct` |
+| Máy gặt, hướng chạy, nhiên liệu, khói khi hỏng | `machines` (vị trí từ telemetry MQTT qua bản sao số) |
+| Nhiệm vụ ("Gọi máy gặt", "Xác nhận & chấm sao") | trạng thái yêu cầu dịch vụ (`service_requests`) và ca (`assignments`) |
+| Thông báo trượt vào | thay đổi trạng thái máy/nhiệm vụ giữa hai lần đọc |
+| Nút gọi máy / chấm sao | `POST /api/v1/requests`, `POST /api/v1/acceptances` (đúng RBAC, RLS và sổ cái của Tầng 1) |
+| Giờ trong ngày | đồng hồ mô phỏng; chế độ "ngày đêm tự chạy" và "ban đêm" chỉ để trang trí |
+
+Trung thực: hình ảnh do mã tự vẽ trên canvas (không dùng bộ ảnh ngoài); cây cối, mây, cối xay, đom đóm là trang trí; thiết bị trong bản demo là mô phỏng; chưa kiểm thử trên điện thoại thật (mới thử bằng Chrome không giao diện); nông hộ chỉ thấy thửa của mình vì RLS của Tầng 1. Mã dùng chung với cổng điều hành (`apps/web`) ở khách API, đăng nhập và các hàm thuần, nên hai ứng dụng cùng chạy trên một lõi.
 
 ### 8.0c. Tầng 3 — Truy xuất nguồn gốc lúa gạo
 
