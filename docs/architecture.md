@@ -82,6 +82,10 @@ flowchart TD
   - **Lạnh**: `services/lake-archiver` đọc topic, gom lô và ghi Parquet (ZSTD, phân vùng `dt=YYYY-MM-DD`) vào bucket `openagrios-lake` trên SeaweedFS; DuckDB truy vấn trực tiếp các file này (khử trùng lặp theo `ledger_epoch` + `event_id` vì giao nhận at-least-once).
   - Truy cập qua `GET /api/v1/analytics/*` (chỉ điều phối viên/quản trị, cách ly theo `organization_id`). Chưa dùng Iceberg/Trino: đây là lựa chọn gọn cho quy mô MVP, không phải lớp lakehouse đầy đủ.
 
+- **Cổng chặn mã độc cho tệp tải lên (ClamAV):**
+  - Tệp đính kèm do client gửi (minh chứng sự cố) được quét qua `clamd` (giao thức INSTREAM) **trước khi lưu**. Nhiễm mã độc → `422` kèm tên chữ ký, ghi audit `UPLOAD_BLOCKED_MALWARE`, không lưu đối tượng, không tạo sự cố.
+  - **Fail-closed:** không có kết luận quét (clamd sập, quá thời gian, trả lời lạ) thì từ chối `503` và ghi audit, không bao giờ lưu tệp chưa quét. Production đặt `OPENAGRIOS_MALWARE_SCAN=REQUIRED` nên lõi không khởi động nếu thiếu ClamAV.
+  - Giới hạn: hiện chỉ có một điểm tải tệp từ client; biên bản nghiệm thu do hệ thống tự sinh. Quét ở lớp dịch vụ lõi chứ chưa ở plugin APISIX.
 - **Thu nhận dữ liệu cảm biến OT (MQTT → bản sao số):**
   - Thiết bị phát MQTT lên `openagrios/<org>/machines/<id>/telemetry` (Eclipse Mosquitto, bắt buộc xác thực; ACL quyền tối thiểu: thiết bị chỉ được *publish*, `telemetry-ingestor` chỉ được *subscribe*; tài khoản và ACL được sinh lại từ biến môi trường mỗi lần khởi động).
   - `telemetry-ingestor` kiểm tra schema/kiểu dữ liệu, đối chiếu `org`/`machine` trong topic với payload, rồi gọi endpoint nội bộ của core bằng bí mật dùng chung. Core kiểm tra miền giá trị và quyền sở hữu tenant, cập nhật bản sao số NGSI-LD, ghi PostgreSQL (giới hạn 10 giây/máy) và phát mỗi mẫu lên Kafka → Parquet.

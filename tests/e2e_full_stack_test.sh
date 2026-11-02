@@ -707,5 +707,73 @@ fi
 api POST /sim/reset '{}' >/dev/null   # leave the persistent volume in the clean seeded state
 echo "[PASS] Assertion 15: Tier-3 traceability verified (public page + QR, independent SHA-256 recomputation, identities redacted, ids validated, port not exposed)."
 
+# Assertion 16: malware gate (ClamAV) on client uploads: infected -> 422, clean -> accepted, scanner down -> 503 (fail-closed)
+echo "Verifying malware gate (ClamAV)..."
+SCAN_STATUS=""
+for i in {1..100}; do
+    SCAN_STATUS=$(curl -s -m 10 http://localhost:8000/api/v1/health | json "d['core_services']['malware_scanner']['status']" || true)
+    if [ "$SCAN_STATUS" = "UP" ]; then break; fi
+    sleep 3
+done
+if [ "$SCAN_STATUS" != "UP" ]; then
+    docker compose -f compose.yaml logs --tail 20 clamav || true
+    echo "[FAIL] Assertion 16: ClamAV never became ready (status='$SCAN_STATUS')."
+    exit 1
+fi
+echo "    [OK] clamd is up (signature database loaded)."
+
+# The EICAR antivirus test string is assembled at run time so no file in the repository contains it.
+EICAR_A='X5O!P%@AP[4\PZX54(P^)7CC)7}$'; EICAR_B='EICAR-STANDARD-ANTIVIRUS'; EICAR_C='-TEST-FILE!$H+H*'
+EICAR_B64=$(printf '%s%s%s' "$EICAR_A" "$EICAR_B" "$EICAR_C" | base64 | tr -d '\n')
+CLEAN_B64=$(printf 'plain text evidence, no malware' | base64 | tr -d '\n')
+upload() { # base64 -> prints "<http_code> <body>"
+    curl -s -m 60 -o /tmp/e2e_upload_body -w '%{http_code}' -X POST http://localhost:9080/api/v1/incidents \
+        -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+        -d "{\"machine_id\":\"M01\",\"severity\":\"CRITICAL\",\"incident_type\":\"Dong co qua nong\",\"description\":\"malware gate e2e\",\"estimated_downtime_hours\":24,\"evidence_filename\":\"evidence.bin\",\"evidence_data_url\":\"data:application/octet-stream;base64,$1\"}"
+}
+api POST /sim/reset '{}' >/dev/null
+CODE=$(upload "$EICAR_B64")
+BODY=$(cat /tmp/e2e_upload_body)
+if [ "$CODE" != "422" ] || [ "$(echo "$BODY" | json "d['error']" || true)" != "MALWARE_DETECTED" ]; then
+    echo "Upload response ($CODE): $BODY" | cut -c1-400
+    echo "[FAIL] Assertion 16: EICAR upload was not blocked with 422 MALWARE_DETECTED."
+    exit 1
+fi
+if [ "$(echo "$BODY" | json "d['audit_event']['action']" || true)" != "UPLOAD_BLOCKED_MALWARE" ]; then
+    echo "[FAIL] Assertion 16: the blocked upload was not audited."
+    exit 1
+fi
+INCIDENTS=$(psql_q "SELECT count(*) FROM incidents;")
+if [ "$INCIDENTS" != "0" ]; then
+    echo "[FAIL] Assertion 16: an incident row exists although the upload was blocked ($INCIDENTS)."
+    exit 1
+fi
+echo "    [OK] EICAR blocked (422, $(echo "$BODY" | json "d['signature']" || true)); nothing stored, no incident, block audited."
+
+CODE=$(upload "$CLEAN_B64")
+if [ "$CODE" != "201" ]; then
+    echo "Upload response ($CODE): $(cat /tmp/e2e_upload_body)" | cut -c1-300
+    echo "[FAIL] Assertion 16: a clean file was not accepted."
+    exit 1
+fi
+echo "    [OK] clean evidence scanned and accepted (201)."
+api POST /sim/reset '{}' >/dev/null
+
+docker compose -f compose.yaml stop clamav >/dev/null 2>&1
+CODE=$(upload "$CLEAN_B64")
+BODY=$(cat /tmp/e2e_upload_body)
+if [ "$CODE" != "503" ] || [ "$(echo "$BODY" | json "d['error']" || true)" != "MALWARE_SCANNER_UNAVAILABLE" ]; then
+    echo "Upload response ($CODE): $BODY" | cut -c1-300
+    echo "[FAIL] Assertion 16: with the scanner down the upload was not refused (fail-closed)."
+    exit 1
+fi
+if [ "$(psql_q "SELECT count(*) FROM incidents;")" != "0" ]; then
+    echo "[FAIL] Assertion 16: an incident was stored although the scanner was down."
+    exit 1
+fi
+docker compose -f compose.yaml start clamav >/dev/null 2>&1
+api POST /sim/reset '{}' >/dev/null
+echo "[PASS] Assertion 16: Malware gate verified (EICAR -> 422 + audit + nothing stored; clean -> 201; ClamAV down -> 503 fail-closed)."
+
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

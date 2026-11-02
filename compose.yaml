@@ -130,6 +130,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agriops-client-secret-2026}
       OPENAGRIOS_EVENT_BUS_URL: http://kafka-rest:8082
       OPENAGRIOS_ANALYTICS_URL: http://lake-archiver:8090
+      CLAMAV_HOST: clamav
       OPENAGRIOS_INGEST_TOKEN: ${OPENAGRIOS_INGEST_TOKEN:-ingest_dev_only_token}
     ports:
       - "127.0.0.1:8000:8000"
@@ -144,6 +145,8 @@ services:
         condition: service_started
       kafka-rest:
         condition: service_healthy
+      clamav:
+        condition: service_started
 
   # 7. OPENAGRIOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
   web-app:
@@ -323,8 +326,23 @@ services:
       lake-archiver:
         condition: service_started
 
+  # 14. MALWARE GATE (ClamAV daemon - GPL-2.0 License). Client uploads are scanned over clamd INSTREAM, fail-closed.
+  clamav:
+    image: clamav/clamav:1.4.3
+    container_name: openagrios-clamav
+    restart: unless-stopped
+    volumes:
+      - clamdb:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
 volumes:
   pgdata:
   s3data:
   kafkadata:
   mqttdata:
+  clamdb:

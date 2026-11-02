@@ -80,6 +80,9 @@ services:
   lake-archiver:
     restart: always
 
+  clamav:
+    restart: always
+
   traceability:
     restart: always
     environment:
@@ -109,6 +112,8 @@ services:
       OPENAGRIOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       KEYCLOAK_PUBLIC_ISSUER: "${KEYCLOAK_PUBLIC_ISSUER:?CRITICAL KEYCLOAK_PUBLIC_ISSUER must match the Keycloak realm issuer}"
       OPENAGRIOS_STORAGE_MODE: POSTGRESQL_PRODUCTION
+      # fail-fast: the core refuses to start without a malware scanner in production
+      OPENAGRIOS_MALWARE_SCAN: REQUIRED
       OPENAGRIOS_STRICT_RFC9700: "${OPENAGRIOS_STRICT_RFC9700:-true}"
       POSTGRES_USER: ${POSTGRES_APP_USER:-openagrios_app}
       POSTGRES_PASSWORD: "${POSTGRES_APP_PASSWORD:?CRITICAL POSTGRES_APP_PASSWORD must be explicitly provided in production}"

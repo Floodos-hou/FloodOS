@@ -12,6 +12,7 @@ import org.openagrios.apps.agriops.AgriModels.*;
 
 import org.openagrios.core.dataservices.AnalyticsLakeClient;
 import org.openagrios.core.dataservices.EventBusPublisher;
+import org.openagrios.core.dataservices.MalwareScanner;
 import org.openagrios.core.dataservices.ImmutableAuditLedger;
 import org.openagrios.core.dataservices.PostgreSqlDataService;
 
@@ -79,6 +80,8 @@ public final class AgriDataStore {
     public final PostgreSqlDataService postgreSqlDataService;
     public final EventBusPublisher eventBus = EventBusPublisher.fromEnvironment();
     public final AnalyticsLakeClient analyticsLake = new AnalyticsLakeClient();
+    /** Malware gate for client uploads (ClamAV). Replaceable so tests can inject a scanner against a fake daemon. */
+    public MalwareScanner malwareScanner = MalwareScanner.fromEnvironment();
 
 
 

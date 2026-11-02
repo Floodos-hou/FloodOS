@@ -15,6 +15,7 @@ public final class UnitTestRunner {
         PureLogicTests.run();
         SecurityTests.run();
         PlatformTests.run();
+        ScannerTests.run();
         System.exit(TestKit.report());
     }
 }
