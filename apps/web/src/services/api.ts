@@ -117,6 +117,11 @@ export const api = {
     return request<TacticalState>('/state', {}, token);
   },
 
+  // NGSI-LD digital twin: live machine positions fed by MQTT telemetry (roles with fleet access only)
+  async getDigitalTwin(token: string): Promise<{ entities: any[] }> {
+    return request<{ entities: any[] }>('/digital-twin/entities', {}, token);
+  },
+
   // Service Request (FARMER / COORDINATOR)
   async createRequest(
     token: string,
