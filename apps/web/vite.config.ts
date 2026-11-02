@@ -13,7 +13,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: process.env.VITE_API_GATEWAY_URL || 'http://localhost:8000',
+        target: process.env.VITE_API_GATEWAY_URL || 'http://localhost:9080',
         changeOrigin: true,
       }
     }
