@@ -119,18 +119,18 @@ class ValidationTests(unittest.TestCase):
 
     def test_topics_that_do_not_match_the_scheme_are_rejected(self):
         bad_topics = [
-            "other/HTX/vehicles/V01/telemetry",
-            "floodos/HTX/vehicles/V01/telemetry/extra",
-            "floodos/HTX/vehicles/V01/status",
+            "other/BCH_PCTT_HN/vehicles/V01/telemetry",
+            "floodos/BCH_PCTT_HN/vehicles/V01/telemetry/extra",
+            "floodos/BCH_PCTT_HN/vehicles/V01/status",
             "floodos//vehicles/V01/telemetry",
-            "floodos/HTX/vehicles//telemetry",
+            "floodos/BCH_PCTT_HN/vehicles//telemetry",
             "floodos/../vehicles/V01/telemetry",
-            "floodos/HTX ORG/vehicles/V01/telemetry",
-            "floodos/HTX/vehicles/V01;DROP/telemetry",
+            "floodos/BCH ORG/vehicles/V01/telemetry",
+            "floodos/BCH_PCTT_HN/vehicles/V01;DROP/telemetry",
             "floodos/#/vehicles/V01/telemetry",
             "floodos/+/vehicles/V01/telemetry",
-            "floodos/HTX/machines/M01/telemetry",   # the former per-machine topic family no longer exists
-            "floodos/HTX/sensors/S01/telemetry",
+            "floodos/BCH_PCTT_HN/machines/M01/telemetry",   # the former per-machine topic family no longer exists
+            "floodos/BCH_PCTT_HN/sensors/S01/telemetry",
         ]
         for t in bad_topics:
             payload, reason = ingestor.validate(t, good())
@@ -308,8 +308,8 @@ class SimulatorTests(unittest.TestCase):
 
     def test_longitude_degrees_shrink_with_latitude(self):
         equator = simulator.metres_between(0, 105, 0, 105.001)
-        cantho = simulator.metres_between(10, 105, 10, 105.001)
-        self.assertLess(cantho, equator)
+        hanoi = simulator.metres_between(21, 105, 21, 105.001)
+        self.assertLess(hanoi, equator)
 
     def test_asset_roster_is_fetched_with_the_ingest_token(self):
         core = FakeCore()

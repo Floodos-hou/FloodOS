@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
-import type { HarvesterMachine } from '../types';
+import type { RescueVehicle } from '../types';
 
 /** One vehicle as reported by the NGSI-LD digital twin (fed by MQTT telemetry). */
 export interface LiveMachine {
@@ -37,142 +37,148 @@ const MIN_STEP_DEG = 0.000005;
 
 const ROLES_WITH_TWIN = new Set([
   'DISPATCHER',
-  'COORDINATOR',
   'FIELD_TEAM',
   'RESOURCE_MANAGER',
   'PLATFORM_ADMIN',
-  'MACHINE_OWNER',
-  'OPERATOR',
 ]);
 
 type Trails = Record<string, [number, number][]>;
 
 interface Snapshot {
-  /** Token the data was fetched with: a snapshot is never shown to a different session/tenant. */
-  key: string;
-  live: Record<string, LiveMachine>;
-  trails: Trails;
-  movedAt: Record<string, number>;
-  lastMoveAt: number | null;
-  lastPollAt: number | null;
-  connected: boolean;
-  error: string | null;
+  entities: Array<{
+    id?: string;
+    location?: { value?: { coordinates?: [number, number] } };
+    fuel_level?: { value?: number };
+    vehicle_status?: { value?: string };
+    machine_status?: { value?: string };
+  }>;
 }
 
-const EMPTY: Snapshot = { key: '', live: {}, trails: {}, movedAt: {}, lastMoveAt: null, lastPollAt: null, connected: false, error: null };
+function parseEntities(raw: Snapshot | null): LiveMachine[] {
+  if (!raw || !Array.isArray(raw.entities)) return [];
+  const out: LiveMachine[] = [];
+  for (const e of raw.entities) {
+    const coords = e.location?.value?.coordinates;
+    if (!coords || coords.length < 2) continue;
+    const [lng, lat] = coords;
+    if (typeof lng !== 'number' || typeof lat !== 'number') continue;
+    const id = (e.id || '').replace(/^urn:ngsi-ld:Vehicle:/, '').replace(/^urn:ngsi-ld:HarvesterMachine:/, '');
+    if (!id) continue;
+    const fuel = typeof e.fuel_level?.value === 'number' ? e.fuel_level.value : 100;
+    const status = (e.vehicle_status?.value || e.machine_status?.value || 'IDLE').toString();
+    out.push({ machine_id: id, lat, lng, fuel_pct: fuel, status });
+  }
+  return out;
+}
 
-/**
- * Polls the digital-twin endpoint every couple of seconds and keeps a short trail per vehicle.
- * Only roles that the API allows to read vehicle entities are polled.
- */
 export function useLiveFleet(token: string | null, role: string | undefined) {
-  const allowed = !!token && !!role && ROLES_WITH_TWIN.has(role);
-  const [snap, setSnap] = useState<Snapshot>(EMPTY);
-  const inFlight = useRef(false);
+  const [live, setLive] = useState<Map<string, LiveMachine>>(new Map());
+  const [trails, setTrails] = useState<Trails>({});
+  const [info, setInfo] = useState<LiveFleetInfo>({
+    enabled: false,
+    connected: false,
+    lastMoveAt: null,
+    lastPollAt: null,
+    movedAt: {},
+    error: null,
+  });
+
+  const enabled = Boolean(token && role && ROLES_WITH_TWIN.has(role));
+  const trailsRef = useRef<Trails>({});
+  trailsRef.current = trails;
+  const lastPosRef = useRef<Map<string, [number, number]>>(new Map());
+  const movedAtRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    if (!allowed || !token) return;
+    if (!enabled || !token) {
+      setInfo((prev) => ({ ...prev, enabled: false, connected: false }));
+      return;
+    }
     let cancelled = false;
 
-    const poll = async () => {
-      if (inFlight.current || document.hidden) return;
-      inFlight.current = true;
+    async function poll() {
       try {
-        const res = await api.getDigitalTwin(token);
+        const raw = await api.getDigitalTwin(token!);
         if (cancelled) return;
-        const t = Date.now();
-        setSnap((previous) => {
-          const prev = previous.key === token ? previous : EMPTY;
-          const live: Record<string, LiveMachine> = {};
-          const trails: Trails = { ...prev.trails };
-          const movedAt = { ...prev.movedAt };
-          let lastMoveAt = prev.lastMoveAt;
-          for (const e of res.entities) {
-            const id = String(e.id).split(':').pop() ?? '';
-            const coords = e.location?.value?.coordinates;
-            if (!id || !Array.isArray(coords)) continue;
-            const m: LiveMachine = {
-              machine_id: id,
-              lng: Number(coords[0]),
-              lat: Number(coords[1]),
-              fuel_pct: Number(e.fuelLevel?.value ?? e.fuelPercent?.value ?? 0),
-              status: String(e.status?.value ?? 'AVAILABLE'),
-            };
-            live[id] = m;
-            const before = prev.live[id];
-            const trail = trails[id] ? [...trails[id]] : [];
-            const last = trail[trail.length - 1];
-            const moved = !last || Math.abs(last[0] - m.lng) > MIN_STEP_DEG || Math.abs(last[1] - m.lat) > MIN_STEP_DEG;
-            if (moved) {
-              trail.push([m.lng, m.lat]);
-              if (trail.length > MAX_TRAIL_POINTS) trail.shift();
-              trails[id] = trail;
-              if (before) {
-                movedAt[id] = t;
-                lastMoveAt = t;
-              }
-            } else if (before && Math.abs(before.fuel_pct - m.fuel_pct) > 0.001) {
-              lastMoveAt = t; // fuel burn also proves telemetry is arriving
+        const list = parseEntities(raw as Snapshot);
+        const nextMap = new Map<string, LiveMachine>();
+        const now = Date.now();
+        let anyMoved = false;
+
+        const nextTrails: Trails = { ...trailsRef.current };
+
+        for (const m of list) {
+          nextMap.set(m.machine_id, m);
+          const prev = lastPosRef.current.get(m.machine_id);
+          const moved =
+            !prev ||
+            Math.abs(prev[0] - m.lat) > MIN_STEP_DEG ||
+            Math.abs(prev[1] - m.lng) > MIN_STEP_DEG;
+
+          if (moved) {
+            anyMoved = true;
+            lastPosRef.current.set(m.machine_id, [m.lat, m.lng]);
+            movedAtRef.current[m.machine_id] = now;
+
+            const existing = nextTrails[m.machine_id] || [];
+            const lastPoint = existing[existing.length - 1];
+            if (!lastPoint || lastPoint[0] !== m.lng || lastPoint[1] !== m.lat) {
+              const appended = [...existing, [m.lng, m.lat] as [number, number]];
+              nextTrails[m.machine_id] = appended.slice(-MAX_TRAIL_POINTS);
             }
           }
-          return { key: token, live, trails, movedAt, lastMoveAt, lastPollAt: t, connected: true, error: null };
-        });
+        }
+
+        setLive(nextMap);
+        setTrails(nextTrails);
+        setInfo((prev) => ({
+          ...prev,
+          enabled: true,
+          connected: true,
+          lastPollAt: now,
+          lastMoveAt: anyMoved ? now : prev.lastMoveAt,
+          movedAt: { ...movedAtRef.current },
+          error: null,
+        }));
       } catch (err: any) {
         if (cancelled) return;
-        setSnap((previous) => ({
-          ...(previous.key === token ? previous : EMPTY),
-          key: token,
+        setInfo((prev) => ({
+          ...prev,
+          enabled: true,
           connected: false,
-          lastPollAt: Date.now(),
-          error: err?.message ?? 'Không đọc được bản sao số',
+          error: err?.message || 'Polling error',
         }));
-      } finally {
-        inFlight.current = false;
       }
-    };
+    }
 
-    void poll();
-    const timer = window.setInterval(() => void poll(), POLL_MS);
+    poll();
+    const handle = setInterval(poll, POLL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      clearInterval(handle);
     };
-  }, [allowed, token]);
+  }, [enabled, token]);
 
-  const view = allowed && snap.key === token ? snap : EMPTY;
-
-  const info: LiveFleetInfo = useMemo(
-    () => ({
-      enabled: allowed,
-      connected: view.connected,
-      lastMoveAt: view.lastMoveAt,
-      lastPollAt: view.lastPollAt,
-      movedAt: view.movedAt,
-      error: view.error,
-    }),
-    [view, allowed]
-  );
-
-  return { live: view.live, trails: view.trails, info };
+  return { live, trails, info };
 }
 
-/** Overlays live twin positions and fuel on the (slower) tactical-state vehicle list. */
-export function mergeLive<T extends { machine_id?: string; vehicle_id?: string; current_lat?: number; current_lng?: number; fuel_pct?: number; fuel_percent?: number }>(
+/** Merges the latest polled telemetry into the static state vehicles. */
+export function mergeLive<T extends { vehicle_id?: string; machine_id?: string; current_lat?: number; current_lng?: number; fuel_pct?: number }>(
   vehicles: T[],
-  live: Record<string, LiveMachine>
+  live: Map<string, LiveMachine>
 ): T[] {
-  if (Object.keys(live).length === 0) return vehicles;
+  if (live.size === 0) return vehicles;
   return vehicles.map((v) => {
     const id = v.vehicle_id || v.machine_id;
     if (!id) return v;
-    const l = live[id];
+    const l = live.get(id);
     if (!l) return v;
     return {
       ...v,
       current_lat: l.lat,
       current_lng: l.lng,
       fuel_pct: l.fuel_pct,
-      fuel_percent: l.fuel_pct,
+      status: l.status || (v as any).status,
     };
   });
 }

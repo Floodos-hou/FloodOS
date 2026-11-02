@@ -70,9 +70,9 @@ test('KPIs count statuses, average fuel and progress, and ignore fogged fields',
   const k = computeKpis(
     [m('A', 'WORKING', 90), m('B', 'WORKING', 50), m('C', 'IDLE', 20), m('D', 'BREAKDOWN', 10), m('E', 'MAINTENANCE', 40)],
     [
-      { harvest_progress_pct: 100, visibility: 'FULL' },
-      { harvest_progress_pct: 50, visibility: 'FULL' },
-      { harvest_progress_pct: 0, visibility: 'FOG_OF_WAR' },
+      { progress_pct: 100, visibility: 'FULL' },
+      { progress_pct: 50, visibility: 'FULL' },
+      { progress_pct: 0, visibility: 'FOG_OF_WAR' },
     ],
     [{ status: 'IN_PROGRESS' }, { status: 'CONFIRMED' }, { status: 'IN_PROGRESS' }]
   );
@@ -82,14 +82,14 @@ test('KPIs count statuses, average fuel and progress, and ignore fogged fields',
   );
   assert.equal(k.avgFuelPct, 42);
   assert.equal(k.lowFuel, 2);
-  assert.equal(k.avgHarvestPct, 75, 'the fogged field is excluded');
+  assert.equal(k.avgProgressPct, 75, 'the fogged field is excluded');
   assert.equal(k.activeShifts, 2);
 });
 
 test('KPIs of an empty fleet are zeros, never NaN', () => {
   const k = computeKpis([], [], []);
   assert.equal(k.avgFuelPct, 0);
-  assert.equal(k.avgHarvestPct, 0);
+  assert.equal(k.avgProgressPct, 0);
   assert.equal(k.machines, 0);
 });
 

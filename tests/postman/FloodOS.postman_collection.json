@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "39c58014-e446-5750-a64a-6a43897b7c33",
-    "name": "OpenDXOS - Hanoi FloodOps API (Tier 1 core + application)",
-    "description": "Executable contract of the FloodOps API. Run against the gateway (:9080) with the 'OpenDXOS Gateway (Docker)' environment, after filling the *_token variables with PKCE tokens (see docs/api-spec.md section 2). All demo data is SIMULATED. Roles: REPORTER, DISPATCHER, FIELD_TEAM, RESOURCE_MANAGER, PLATFORM_ADMIN.",
+    "name": "FloodOS - Hanoi Flood Response API (Tier 1 core + application)",
+    "description": "Executable contract of the FloodOS API. Run against the gateway (:9080) with the 'FloodOS Gateway (Docker)' environment, after filling the *_token variables with PKCE tokens (see docs/api-spec.md section 2). All demo data is SIMULATED. Roles: REPORTER, DISPATCHER, FIELD_TEAM, RESOURCE_MANAGER, PLATFORM_ADMIN.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [

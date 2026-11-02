@@ -411,12 +411,11 @@ pass "Assertion 11: state, workflow mirror and hash chain survive a core restart
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# Assertion 12: the remaining front-ends are still served by the gateway (they are the legacy UI, not yet reworked)
+# Assertion 12: the FloodOS operations web application is served by the gateway
 PORTAL=$(curl -s -m 20 "$GW/" || true)
 echo "$PORTAL" | grep -q 'id="root"' || fail "Assertion 12: the operations portal is not served at /."
 expect "the API stays token-protected next to the static front-ends" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/state")" "401"
-echo "[WARN] apps/web and apps/twin3d still target the former rice-harvest API: they are served, but they are NOT FloodOS front-ends yet."
-pass "Assertion 12: static front-ends are served and the API remains protected."
+pass "Assertion 12: FloodOS operations portal is served and the API remains protected."
 
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"
 echo "============================================================================"

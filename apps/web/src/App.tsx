@@ -31,7 +31,7 @@ export const App: React.FC = () => {
   const [state, setState] = useState<TacticalState | null>(null);
   const { live, trails, info: liveInfo } = useLiveFleet(token, user?.role);
   const mapVehicles = useMemo(
-    () => (state ? mergeLive(state.vehicles || state.machines || [], live) : []),
+    () => (state ? mergeLive(state.vehicles || [], live) : []),
     [state, live]
   );
   const [stateUpdatedAt, setStateUpdatedAt] = useState<Date | null>(null);
@@ -346,7 +346,7 @@ export const App: React.FC = () => {
     { id: 'HOME', icon: '🏠', label: HOME_LABEL[user.role] ?? 'Trang chủ' },
     { id: 'MAP', icon: '🗺️', label: 'Bản đồ Tác chiến' },
   ];
-  if (['DISPATCHER', 'COORDINATOR', 'REPORTER', 'FARMER', 'PLATFORM_ADMIN'].includes(user.role)) {
+  if (['DISPATCHER', 'REPORTER', 'PLATFORM_ADMIN'].includes(user.role)) {
     tabs.push({ id: 'PROCESS', icon: '📋', label: 'Quy trình SOP (BPMN)' });
   }
   if (
@@ -514,7 +514,7 @@ export const App: React.FC = () => {
         {/* TAB 1: WORKSPACES */}
         {state && activeTab === 'HOME' && (
           <>
-            {(user.role === 'REPORTER' || user.role === 'FARMER') && (
+            {user.role === 'REPORTER' && (
               <ReporterWorkspace
                 reports={state.reports || []}
                 orders={state.orders || []}
@@ -527,7 +527,7 @@ export const App: React.FC = () => {
               />
             )}
 
-            {(user.role === 'DISPATCHER' || user.role === 'COORDINATOR' || user.role === 'PLATFORM_ADMIN') && (
+            {(user.role === 'DISPATCHER' || user.role === 'PLATFORM_ADMIN') && (
               <DispatcherWorkspace
                 reports={state.reports || []}
                 orders={state.orders || []}
@@ -546,7 +546,7 @@ export const App: React.FC = () => {
               />
             )}
 
-            {(user.role === 'FIELD_TEAM' || user.role === 'OPERATOR') && (
+            {user.role === 'FIELD_TEAM' && (
               <FieldTeamWorkspace
                 currentUserId={user.user_id}
                 teams={state.teams || []}
@@ -563,7 +563,7 @@ export const App: React.FC = () => {
               />
             )}
 
-            {(user.role === 'RESOURCE_MANAGER' || user.role === 'MACHINE_OWNER' || user.role === 'REPAIR_TEAM') && (
+            {user.role === 'RESOURCE_MANAGER' && (
               <ResourceManagerWorkspace
                 vehicles={state.vehicles || []}
                 shelters={state.shelters || []}

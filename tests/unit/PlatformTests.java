@@ -108,7 +108,7 @@ final class PlatformTests {
         test("delivers a record in Kafka REST v2 format to /topics/<topic>", () -> {
             try (FakeEndpoint ep = new FakeEndpoint()) {
                 EventBusPublisher p = EventBusPublisher.forUrl(ep.url() + "/", 3, 10);
-                p.publish(EventBusPublisher.TOPIC_AUDIT, "HTX_CANTHO_01", Map.of("action", "CREATE", "n", 7));
+                p.publish(EventBusPublisher.TOPIC_AUDIT, "BCH_PCTT_HN_01", Map.of("action", "CREATE", "n", 7));
                 eventually(5000, () -> count(p.status(), "published") == 1, "published counter");
                 FakeEndpoint.Seen s = ep.seen.get(0);
                 equal("POST", s.method(), "method");
@@ -116,7 +116,7 @@ final class PlatformTests {
                 equal("application/vnd.kafka.json.v2+json", s.contentType(), "embedded JSON content type");
                 Map<String, Object> body = JsonCodec.parseObject(s.body());
                 Map<?, ?> rec = (Map<?, ?>) ((List<?>) body.get("records")).get(0);
-                equal("HTX_CANTHO_01", rec.get("key"), "partition key = tenant");
+                equal("BCH_PCTT_HN_01", rec.get("key"), "partition key = tenant");
                 equal("CREATE", ((Map<?, ?>) rec.get("value")).get("action"), "payload");
                 notNull(p.status().get("last_success_at"), "success timestamp");
                 equal("KAFKA_REST_PROXY", p.status().get("mode"), "mode");
@@ -172,11 +172,11 @@ final class PlatformTests {
         test("keys and values with quotes / unicode still produce valid JSON", () -> {
             try (FakeEndpoint ep = new FakeEndpoint()) {
                 EventBusPublisher p = EventBusPublisher.forUrl(ep.url(), 3, 5);
-                p.publish(EventBusPublisher.TOPIC_AUDIT, "org\"with\\quote", Map.of("note", "Cần Thơ \"1\"\n"));
+                p.publish(EventBusPublisher.TOPIC_AUDIT, "org\"with\\quote", Map.of("note", "Hà Nội \"1\"\n"));
                 eventually(5000, () -> count(p.status(), "published") == 1, "delivered");
                 Map<?, ?> rec = (Map<?, ?>) ((List<?>) JsonCodec.parseObject(ep.seen.get(0).body()).get("records")).get(0);
                 equal("org\"with\\quote", rec.get("key"), "key survives escaping");
-                equal("Cần Thơ \"1\"\n", ((Map<?, ?>) rec.get("value")).get("note"), "value survives escaping");
+                equal("Hà Nội \"1\"\n", ((Map<?, ?>) rec.get("value")).get("note"), "value survives escaping");
             }
         });
     }
@@ -189,11 +189,11 @@ final class PlatformTests {
                 ImmutableAuditLedger l = new ImmutableAuditLedger();
                 EventBusPublisher bus = EventBusPublisher.forUrl(ep.url(), 3, 5);
                 l.setEventBus(bus);
-                var rec = l.appendRecord("HTX_CANTHO_01", "CORR-9", "ServiceRequest", "REQ-9", "CREATE", "alice", "COORDINATOR",
+                var rec = l.appendRecord("BCH_PCTT_HN_01", "CORR-9", "FloodReport", "FR-0009", "CREATE", "alice", "DISPATCHER",
                         Map.of(), Map.of("s", "NEW"), 200);
                 eventually(5000, () -> count(bus.status(), "published") == 1, "streamed");
                 Map<?, ?> r = (Map<?, ?>) ((List<?>) JsonCodec.parseObject(ep.seen.get(0).body()).get("records")).get(0);
-                equal("HTX_CANTHO_01", r.get("key"), "tenant key");
+                equal("BCH_PCTT_HN_01", r.get("key"), "tenant key");
                 Map<?, ?> v = (Map<?, ?>) r.get("value");
                 equal("audit.v1", v.get("event_type"), "event type");
                 equal(rec.recordHash(), v.get("record_hash"), "hash identical to the ledger");
