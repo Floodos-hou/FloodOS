@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 /**
  * Geodesy for the true-scale 3D twin. Pure functions (unit-tested). The scene works in a local tangent plane in METRES:

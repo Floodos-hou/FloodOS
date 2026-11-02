@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2026 OpenAgriOS Contributors -->
+<!-- Copyright 2026 FloodOS Contributors -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="100%" height="100%">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -33,7 +33,7 @@
     <rect width="1120" height="64" rx="10" fill="#1E293B" stroke="#475569" stroke-width="1"/>
     <circle cx="36" cy="32" r="16" fill="#10B981"/>
     <text x="36" y="38" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="16" fill="#FFFFFF" text-anchor="middle">OA</text>
-    <text x="68" y="30" font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#F8FAFC">OpenAgriOS — Kiến trúc Tổng thể DX-OS 3 Tầng (Open-Core Architecture)</text>
+    <text x="68" y="30" font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#F8FAFC">FloodOS — Kiến trúc Tổng thể DX-OS 3 Tầng (Open-Core Architecture)</text>
     <text x="68" y="49" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" fill="#94A3B8">Nền tảng Điều hành Nông nghiệp số Phân tầng • Apache-2.0 Open Source • Java 21 LTS Virtual Threads</text>
     <rect x="990" y="20" width="110" height="24" rx="12" fill="#047857"/>
     <text x="1045" y="36" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="bold" fill="#ECFDF5" text-anchor="middle">v0.1.0-alpha</text>
@@ -46,7 +46,7 @@
     
     <!-- Channel 1 -->
     <rect x="24" y="38" width="250" height="40" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
-    <text x="36" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">AgriOps Web Workspace</text>
+    <text x="36" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#E2E8F0">FloodOS Web Workspace</text>
     <text x="245" y="62" font-family="'Segoe UI', Roboto, sans-serif" font-size="10" fill="#94A3B8" text-anchor="end">React / Next.js</text>
 
     <!-- Channel 2 -->
@@ -78,31 +78,31 @@
 
   <!-- TIER 2 & TIER 1 CONTAINER -->
   <g transform="translate(40, 275)">
-    <!-- TIER 2: AGRIOPS APPLICATION (apps/agriops) -->
+    <!-- TIER 2: FLOODOS APPLICATION (apps/floodos) -->
     <rect width="1120" height="110" rx="10" fill="url(#tier2Grad)" stroke="#38BDF8" stroke-width="1.2"/>
-    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#38BDF8">PHÂN HỆ NGHIỆP VỤ NÔNG NGHIỆP SỐ (AgriOps Domain Engine — apps/agriops)</text>
+    <text x="24" y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="bold" fill="#38BDF8">PHÂN HỆ NGHIỆP VỤ NÔNG NGHIỆP SỐ (FloodOS Domain Engine — apps/floodos)</text>
 
     <!-- App Box 1 -->
     <rect x="24" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
-    <text x="36" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriOpsService.java</text>
+    <text x="36" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">FloodOSService.java</text>
     <text x="36" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Điều phối gặt, xếp lịch máy,</text>
     <text x="36" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">xử lý sự cố và nghiệm thu vụ</text>
 
     <!-- App Box 2 -->
     <rect x="294" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
-    <text x="306" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriDataStore.java</text>
+    <text x="306" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">FloodDataStore.java</text>
     <text x="306" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Kho dữ liệu HTX, máy gặt,</text>
     <text x="306" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">thửa ruộng &amp; đồng hồ giả lập</text>
 
     <!-- App Box 3 -->
     <rect x="564" y="36" width="250" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
-    <text x="576" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">AgriModels.java</text>
+    <text x="576" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">FloodModels.java</text>
     <text x="576" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">Record domain entities:</text>
     <text x="576" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">FieldPlot, Machine, Incident</text>
 
     <!-- App Box 4 -->
     <rect x="834" y="36" width="260" height="60" rx="6" fill="#0F172A" stroke="#334155" filter="url(#cardShadow)"/>
-    <text x="846" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">OpenAgriOsServer.java</text>
+    <text x="846" y="58" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#F1F5F9">FloodOSServer.java</text>
     <text x="846" y="76" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">HTTP REST Server Port 8000</text>
     <text x="846" y="90" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" fill="#94A3B8">JDK 21 Virtual Threads</text>
   </g>

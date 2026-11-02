@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../web/src/context/useAuth';
@@ -54,7 +54,7 @@ const TwinApp: React.FC = () => {
   return (
     <div className="app">
       <header className="topbar">
-        <strong className="brand">OpenAgriOS <em>Bản đồ thu hoạch</em></strong>
+        <strong className="brand">FloodOS <em>Bản đồ thu hoạch</em></strong>
         <span className="who">{state?.auth_context.full_name ?? user?.full_name} · {state?.auth_context.organization_name}</span>
         <span className="sim" title="Đồng hồ mô phỏng của nền tảng">{clock(state?.sim_clock?.sim_time)}</span>
         <button onClick={() => { setSelected(null); setFrameToken((n) => n + 1); }}>Toàn cảnh</button>

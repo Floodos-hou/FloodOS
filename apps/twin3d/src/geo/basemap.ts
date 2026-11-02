@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 /**
  * Ground imagery of the twin. Online it is a mosaic of satellite tiles placed by Web-Mercator maths; when the tiles

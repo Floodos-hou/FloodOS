@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { ShieldCheck, LogOut, Clock, RotateCcw, FastForward, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { orgLabel, roleLabel, shortName } from '../../utils/labels';
-import { OpenAgriLogo } from './OpenAgriLogo';
+import { FloodOsLogo } from './FloodOsLogo';
 
 interface HeaderProps {
   simTime: string;
@@ -67,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         {/* Brand with Official Repo Logo */}
         <div className="flex min-w-0 items-center gap-3">
-          <OpenAgriLogo
+          <FloodOsLogo
             size={42}
             showText={true}
             textVariant="white"

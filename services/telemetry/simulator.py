@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 """
-OpenDXOS device SIMULATOR (demo only: there is no physical hardware and no official gauge).
+FloodOS device SIMULATOR (demo only: there is no physical hardware and no official gauge).
 
 Emulates two kinds of field devices and says so on every message ("source": "SIMULATOR"):
-  * the GPS/fuel unit of each rescue vehicle  -> openagrios/<org>/vehicles/<id>/telemetry
-  * a water-level gauge per monitored zone    -> openagrios/<org>/gauges/<id>/telemetry
+  * the GPS/fuel unit of each rescue vehicle  -> floodos/<org>/vehicles/<id>/telemetry
+  * a water-level gauge per monitored zone    -> floodos/<org>/gauges/<id>/telemetry
 It speaks the real protocol (authenticated MQTT), so the samples travel through exactly the same
 ingestor -> core -> Kafka -> Parquet path real devices would use. The roster and starting values are read
 from the core (no duplicated seed data).
@@ -102,7 +102,7 @@ def main():
     if not (INGEST_TOKEN and MQTT_USER and MQTT_PASSWORD):
         sys.exit("INGEST_TOKEN, MQTT_USER and MQTT_PASSWORD are required; failing fast")
 
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="opendxos-device-simulator")
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="floodos-device-simulator")
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     client.reconnect_delay_set(min_delay=1, max_delay=30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
@@ -140,13 +140,13 @@ def main():
                 speed = advance_vehicle(a, INTERVAL_S, TIMELAPSE) if a["status"] in MOVING_STATUSES else 0.0
                 payload = {"ts": ts, "source": SOURCE, "lat": round(a["lat"], 6), "lon": round(a["lon"], 6),
                            "fuel_pct": round(a["fuel_pct"], 2), "speed_kmh": speed}
-                topic = f"openagrios/{a['organization_id']}/vehicles/{asset_id}/telemetry"
+                topic = f"floodos/{a['organization_id']}/vehicles/{asset_id}/telemetry"
             else:
                 if a.get("level_cm") is None:
                     a["level_cm"] = 0.0
                 advance_gauge(a, TIMELAPSE)
                 payload = {"ts": ts, "source": SOURCE, "level_cm": round(a["level_cm"], 1)}
-                topic = f"openagrios/{a['organization_id']}/gauges/{asset_id}/telemetry"
+                topic = f"floodos/{a['organization_id']}/gauges/{asset_id}/telemetry"
             info = client.publish(topic, json.dumps(payload), qos=1)
             if info.rc != mqtt.MQTT_ERR_SUCCESS:
                 log(f"publish to {topic} failed rc={info.rc}")

@@ -1,8 +1,8 @@
 # Third-Party Software Notices and Licenses
 
-This project, **OpenAgriOS**, is licensed under the [Apache License 2.0](LICENSE).
+This project, **FloodOS**, is licensed under the [Apache License 2.0](LICENSE).
 
-This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within OpenAgriOS, along with their respective licensing terms. All integrated components use OSI-approved permissive or copyleft licences (MIT, Apache-2.0, BSD, ISC, EPL, GPL-family, PostgreSQL, PSF-2.0).
+This document lists the third-party open-source components, libraries, and runtime dependencies utilized or integrated within FloodOS, along with their respective licensing terms. All integrated components use OSI-approved permissive or copyleft licences (MIT, Apache-2.0, BSD, ISC, EPL, GPL-family, PostgreSQL, PSF-2.0).
 
 ---
 
@@ -53,7 +53,7 @@ Used by: Eclipse Temurin OpenJDK 21
 
 ## 3. Compliance and Copyleft Hygiene
 
-OpenAgriOS enforces strict Open-Core licensing hygiene:
+FloodOS enforces strict Open-Core licensing hygiene:
 - No viral copyleft licenses (e.g. AGPL-3.0) are incorporated into the core application runtime or mandatory distribution bundles.
 - MinIO (AGPL-3.0) was deliberately replaced by SeaweedFS (Apache-2.0) to maintain 100% Apache-2.0 compatibility for downstream integrators and enterprise deployments.
 - All database migrations, declarative schemas, and workflow definitions are licensed under Apache-2.0.

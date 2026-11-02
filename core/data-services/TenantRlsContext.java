@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.core.dataservices;
+package org.floodos.core.dataservices;
 
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;

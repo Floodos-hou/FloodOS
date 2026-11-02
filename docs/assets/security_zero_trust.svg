@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2026 OpenAgriOS Contributors -->
+<!-- Copyright 2026 FloodOS Contributors -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%">
   <defs>
     <linearGradient id="secBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -79,13 +79,13 @@
 
     <rect x="14" y="50" width="212" height="195" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
     <text x="24" y="74" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Realm:</text>
-    <text x="75" y="74" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#A78BFA">openagrios</text>
+    <text x="75" y="74" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#A78BFA">floodos</text>
     
     <text x="24" y="96" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Public Client:</text>
-    <text x="110" y="96" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#93C5FD">agriops-web (PKCE)</text>
+    <text x="110" y="96" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#93C5FD">floodos-web (PKCE)</text>
     
     <text x="24" y="118" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Confidential Client:</text>
-    <text x="24" y="134" font-family="monospace" font-size="10" fill="#FDE68A">agriops-gateway (Secret)</text>
+    <text x="24" y="134" font-family="monospace" font-size="10" fill="#FDE68A">floodos-gateway (Secret)</text>
     
     <text x="24" y="156" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#E2E8F0">• Token Introspection:</text>
     <text x="24" y="172" font-family="monospace" font-size="10" fill="#4ADE80">RFC 7662 (/token/introspect)</text>
@@ -114,7 +114,7 @@
     <!-- Plugin 2: OpenID Connect -->
     <rect x="16" y="180" width="238" height="150" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
     <text x="28" y="204" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#93C5FD">🔑 PLUGIN: openid-connect</text>
-    <text x="28" y="222" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Client ID: <tspan font-family="monospace" fill="#FDE68A">agriops-gateway</tspan></text>
+    <text x="28" y="222" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Client ID: <tspan font-family="monospace" fill="#FDE68A">floodos-gateway</tspan></text>
     <text x="28" y="238" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Introspect: <tspan font-family="monospace" fill="#A78BFA">:8080/token/introspect</tspan></text>
     <text x="28" y="254" font-family="system-ui, sans-serif" font-size="10" fill="#CBD5E1">• Injects Upstream Headers:</text>
     <rect x="26" y="262" width="218" height="58" rx="6" fill="#1E293B" stroke="#475569" stroke-width="0.6"/>
@@ -142,8 +142,8 @@
   <g transform="translate(610, 85)" filter="url(#secShadow)">
     <rect width="270" height="540" rx="12" fill="url(#coreGrad)" stroke="#10B981" stroke-width="1.5"/>
     <rect x="18" y="16" width="234" height="28" rx="6" fill="#10B981" fill-opacity="0.2"/>
-    <text x="28" y="35" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#34D399">OPENAGRIOS CORE PAAS</text>
-    <text x="28" y="60" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#94A3B8">OpenAgriOsServer (:8000)</text>
+    <text x="28" y="35" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#34D399">FLOODOS CORE PAAS</text>
+    <text x="28" y="60" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#94A3B8">FloodOSServer (:8000)</text>
 
     <!-- Tenant Context Resolver -->
     <rect x="16" y="80" width="238" height="110" rx="8" fill="#0F172A" fill-opacity="0.8" stroke="#334155" stroke-width="0.8"/>
@@ -237,6 +237,6 @@
   <!-- Footer Stats -->
   <g transform="translate(40, 642)">
     <text x="0" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#64748B">* Kiểm thử nghiệm thu tự động AcceptanceTestRunner xác nhận 100% token giả mạo, hết hạn hoặc sai audience đều bị từ chối 401 Unauthorized.</text>
-    <text x="1120" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#10B981" text-anchor="end">OpenAgriOS Platform 2026</text>
+    <text x="1120" y="18" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#10B981" text-anchor="end">FloodOS Platform 2026</text>
   </g>
 </svg>

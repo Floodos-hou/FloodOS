@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * OpenAgriOS visual identity — "Đồng lúa & Phù sa"
+ * FloodOS visual identity — "Đồng lúa & Phù sa"
  * Neutrals are warm paddy/soil tones (rice cream → dark loam); `emerald` is remapped to
  * a deeper leaf green so every existing utility class picks up the agricultural palette.
  */
@@ -94,7 +94,7 @@ h1, h2, .font-display {
 }
 
 /* Header ribbon: wheat-gold edge under the leaf-green bar */
-.agri-ribbon {
+.app-ribbon {
   background-image: linear-gradient(90deg, var(--color-amber-400), var(--color-amber-200) 40%, var(--color-amber-400));
 }
 

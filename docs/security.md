@@ -1,12 +1,12 @@
-# Hướng dẫn Bảo mật & Triển khai Production (OpenAgriOS Security & Production Guide)
+# Hướng dẫn Bảo mật & Triển khai Production (FloodOS Security & Production Guide)
 
-Tài liệu này quy định kiến trúc bảo mật Zero-Trust, cơ chế quản lý danh tính OIDC/PKCE, cách ly dữ liệu đa thuê ước (Multi-Tenancy RLS), chuỗi kiểm toán bất biến (Immutable Audit Hash-Chain) và quy trình thiết lập bí mật (Secrets Management) an toàn cho nền tảng OpenAgriOS khi đưa vào vận hành thực tế.
+Tài liệu này quy định kiến trúc bảo mật Zero-Trust, cơ chế quản lý danh tính OIDC/PKCE, cách ly dữ liệu đa thuê ước (Multi-Tenancy RLS), chuỗi kiểm toán bất biến (Immutable Audit Hash-Chain) và quy trình thiết lập bí mật (Secrets Management) an toàn cho nền tảng FloodOS khi đưa vào vận hành thực tế.
 
 ---
 
 ## 1. Mô hình Kiến trúc Bảo mật Zero-Trust
 
-OpenAgriOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn luôn xác thực và ủy quyền" (Never Trust, Always Verify)** trên toàn bộ 3 tầng kiến trúc:
+FloodOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn luôn xác thực và ủy quyền" (Never Trust, Always Verify)** trên toàn bộ 3 tầng kiến trúc:
 
 ```
                   +-------------------------------------------------------+
@@ -24,7 +24,7 @@ OpenAgriOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn 
                                               |
                                               v
 +-----------------------------------------------------------------------------------------+
-| OpenAgriOS Core API (Port 8000)                                                         |
+| FloodOS Core API (Port 8000)                                                         |
 | - ZeroTrustGateway: Xác thực chữ ký RS256 qua Keycloak Token Introspection (RFC 7662)   |
 | - RBAC Guard: Kiểm tra quyền hạn theo vai trò (REPORTER, DISPATCHER, FIELD_TEAM, RESOURCE_MANAGER)     |
 | - Session Context: Nạp TenantRlsContext (app.current_org_id, app.current_user_role)     |
@@ -33,8 +33,8 @@ OpenAgriOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn 
                     v                                             v
 +--------------------------------------+     +--------------------------------------------+
 | PostgreSQL 16 (Port 5432)            |     | Keycloak 24 (Port 8080)                    |
-| - Dedicated Role: openagrios_app     |     | - Confidential Client: agriops-gateway     |
-|   (NOSUPERUSER, NOBYPASSRLS)         |     | - Public Client: agriops-web (PKCE S256)   |
+| - Dedicated Role: floodos_app     |     | - Confidential Client: floodos-gateway     |
+|   (NOSUPERUSER, NOBYPASSRLS)         |     | - Public Client: floodos-web (PKCE S256)   |
 | - FORCE ROW LEVEL SECURITY           |     | - Token Introspection (RFC 7662)           |
 | - GiST btree_gist Time-Window Lock   |     |                                            |
 +--------------------------------------+     +--------------------------------------------+
@@ -48,19 +48,19 @@ OpenAgriOS áp dụng nguyên tắc **"Không tin tưởng bất kỳ ai, luôn 
 
 Hệ thống cung cấp cơ chế bảo vệ nghiêm ngặt giữa hai chế độ hoạt động:
 
-1. **Chế độ Phát triển cục bộ (`OPENAGRIOS_AUTH_MODE=DEV_MOCK_STANDALONE`):**
+1. **Chế độ Phát triển cục bộ (`FLOODOS_AUTH_MODE=DEV_MOCK_STANDALONE`):**
    - Dành riêng cho phát triển cục bộ và kiểm thử tự động không cần container Keycloak.
    - Sử dụng thuật toán HMAC-SHA256 với secret nội bộ cục bộ.
    - **Cơ chế phòng vệ:** Mọi token giả mạo gắn thuật toán RS256 hoặc chứa chữ ký sai lệch đều bị từ chối thẳng thừng với mã lỗi `401 UNAUTHORIZED`.
 
-2. **Chế độ Vận hành Sản xuất (`OPENAGRIOS_AUTH_MODE=KEYCLOAK_PRODUCTION`):**
+2. **Chế độ Vận hành Sản xuất (`FLOODOS_AUTH_MODE=KEYCLOAK_PRODUCTION`):**
    - Bắt buộc trên môi trường production và staging.
    - Mọi yêu cầu đăng nhập và kiểm tra token đều được chuyển trực tiếp tới máy chủ Keycloak thật.
    - **Quy tắc Fail-Fast:** Khi Keycloak không phản hồi hoặc trả về lỗi, Core API lập tức trả về mã lỗi `401 KEYCLOAK_LOGIN_FAILED` hoặc `401 KEYCLOAK_TOKEN_EXCHANGE_FAILED`. **Tuyệt đối không âm thầm chuyển đổi ngược về chế độ Mock.**
 
 ### 2.2. Luồng Authorization Code với PKCE cho Web và Mobile
 
-Theo khuyến nghị bảo mật RFC 9700 (OAuth 2.0 Security Best Current Practice), cơ chế ROPC (Resource Owner Password Credentials) đã bị loại bỏ cho các ứng dụng tương tác người dùng. OpenAgriOS áp dụng chuẩn **Authorization Code Flow kết hợp Proof Key for Code Exchange (PKCE - RFC 7636)**:
+Theo khuyến nghị bảo mật RFC 9700 (OAuth 2.0 Security Best Current Practice), cơ chế ROPC (Resource Owner Password Credentials) đã bị loại bỏ cho các ứng dụng tương tác người dùng. FloodOS áp dụng chuẩn **Authorization Code Flow kết hợp Proof Key for Code Exchange (PKCE - RFC 7636)**:
 
 1. **Khởi tạo phiên:** Client (trình duyệt) tự sinh `code_verifier` bằng Web Crypto, tính `code_challenge` (SHA-256 base64url, 43 ký tự) rồi gọi `GET /api/v1/auth/pkce/authorize-url?code_challenge=...&state=...&redirect_uri=...`. Máy chủ **không bao giờ** nhận hay trả về `code_verifier` ở chế độ này; `code_challenge` sai định dạng bị từ chối `400 INVALID_CODE_CHALLENGE`. (Chế độ cũ không kèm `code_challenge` chỉ còn phục vụ công cụ dev/test.)
 2. **Đổi mã lấy token:** Client gửi mã xác thực tới `POST /api/v1/auth/pkce/token` cùng `code` và `code_verifier`.
@@ -73,12 +73,12 @@ Theo khuyến nghị bảo mật RFC 9700 (OAuth 2.0 Security Best Current Pract
 
 ## 3. Bảo mật Dữ liệu Cơ sở dữ liệu: PostgreSQL Row-Level Security (RLS)
 
-### 3.1. Phân quyền Người dùng Ứng dụng Không có quyền Siêu quản trị (`openagrios_app`)
+### 3.1. Phân quyền Người dùng Ứng dụng Không có quyền Siêu quản trị (`floodos_app`)
 
 Để ngăn chặn lỗ hổng vô hiệu hóa RLS của tài khoản quản trị PostgreSQL (superuser bypass), ứng dụng Core API kết nối qua vai trò chuyên dụng:
 
 ```sql
-CREATE ROLE openagrios_app WITH LOGIN PASSWORD 'strong_password_here'
+CREATE ROLE floodos_app WITH LOGIN PASSWORD 'strong_password_here'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ```
 
@@ -104,7 +104,7 @@ Ngữ cảnh rỗng, sai hoặc vai trò lạ cho **0 hàng** (mặc định t�
 
 Thao tác báo sự cố phương tiện ghi lan sang lệnh/tin của đội khác nên được ghi dưới quyền `DISPATCHER` **trong cùng đơn vị** của người báo (việc cho phép đã kiểm tra ở Java trước đó); không có đường ghi nào dùng `PLATFORM_ADMIN` cho thao tác của người dùng.
 
-**Các lỗ hổng của nguyên mẫu cũ đã đóng:** token thiếu `organization_id` không còn bị gán mặc định vào một tenant; token không có vai trò đã đăng ký không còn bị gán vai trò thấp nhất; `POST /api/v1/sim/reset` không còn mở cho mọi người dùng đã đăng nhập (chỉ `PLATFORM_ADMIN` và chỉ khi `OPENDXOS_ALLOW_DEMO_RESET=true`, đóng trong production); tài khoản dev-mock không còn rơi về một tài khoản mặc định.
+**Các lỗ hổng của nguyên mẫu cũ đã đóng:** token thiếu `organization_id` không còn bị gán mặc định vào một tenant; token không có vai trò đã đăng ký không còn bị gán vai trò thấp nhất; `POST /api/v1/sim/reset` không còn mở cho mọi người dùng đã đăng nhập (chỉ `PLATFORM_ADMIN` và chỉ khi `FLOODOS_ALLOW_DEMO_RESET=true`, đóng trong production); tài khoản dev-mock không còn rơi về một tài khoản mặc định.
 
 ---
 
@@ -129,19 +129,19 @@ $$ LANGUAGE plpgsql;
 
 ### 5.1. Tạo khóa ngẫu nhiên chuẩn mật mã
 
-Tuyệt đối không sử dụng mật khẩu mặc định (ví dụ `123456`, `openagrios_dev_only`, `admin_dev_only`). Sử dụng tiện ích `openssl` để sinh các chuỗi ngẫu nhiên 256-bit:
+Tuyệt đối không sử dụng mật khẩu mặc định (ví dụ `123456`, `floodos_dev_only`, `admin_dev_only`). Sử dụng tiện ích `openssl` để sinh các chuỗi ngẫu nhiên 256-bit:
 
 ```bash
 # 1. Mật khẩu Superuser PostgreSQL
 openssl rand -hex 32
 
-# 2. Mật khẩu Ứng dụng PostgreSQL (openagrios_app)
+# 2. Mật khẩu Ứng dụng PostgreSQL (floodos_app)
 openssl rand -hex 32
 
 # 3. Mật khẩu Quản trị viên Keycloak
 openssl rand -hex 32
 
-# 4. Bí mật Client Gateway Keycloak (agriops-gateway client secret)
+# 4. Bí mật Client Gateway Keycloak (floodos-gateway client secret)
 openssl rand -hex 32
 
 # 5. Khóa Quản trị Apache APISIX
@@ -180,6 +180,6 @@ Khi áp dụng `compose.prod.yaml`, các cổng nội bộ như:
 - Cổng PostgreSQL `5432`
 - Cổng SeaweedFS S3 `9000` / `8888`
 - Cổng Flowable BPMN `8081`
-- Cổng OpenAgriOS Core API `8000`
+- Cổng FloodOS Core API `8000`
 
 sẽ **không được xuất bản ra ngoài mạng Internet (no host port binding)** mà chỉ giao tiếp qua mạng nội bộ Docker. API nghiệp vụ chỉ được công bố qua Gateway APISIX (cổng `9080` / `9443`). Keycloak (cổng `8080`) vẫn được công bố riêng để client OIDC thực hiện đăng nhập; khi triển khai thực tế, nên đặt cổng này sau HTTPS ingress/reverse proxy và giới hạn quyền truy cập quản trị.

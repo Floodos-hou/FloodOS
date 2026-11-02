@@ -1,4 +1,4 @@
-# OpenAgriOS — Hướng Dẫn Chạy Demo & Kiểm Thử Tự Động
+# FloodOS — Hướng Dẫn Chạy Demo & Kiểm Thử Tự Động
 
 Hướng dẫn chi tiết từng bước để biên dịch, khởi động server và chạy trọn vẹn kịch bản kiểm thử tích hợp (End-to-End Acceptance Tests).
 
@@ -30,7 +30,7 @@ javac -encoding UTF-8 -d target/classes @sources.txt
 
 ### Bước 2: Chạy Server Headless Core PaaS
 ```bash
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.apps.floodops.FloodOpsServer
+java -Dfile.encoding=UTF-8 -cp target/classes org.floodos.apps.floodos.FloodOSServer
 ```
 Server sẽ lắng nghe tại cổng `8000` (truy cập `http://localhost:8000/api/v1/health` trên trình duyệt để kiểm tra trạng thái hoạt động).
 
@@ -44,12 +44,12 @@ Server sẽ lắng nghe tại cổng `8000` (truy cập `http://localhost:8000/a
 
 Trong một cửa sổ dòng lệnh khác, thực thi:
 ```bash
-java -Dfile.encoding=UTF-8 -cp target/classes org.openagrios.tests.AcceptanceTestRunner
+java -Dfile.encoding=UTF-8 -cp target/classes org.floodos.tests.AcceptanceTestRunner
 ```
 
 ### Kết quả mong đợi:
 ```text
-HANOI FLOODOPS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)
+HANOI FLOODOS - IN-PROCESS ACCEPTANCE SUITE (JAVA 21)
 [1] Platform health, workflow definitions and registered roles ...
 [2] Authentication fails closed ...
 [3] Row-level scope per role ...
@@ -69,7 +69,7 @@ Số kiểm tra và kết quả của lần chạy gần nhất được ghi ở
 
 ## 4. Kiểm thử với Postman Collection
 
-1. Mở Postman, chọn **Import** và nhập `tests/postman/OpenDXOS_FloodOps.postman_collection.json` cùng một trong hai môi trường `OpenDXOS_Gateway_Docker.postman_environment.json` (qua APISIX, :9080) hoặc `OpenDXOS_Core_Direct.postman_environment.json` (trực tiếp lõi, :8000, chỉ dùng khi phát triển).
+1. Mở Postman, chọn **Import** và nhập `tests/postman/FloodOS.postman_collection.json` cùng một trong hai môi trường `FloodOS_Gateway_Docker.postman_environment.json` (qua APISIX, :9080) hoặc `FloodOS_Core_Direct.postman_environment.json` (trực tiếp lõi, :8000, chỉ dùng khi phát triển).
 2. Lấy token PKCE cho từng vai trò (xem [`api-spec.md`](api-spec.md), mục 2) và điền vào các biến `*_token` của môi trường. Với bước "đội thay thế hoàn thành lệnh", điền `replacement_team_token` bằng token của đội được giao lệnh `-R1` (xem trong `GET /api/v1/state`).
 3. Bộ sưu tập có 8 thư mục (0 nền tảng, 1 người báo tin, 2 điều phối, 3 hiện trường, 4 điều phối lại và sửa chữa, 5 hoàn tất và xác nhận, 6 kiểm toán và phân tích, 7 bản sao số và điểm trú), mỗi yêu cầu có kịch bản kiểm tra tự động. Mỗi lần chạy dùng một khung giờ ngẫu nhiên trong tương lai nên chạy lặp lại không tự xung đột.
 4. Một kiểm thử đơn vị ([`PlatformTests`](../tests/unit/PlatformTests.java)) bảo đảm mọi yêu cầu trong bộ sưu tập trỏ tới route có thật của máy chủ.

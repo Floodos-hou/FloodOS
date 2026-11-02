@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
-package org.openagrios.tests.unit;
+package org.floodos.tests.unit;
 
-import static org.openagrios.tests.unit.TestKit.*;
+import static org.floodos.tests.unit.TestKit.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -19,16 +19,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import org.openagrios.apps.floodops.FloodDataStore;
-import org.openagrios.apps.floodops.FloodOpsServer;
-import org.openagrios.apps.floodops.FloodOpsService;
-import org.openagrios.apps.floodops.FloodOpsService.HttpResult;
-import org.openagrios.core.dataservices.ImmutableAuditLedger;
-import org.openagrios.core.dataservices.MalwareScanner;
-import org.openagrios.core.dataservices.MalwareScanner.ScanUnavailableException;
-import org.openagrios.core.dataservices.SeaweedS3StorageService;
-import org.openagrios.core.identity.KeycloakOidcEngine.AuthContext;
-import org.openagrios.core.workflow.BpmnWorkflowEngine;
+import org.floodos.apps.floodos.FloodDataStore;
+import org.floodos.apps.floodos.FloodOSServer;
+import org.floodos.apps.floodos.FloodOSService;
+import org.floodos.apps.floodos.FloodOSService.HttpResult;
+import org.floodos.core.dataservices.ImmutableAuditLedger;
+import org.floodos.core.dataservices.MalwareScanner;
+import org.floodos.core.dataservices.MalwareScanner.ScanUnavailableException;
+import org.floodos.core.dataservices.SeaweedS3StorageService;
+import org.floodos.core.identity.KeycloakOidcEngine.AuthContext;
+import org.floodos.core.workflow.BpmnWorkflowEngine;
 
 /** ClamAV INSTREAM client against a protocol-faithful fake clamd, and the upload gate in the incident flow. */
 final class ScannerTests {
@@ -253,11 +253,11 @@ final class ScannerTests {
     }
 
     // ------------------------------------------------------------------ upload gate in the incident flow
-    private static FloodOpsService newService(MalwareScanner scanner) {
-        java.io.File bpmn = new java.io.File(FloodOpsServer.resolveProjectRoot(), "infra/bpmn");
+    private static FloodOSService newService(MalwareScanner scanner) {
+        java.io.File bpmn = new java.io.File(FloodOSServer.resolveProjectRoot(), "infra/bpmn");
         FloodDataStore store = new FloodDataStore(new ImmutableAuditLedger(), new SeaweedS3StorageService(), new BpmnWorkflowEngine(bpmn));
         store.malwareScanner = scanner;
-        return new FloodOpsService(store);
+        return new FloodOSService(store);
     }
 
     private static Map<String, Object> incident(String evidenceDataUrl) {
@@ -276,7 +276,7 @@ final class ScannerTests {
         return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(content);
     }
 
-    private static boolean auditHas(FloodOpsService svc, String action) {
+    private static boolean auditHas(FloodOSService svc, String action) {
         return svc.getStore().auditLedger.listRecentByTenant("ORG_HN_PILOT_01", 100).stream().anyMatch(r -> action.equals(r.get("action")));
     }
 
@@ -287,7 +287,7 @@ final class ScannerTests {
 
         test("infected evidence is rejected with 422; nothing is stored, no incident is created, the block is audited", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 1 << 20));
+                FloodOSService svc = newService(scannerFor(f, 3000, 1 << 20));
                 int objectsBefore = svc.getStore().s3Storage.listByTenant("ORG_HN_PILOT_01").size();
                 String statusBefore = svc.getStore().vehicles.get("V01").status;
                 HttpResult r = svc.reportFieldIncident(coord, incident(dataUrl(eicar().getBytes(StandardCharsets.US_ASCII))));
@@ -303,7 +303,7 @@ final class ScannerTests {
         });
         test("an infected photo on a citizen's flood report is rejected with 422 and no report is created", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 1 << 20));
+                FloodOSService svc = newService(scannerFor(f, 3000, 1 << 20));
                 int reportsBefore = svc.getStore().reports.size();
                 Map<String, Object> b = new LinkedHashMap<>();
                 b.put("lat", 20.9665); b.put("lng", 105.8712); b.put("depth_cm", 40); b.put("need_type", "EVACUATION");
@@ -318,14 +318,14 @@ final class ScannerTests {
         });
         test("only images are accepted as evidence (415), before any scan", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 1 << 20));
+                FloodOSService svc = newService(scannerFor(f, 3000, 1 << 20));
                 equal(415, svc.reportFieldIncident(coord, incident("data:application/pdf;base64," + Base64.getEncoder().encodeToString("%PDF".getBytes(StandardCharsets.US_ASCII)))).status(), "pdf");
                 equal(0, f.connections.get(), "scanner untouched");
             }
         });
         test("clean evidence is accepted and stored", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 1 << 20));
+                FloodOSService svc = newService(scannerFor(f, 3000, 1 << 20));
                 HttpResult r = svc.reportFieldIncident(coord, incident(dataUrl("jpeg bytes".getBytes(StandardCharsets.UTF_8))));
                 equal(201, r.status(), "accepted");
                 equal(1, svc.getStore().incidents.size(), "incident created");
@@ -333,7 +333,7 @@ final class ScannerTests {
             }
         });
         test("scanner down -> 503 fail-closed: not stored, no incident, audited", () -> {
-            FloodOpsService svc = newService(MalwareScanner.forEndpoint("127.0.0.1", 1, 500, 1 << 20));
+            FloodOSService svc = newService(MalwareScanner.forEndpoint("127.0.0.1", 1, 500, 1 << 20));
             HttpResult r = svc.reportFieldIncident(coord, incident(dataUrl("jpeg".getBytes(StandardCharsets.UTF_8))));
             equal(503, r.status(), "status");
             equal("MALWARE_SCANNER_UNAVAILABLE", r.body().get("error"), "error code");
@@ -342,7 +342,7 @@ final class ScannerTests {
         });
         test("malformed evidence is a 400 and never reaches the scanner", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 1 << 20));
+                FloodOSService svc = newService(scannerFor(f, 3000, 1 << 20));
                 for (String bad : new String[]{"data:text/plain,not-base64-at-all", "@@@not base64@@@", "data:image/jpeg;base64"}) {
                     equal(400, svc.reportFieldIncident(coord, incident(bad)).status(), "input: " + bad);
                 }
@@ -352,21 +352,21 @@ final class ScannerTests {
         });
         test("evidence above the size limit is a 413", () -> {
             try (FakeClamd f = new FakeClamd()) {
-                FloodOpsService svc = newService(scannerFor(f, 3000, 100));
+                FloodOSService svc = newService(scannerFor(f, 3000, 100));
                 equal(413, svc.reportFieldIncident(coord, incident(dataUrl(new byte[101]))).status(), "too large");
                 equal(0, f.connections.get(), "scanner untouched");
             }
         });
         test("an incident without any attachment does not need the scanner", () -> {
-            FloodOpsService svc = newService(MalwareScanner.forEndpoint("127.0.0.1", 1, 500, 1 << 20));   // would be unreachable
+            FloodOSService svc = newService(MalwareScanner.forEndpoint("127.0.0.1", 1, 500, 1 << 20));   // would be unreachable
             equal(201, svc.reportFieldIncident(coord, incident(null)).status(), "no upload, no scan");
         });
         test("with scanning disabled (standalone dev) uploads are accepted unscanned", () -> {
-            FloodOpsService svc = newService(MalwareScanner.disabled());
+            FloodOSService svc = newService(MalwareScanner.disabled());
             equal(201, svc.reportFieldIncident(coord, incident(dataUrl("anything".getBytes(StandardCharsets.UTF_8)))).status(), "accepted");
         });
         test("health exposes scanner status", () -> {
-            FloodOpsService svc = newService(MalwareScanner.disabled());
+            FloodOSService svc = newService(MalwareScanner.disabled());
             Map<String, Object> st = svc.getStore().malwareScanner.status();
             for (String k : new String[]{"mode", "status", "policy", "scanned", "infected", "scan_unavailable", "max_bytes"}) {
                 isTrue(st.containsKey(k), "field " + k);

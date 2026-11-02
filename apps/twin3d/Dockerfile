@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 #
 # Build context is ./apps: the twin reuses the Tier-1 API client, auth and pure helpers of apps/web by relative import.
 

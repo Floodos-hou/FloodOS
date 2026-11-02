@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 OpenAgriOS Contributors
+# Copyright 2026 FloodOS Contributors
 #
-# Full-stack integration test of OpenDXOS + Hanoi FloodOps on the REAL Docker stack:
+# Full-stack integration test of FloodOS (core platform + flood-response application) on the REAL Docker stack:
 # APISIX -> Keycloak (PKCE) -> Core API -> PostgreSQL (row-level security) -> Flowable -> SeaweedFS -> ClamAV
 # -> Mosquitto/ingestor -> Kafka -> Parquet/DuckDB. Nothing is mocked.
 set -euo pipefail
 
 echo "============================================================================"
-echo "OPENDXOS / HANOI FLOODOPS - FULL-STACK CONTAINER INTEGRATION TEST RUNNER"
+echo "FLOODOS / HANOI FLOODOS - FULL-STACK CONTAINER INTEGRATION TEST RUNNER"
 echo "============================================================================"
 
 DC="docker compose -f compose.yaml"
 GW="http://localhost:9080"
 REDIRECT_ENC="http%3A%2F%2Flocalhost%3A9080%2Fauth%2Fcallback"
 REDIRECT="http://localhost:9080/auth/callback"
-PASSWORD="123456"   # development password of the demo realm (infra/keycloak/openagrios-realm.json)
+PASSWORD="123456"   # development password of the demo realm (infra/keycloak/floodos-realm.json)
 
 cleanup() {
     echo "============================================================================"
@@ -40,10 +40,10 @@ fail() { echo "[FAIL] $1"; exit 1; }
 expect() { # description actual expected
     if [ "$2" = "$3" ]; then echo "    [OK] $1"; else echo "    got '$2' but expected '$3'"; fail "$1"; fi
 }
-psql_q() { $DC exec -T postgres psql -U openagrios -d openagrios_db -At -c "$1" | tr -d '\r'; }
+psql_q() { $DC exec -T postgres psql -U floodos -d floodos_db -At -c "$1" | tr -d '\r'; }
 # Runs SQL as the NON-superuser application role with an explicit RLS session (what the core API does per request).
 rls() { # org role user sql
-    $DC exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A \
+    $DC exec -T postgres psql -U floodos_app -d floodos_db -q -t -A \
         -c "SET LOCAL app.current_org_id='$1'; SET LOCAL app.current_user_role='$2'; SET LOCAL app.current_user_id='$3'; $4" | tail -n 1 | tr -d '\r' | xargs
 }
 jget() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null; }
@@ -86,18 +86,18 @@ wait_for() { # description tries command...
     done
     fail "$what never became ready"
 }
-wait_for "PostgreSQL" 30 $DC exec -T postgres pg_isready -U openagrios -d openagrios_db
-wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/openagrios/.well-known/openid-configuration
+wait_for "PostgreSQL" 30 $DC exec -T postgres pg_isready -U floodos -d floodos_db
+wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/floodos/.well-known/openid-configuration
 wait_for "Flowable REST" 40 curl -sf -u rest-admin:test http://localhost:8081/flowable-rest/service/repository/deployments
 wait_for "Core API" 60 curl -sf http://localhost:8000/api/v1/health
 wait_for "APISIX gateway" 40 curl -sf "$GW/api/v1/health"
 
-# A Keycloak container created before the FloodOps realm existed still holds the old realm (it is imported at first start
+# A Keycloak container created before the FloodOS realm existed still holds the old realm (it is imported at first start
 # only): detect that and recreate the identity-bound services so the run needs no manual step.
 if ! pkce_login reporter_lan >/dev/null 2>&1; then
-    echo "Keycloak has no FloodOps users yet: recreating keycloak, core-api and apisix so the realm is re-imported..."
+    echo "Keycloak has no FloodOS users yet: recreating keycloak, core-api and apisix so the realm is re-imported..."
     $DC up -d --force-recreate keycloak core-api apisix >/dev/null
-    wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/openagrios/.well-known/openid-configuration
+    wait_for "Keycloak realm" 60 curl -sf http://localhost:8080/realms/floodos/.well-known/openid-configuration
     wait_for "Core API" 60 curl -sf http://localhost:8000/api/v1/health
     wait_for "APISIX gateway" 40 curl -sf "$GW/api/v1/health"
 fi
@@ -124,13 +124,13 @@ done
 SCHEMA_RUNS=0
 for run in 1 2; do
     # MSYS_NO_PATHCONV keeps Git-Bash on Windows from rewriting the container path
-    MSYS_NO_PATHCONV=1 $DC exec -T postgres psql -v ON_ERROR_STOP=1 -q -U openagrios -d openagrios_db -f /docker-entrypoint-initdb.d/02-schema.sql >/dev/null 2>&1 && SCHEMA_RUNS=$((SCHEMA_RUNS + 1))
+    MSYS_NO_PATHCONV=1 $DC exec -T postgres psql -v ON_ERROR_STOP=1 -q -U floodos -d floodos_db -f /docker-entrypoint-initdb.d/02-schema.sql >/dev/null 2>&1 && SCHEMA_RUNS=$((SCHEMA_RUNS + 1))
 done
 expect "schema.sql re-applies cleanly twice (idempotent migration)" "$SCHEMA_RUNS" "2"
 for t in flood_zones flood_reports rescue_teams rescue_vehicles dispatch_orders field_incidents report_resolutions safe_shelters gauge_stations audit_records; do
     expect "row-level security is enabled and FORCED on $t" "$(psql_q "SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname='$t';")" "t"
 done
-expect "the application role is not a superuser and cannot bypass RLS" "$(psql_q "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='openagrios_app';")" "f"
+expect "the application role is not a superuser and cannot bypass RLS" "$(psql_q "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='floodos_app';")" "f"
 pass "Assertion 2: single-source schema verified (all tables, idempotent re-apply, RLS forced, least-privilege app role)."
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -185,10 +185,10 @@ expect "a field team without orders sees no report" "$(rls ORG_HN_PILOT_01 FIELD
 expect "the resource manager sees the fleet but no citizen report" "$(rls ORG_HN_PILOT_01 RESOURCE_MANAGER usr_resource_giang "SELECT (SELECT count(*) FROM flood_reports)::text || '/' || (SELECT count(*) FROM rescue_vehicles WHERE organization_id='ORG_HN_PILOT_01');")" "0/5"
 expect "an unknown role sees nothing (deny by default)" "$(rls ORG_HN_PILOT_01 BOGUS usr_reporter_lan "SELECT count(*) FROM flood_reports;")" "0"
 expect "an empty session sees nothing (deny by default)" "$(rls '' '' '' "SELECT count(*) FROM flood_reports;")" "0"
-INSERT_OUT=$($DC exec -T postgres psql -U openagrios_app -d openagrios_db -q -t -A -c "SET LOCAL app.current_org_id='ORG_HN_PILOT_01'; SET LOCAL app.current_user_role='REPORTER'; SET LOCAL app.current_user_id='usr_reporter_hung'; INSERT INTO flood_reports(report_id,organization_id,zone_id,reporter_user_id,lat,lng,depth_cm,need_type,correlation_id) VALUES ('FR-E2E-FAKE','ORG_HN_PILOT_01','Z01','usr_reporter_lan',20.9,105.8,10,'PUMPING','c');" 2>&1 || true)
+INSERT_OUT=$($DC exec -T postgres psql -U floodos_app -d floodos_db -q -t -A -c "SET LOCAL app.current_org_id='ORG_HN_PILOT_01'; SET LOCAL app.current_user_role='REPORTER'; SET LOCAL app.current_user_id='usr_reporter_hung'; INSERT INTO flood_reports(report_id,organization_id,zone_id,reporter_user_id,lat,lng,depth_cm,need_type,correlation_id) VALUES ('FR-E2E-FAKE','ORG_HN_PILOT_01','Z01','usr_reporter_lan',20.9,105.8,10,'PUMPING','c');" 2>&1 || true)
 echo "$INSERT_OUT" | grep -qi "row-level security" || fail "Assertion 4: a reporter could write a report in someone else's name (got: $INSERT_OUT)."
 echo "    [OK] a reporter cannot insert a report owned by another user (row-level security rejects it)"
-OVERLAP_OUT=$($DC exec -T postgres psql -U openagrios -d openagrios_db -q -t -A -c "INSERT INTO dispatch_orders(order_id,organization_id,report_id,reporter_user_id,zone_id,vehicle_id,team_id,start_time,end_time,correlation_id,created_by) VALUES ('ORD-E2E-CLASH','ORG_HN_PILOT_01','FR-0001','usr_reporter_lan','Z01','V01','T03',now(),now()+interval '1 hour','c','usr_dispatcher_hoa');" 2>&1 || true)
+OVERLAP_OUT=$($DC exec -T postgres psql -U floodos -d floodos_db -q -t -A -c "INSERT INTO dispatch_orders(order_id,organization_id,report_id,reporter_user_id,zone_id,vehicle_id,team_id,start_time,end_time,correlation_id,created_by) VALUES ('ORD-E2E-CLASH','ORG_HN_PILOT_01','FR-0001','usr_reporter_lan','Z01','V01','T03',now(),now()+interval '1 hour','c','usr_dispatcher_hoa');" 2>&1 || true)
 echo "$OVERLAP_OUT" | grep -qi "exclusion constraint" || fail "Assertion 4: the database let two active orders share vehicle V01 (got: $OVERLAP_OUT)."
 echo "    [OK] the database itself refuses a double-booked vehicle (GiST exclusion constraint)"
 pass "Assertion 4: PostgreSQL row-level security and exclusion constraints verified per role, tenant and session."
@@ -206,11 +206,11 @@ CONTENT_DEPLOYMENTS=$(curl -s -u rest-admin:test "http://localhost:8081/flowable
 echo "    [OK] $CONTENT_DEPLOYMENTS deployment(s) named after the file content hash (checked again after the core restart)"
 INSTANCES=$(curl -s -u rest-admin:test "http://localhost:8081/flowable-rest/service/runtime/process-instances?processDefinitionKey=flood_report_lifecycle" | jget "d['total']")
 [ "${INSTANCES:-0}" -ge 1 ] || fail "Assertion 5: no flood_report_lifecycle instance is running in Flowable."
-pass "Assertion 5: Flowable REST has the FloodOps process definitions and live instances ($INSTANCES running)."
+pass "Assertion 5: Flowable REST has the FloodOS process definitions and live instances ($INSTANCES running)."
 
 # ---------------------------------------------------------------------------------------------------------------
 # Assertion 6: the golden path through the gateway, one real identity per role
-echo "Executing the FloodOps golden path across APISIX with real Keycloak tokens..."
+echo "Executing the FloodOS golden path across APISIX with real Keycloak tokens..."
 expect "reporter_lan state is scoped" "$(gw GET /state "$T_LAN")" "200"
 S_LAN=$(body)
 echo "$S_LAN" | grep -q '"organization_name"' || fail "Assertion 6: protected state did not arrive through APISIX introspection."
@@ -325,32 +325,32 @@ for e in json.load(sys.stdin)['entities']:
     if e['id'].endswith(':V03'):
         print(e['dataSource']['value'])" 2>/dev/null; }
 ORG=ORG_HN_PILOT_01
-$DC exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t "openagrios/$ORG/vehicles/V03/telemetry" -m '{}' >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted an anonymous publish."
-mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" '{}' device wrong-password >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted a wrong password."
+$DC exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t "floodos/$ORG/vehicles/V03/telemetry" -m '{}' >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted an anonymous publish."
+mqtt_pub "floodos/$ORG/vehicles/V03/telemetry" '{}' device wrong-password >/dev/null 2>&1 && fail "Assertion 8: Mosquitto accepted a wrong password."
 echo "    [OK] the broker refuses anonymous and wrong-password clients"
 # MQTT 3.1.1 drops a denied PUBLISH silently (the client still gets a PUBACK), so the exit code proves nothing here:
 # check the ACL the broker actually loaded instead.
 ACL=$(MSYS_NO_PATHCONV=1 $DC exec -T mosquitto cat /mosquitto/config/acl)
-echo "$ACL" | grep -q 'topic write openagrios/+/vehicles/+/telemetry' || fail "Assertion 8: the device may not write the vehicles topic family."
-echo "$ACL" | grep -q 'topic write openagrios/+/gauges/+/telemetry' || fail "Assertion 8: the device may not write the gauges topic family."
-echo "$ACL" | grep -q 'topic read openagrios/+/vehicles/+/telemetry' || fail "Assertion 8: the ingestor may not read the vehicles topic family."
+echo "$ACL" | grep -q 'topic write floodos/+/vehicles/+/telemetry' || fail "Assertion 8: the device may not write the vehicles topic family."
+echo "$ACL" | grep -q 'topic write floodos/+/gauges/+/telemetry' || fail "Assertion 8: the device may not write the gauges topic family."
+echo "$ACL" | grep -q 'topic read floodos/+/vehicles/+/telemetry' || fail "Assertion 8: the ingestor may not read the vehicles topic family."
 echo "$ACL" | grep -qi 'machines' && fail "Assertion 8: the former machines/ topic family is still in the broker ACL."
 echo "    [OK] the broker ACL grants write to the two new topic families only (the former machines/ family is gone)"
 LAT0=$(twin_lat); NEW_LAT=$(python3 -c "print(round($LAT0 + 0.0010, 6))")
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":$NEW_LAT,\"lon\":105.86,\"fuel_pct\":61.5,\"speed_kmh\":6.2,\"source\":\"SIMULATOR\"}"
+mqtt_pub "floodos/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":$NEW_LAT,\"lon\":105.86,\"fuel_pct\":61.5,\"speed_kmh\":6.2,\"source\":\"SIMULATOR\"}"
 SEEN=""; for i in $(seq 1 15); do SEEN=$(twin_lat); [ "$SEEN" = "$NEW_LAT" ] && break; sleep 2; done
 expect "a labelled sample moves the digital twin" "$SEEN" "$NEW_LAT"
 expect "the twin labels the position as SIMULATOR" "$(twin_field)" "SIMULATOR"
 # rejected samples must change nothing
-mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5}"
-mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"official\"}"
-mqtt_pub "openagrios/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":999,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
-mqtt_pub "openagrios/ORG_HN_PILOT_02/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
+mqtt_pub "floodos/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5}"
+mqtt_pub "floodos/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"official\"}"
+mqtt_pub "floodos/$ORG/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":999,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
+mqtt_pub "floodos/ORG_HN_PILOT_02/vehicles/V03/telemetry" "{\"ts\":\"$TS\",\"lat\":21.5,\"lon\":105.86,\"fuel_pct\":61.5,\"source\":\"SIMULATOR\"}"
 sleep 6
 expect "samples with no/unknown source, out of range, or from the wrong tenant change nothing" "$(twin_lat)" "$NEW_LAT"
 # gauge: a reading moves the zone's water level and risk, labelled
-mqtt_pub "openagrios/$ORG/gauges/G03/telemetry" "{\"ts\":\"$TS\",\"level_cm\":130,\"source\":\"SIMULATOR\"}"
+mqtt_pub "floodos/$ORG/gauges/G03/telemetry" "{\"ts\":\"$TS\",\"level_cm\":130,\"source\":\"SIMULATOR\"}"
 Z=""; for i in $(seq 1 15); do gw GET /state "$T_HOA" >/dev/null; Z=$(body | jget "[z['water_level_cm'] for z in d['zones'] if z['zone_id']=='Z03'][0]"); [ "$Z" = "130.0" ] && break; sleep 2; done
 expect "a gauge reading updates the zone water level" "$Z" "130.0"
 expect "  labelled with its source" "$(body | jget "[z['water_level_source'] for z in d['zones'] if z['zone_id']=='Z03'][0]")" "SIMULATOR"
@@ -415,7 +415,7 @@ pass "Assertion 11: state, workflow mirror and hash chain survive a core restart
 PORTAL=$(curl -s -m 20 "$GW/" || true)
 echo "$PORTAL" | grep -q 'id="root"' || fail "Assertion 12: the operations portal is not served at /."
 expect "the API stays token-protected next to the static front-ends" "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/v1/state")" "401"
-echo "[WARN] apps/web and apps/twin3d still target the former rice-harvest API: they are served, but they are NOT FloodOps front-ends yet."
+echo "[WARN] apps/web and apps/twin3d still target the former rice-harvest API: they are served, but they are NOT FloodOS front-ends yet."
 pass "Assertion 12: static front-ends are served and the API remains protected."
 
 echo "[5/5] All full-stack container integration assertions PASSED successfully!"

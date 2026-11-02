@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, LockKeyhole, Tractor, Wheat, Map as MapIcon, ShieldCheck, UserCheck } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { DEMO_PASSWORD } from '../../demo/demoScript';
-import { OpenAgriLogo } from '../common/OpenAgriLogo';
+import { FloodOsLogo } from '../common/FloodOsLogo';
 
 const FEATURES = [
   { icon: Wheat, title: 'Bản đồ số & Giám sát nông nghiệp 3D', text: 'Theo dõi sinh trưởng, mô hình hóa thửa ruộng 3D và đa dạng hóa cây trồng.' },
@@ -77,7 +77,7 @@ export const LoginPage: React.FC = () => {
     <main className="grid min-h-screen lg:grid-cols-[1.1fr_1fr] bg-slate-50">
       {/* Hero Left Column */}
       <section className="relative overflow-hidden bg-gradient-to-b from-emerald-950 via-emerald-900 to-emerald-800 px-8 pb-48 pt-12 text-emerald-50 sm:px-14 lg:pb-12 lg:pt-16 shadow-2xl">
-        <OpenAgriLogo size={52} showText textVariant="white" subtitle="Cổng Điều Hành Nông Nghiệp Mở Quốc Gia" />
+        <FloodOsLogo size={52} showText textVariant="white" subtitle="Cổng Điều Hành Nông Nghiệp Mở Quốc Gia" />
 
         <div className="mt-12 max-w-xl">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1 text-xs font-semibold text-amber-300 ring-1 ring-white/15 mb-4">

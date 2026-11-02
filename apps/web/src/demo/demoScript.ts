@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 /**
  * Demo storyline for the Tier-2 web app. Only active when the image is built with VITE_DEMO_MODE=true

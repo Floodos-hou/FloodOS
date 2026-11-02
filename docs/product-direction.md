@@ -1,21 +1,21 @@
-# OpenDXOS — Định hướng sản phẩm và ứng dụng minh họa
+# FloodOS — Định hướng sản phẩm và ứng dụng minh họa
 
 ## Tên gọi
 
-- **Tên nền tảng/repo trong tài liệu:** OpenDXOS.
+- **Tên dự án (nền tảng và ứng dụng):** FloodOS.
 - **Tên đề tài OLP:** Xây dựng Hệ điều hành Chuyển đổi số bằng Công nghệ Lõi nguồn mở (DX-OS Open-Core).
-- **Tên ứng dụng minh họa:** Hanoi FloodOps.
+- **Ứng dụng minh họa:** điều phối ứng phó ngập lụt cho một địa bàn thí điểm tại Hà Nội, chạy trên lõi FloodOS.
 - **Phạm vi ứng dụng:** điều phối ứng phó ngập lụt cho một địa bàn thí điểm tại Hà Nội (dữ liệu mô phỏng).
 
-OpenDXOS là nền tảng lõi dùng chung. Hanoi FloodOps là ứng dụng nghiệp vụ minh họa sử dụng năng lực của nền tảng; ứng dụng không thay thế hay đổi trọng tâm đề tài dự thi.
+Lõi FloodOS là nền tảng dùng chung. Ứng dụng điều phối ngập lụt là ứng dụng nghiệp vụ minh họa sử dụng năng lực của lõi; ứng dụng không thay thế hay đổi trọng tâm đề tài dự thi.
 
 ## Mô hình ba tầng
 
 1. **Tầng 1 — Headless Core PaaS:** dịch vụ dùng chung chạy không giao diện, gồm định danh/SSO, API Gateway, dữ liệu có cấu trúc và tệp, workflow, truyền sự kiện, kiểm toán và vận hành.
 2. **Tầng 2 — Không gian năng lực số H-P-D-I:** trải nghiệm người dùng và các năng lực dùng chung để tiếp nhận công việc, theo dõi quy trình, xem dữ liệu/bản đồ và hỗ trợ quyết định.
-3. **Tầng 3 — Ứng dụng nghiệp vụ:** các module chuyên ngành cắm-rút. Hanoi FloodOps là ứng dụng minh họa đầu tiên; các ứng dụng nông nghiệp, thương mại hoặc logistics có thể được bổ sung sau.
+3. **Tầng 3 — Ứng dụng nghiệp vụ:** các module chuyên ngành cắm-rút. Ứng dụng điều phối ngập lụt là ứng dụng minh họa đầu tiên; các ứng dụng nông nghiệp, thương mại hoặc logistics có thể được bổ sung sau.
 
-Giao diện của Hanoi FloodOps được cung cấp qua không gian năng lực Tầng 2 và tiêu thụ các API/dịch vụ Tầng 1. Ranh giới này cần được thể hiện trong cấu trúc mã và khi trình bày.
+Giao diện của ứng dụng điều phối ngập lụt được cung cấp qua không gian năng lực Tầng 2 và tiêu thụ các API/dịch vụ Tầng 1. Ranh giới này cần được thể hiện trong cấu trúc mã và khi trình bày.
 
 ## Luồng nghiệp vụ mục tiêu
 
@@ -50,7 +50,7 @@ Luồng demo nên thể hiện liên tục từ tin báo → xác minh → đi�
 - Áp dụng lọc quyền ở API/RLS trước khi gửi dữ liệu bản đồ cho trình duyệt. Ẩn marker bằng CSS không phải biện pháp phân quyền.
 - Trạng thái “địa bàn an toàn” chỉ được hiển thị khi dữ liệu đủ mới và có nguồn phù hợp; nếu dữ liệu cũ hoặc mất kết nối, phải thể hiện là chưa xác định.
 
-Các luồng và màn hình chi tiết cần được chốt thành tiêu chí nghiệm thu cùng với RBAC/RLS, BPMN và API. Xem [yêu cầu UX cho bản demo](floodops-demo-ux.md); đây là đích thiết kế, không phải bằng chứng triển khai.
+Các luồng và màn hình chi tiết cần được chốt thành tiêu chí nghiệm thu cùng với RBAC/RLS, BPMN và API. Xem [yêu cầu UX cho bản demo](floodos-demo-ux.md); đây là đích thiết kế, không phải bằng chứng triển khai.
 
 ## Dữ liệu nghiệp vụ dự kiến
 
@@ -65,13 +65,13 @@ Không thay schema bằng cách đổi tên hàng loạt `fields` thành `flood_
 
 ## Tình trạng mã nguồn hiện tại
 
-Backend đã được chuyển từ nguyên mẫu thu hoạch lúa sang FloodOps (mô hình, API, BPMN, RBAC/RLS, seed, telemetry, kiểm thử, Postman). Chi tiết và trạng thái từng hạng mục: [README, mục 3](../README.md).
+Backend đã được chuyển từ nguyên mẫu thu hoạch lúa sang FloodOS (mô hình, API, BPMN, RBAC/RLS, seed, telemetry, kiểm thử, Postman). Chi tiết và trạng thái từng hạng mục: [README, mục 3](../README.md).
 
-**Còn thiếu và được ghi rõ là chưa làm:** giao diện FloodOps (`apps/web` và `apps/twin3d` vẫn là giao diện cũ không khớp API mới), hoàn tất user task Flowable qua REST, giám sát Prometheus/Grafana, GitOps/ArgoCD, triển khai Internet, quản trị đơn vị, hàng đợi ngoại tuyến, thành phần AI, dữ liệu quan trắc thật, định tuyến thật.
+**Còn thiếu và được ghi rõ là chưa làm:** giao diện FloodOS (`apps/web` và `apps/twin3d` vẫn là giao diện cũ không khớp API mới), hoàn tất user task Flowable qua REST, giám sát Prometheus/Grafana, GitOps/ArgoCD, triển khai Internet, quản trị đơn vị, hàng đợi ngoại tuyến, thành phần AI, dữ liệu quan trắc thật, định tuyến thật.
 
 ## Lộ trình còn lại
 
-1. Làm giao diện FloodOps theo [yêu cầu UX](floodops-demo-ux.md): cockpit theo vai trò, bản đồ có nhãn nguồn dữ liệu, trạng thái tải/lỗi/rỗng/dữ liệu cũ, thao tác một tay trên điện thoại.
+1. Làm giao diện FloodOS theo [yêu cầu UX](floodos-demo-ux.md): cockpit theo vai trò, bản đồ có nhãn nguồn dữ liệu, trạng thái tải/lỗi/rỗng/dữ liệu cũ, thao tác một tay trên điện thoại.
 2. Hoàn tất user task Flowable qua REST để trạng thái tiến trình do chính Flowable giữ.
 3. Giám sát và tự phục hồi có bằng chứng (Prometheus/Grafana, kiểm thử tắt/bật container), GitOps.
 4. Triển khai Internet với bí mật thật, đổi realm demo, bật MFA.
@@ -83,5 +83,5 @@ Backend đã được chuyển từ nguyên mẫu thu hoạch lúa sang FloodOps
 - RLS chặn truy cập chéo giữa các đơn vị và người dùng đúng theo chính sách đã mô tả.
 - Điều phối có kiểm tra xung đột và có trạng thái không tìm được nguồn lực phù hợp.
 - Dữ liệu bản đồ/telemetry có nhãn nguồn và thời điểm; dữ liệu simulator được nhận diện là mô phỏng.
-- Cùng một stack có thể được tái sử dụng bởi ứng dụng khác mà không đưa quy tắc FloodOps vào Headless Core.
+- Cùng một stack có thể được tái sử dụng bởi ứng dụng khác mà không đưa quy tắc FloodOS vào Headless Core.
 - Tài liệu, demo và code mô tả cùng một trạng thái triển khai; các tính năng chưa làm được ghi là lộ trình.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 export type UserRole = 'COORDINATOR' | 'FARMER' | 'OPERATOR' | 'MACHINE_OWNER' | 'REPAIR_TEAM' | 'PLATFORM_ADMIN';
 

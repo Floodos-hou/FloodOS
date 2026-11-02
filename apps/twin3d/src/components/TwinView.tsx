@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 OpenAgriOS Contributors
+// Copyright 2026 FloodOS Contributors
 
 import React, { useEffect, useRef } from 'react';
 import { Twin, type BasemapInfo, type Pick, type TwinInput } from '../scene/twin';
