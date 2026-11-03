@@ -39,12 +39,21 @@ jobs:
         find core apps tests -name "*.java" > sources.txt
         javac -encoding UTF-8 -d target/classes @sources.txt
 
-    - name: Install Frontend Dependencies & Run Web Tests
-      run: |
-        npm --prefix apps/web ci
-        npm --prefix apps/web run test
-        npm --prefix apps/web run test:ui
-        npm --prefix apps/web run build
+    - name: Install Frontend Dependencies
+      working-directory: apps/web
+      run: npm ci
+
+    - name: Run Web Logic Tests
+      working-directory: apps/web
+      run: npm run test
+
+    - name: Run Web UI Workspace Tests
+      working-directory: apps/web
+      run: npm run test:ui
+
+    - name: Build Web Application
+      working-directory: apps/web
+      run: npm run build
 
     - name: Run Unit Tests (Java + Python, incl. DuckDB/Parquet round-trips)
       run: bash tests/run_unit_tests.sh
