@@ -96,39 +96,9 @@ FloodOS tuân thủ tuyệt đối quy tắc **tách biệt ranh giới** theo �
 
 
 
-```mermaid
-flowchart TD
-    subgraph T3 ["TẦNG 3 — ỨNG DỤNG NGHIỆP VỤ (Domain Applications)"]
-        FO["🌊 apps/floodos — Ứng dụng Điều phối ứng phó ngập lụt"]
-        TR["🔍 apps/traceability — Cổng truy xuất vụ việc công khai & Kiểm chứng SHA-256"]
-    end
-
-    subgraph T2 ["TẦNG 2 — KHÔNG GIAN NĂNG LỰC H-P-D-I"]
-        WEB["💻 apps/web — Trung tâm tác chiến số (React 19, MapLibre GL, TailwindCSS)"]
-        TWIN["🌐 apps/twin3d — Bản sao số 3D (Three.js, WebGL)"]
-    end
-
-    subgraph T1 ["TẦNG 1 — NỀN TẢNG DỊCH VỤ LÕI HEADLESS (Domain-Neutral Core PaaS)"]
-        GW["🛡️ APISIX Gateway (Zero-Trust, Token Introspection, Chặn /internal/*)"]
-        IAM["🔑 Keycloak (OIDC, PKCE RFC 7636/9700, Đăng ký quyền động)"]
-        WF["📋 Flowable BPMN 2.0 (Khởi tạo tiến trình, State Mirror Idempotent)"]
-        DS["⚙️ Core Services (PostgreSQL RLS, GiST Exclude, Sổ cái SHA-256, ClamAV, Kafka)"]
-        DB[(🐘 PostgreSQL 16 — RLS Cưỡng bức, Schema Idempotent)]
-        LAKE["🧊 Hồ dữ liệu lạnh: Kafka → Parquet trên SeaweedFS S3 → DuckDB"]
-        OT["📡 Mosquitto MQTT → Ingestor (SIMULATOR/DEVICE) → NGSI-LD"]
-    end
-
-    WEB -->|REST / PKCE| GW
-    TWIN -->|REST| GW
-    TR -->|Read-only| LAKE
-    GW --> IAM
-    GW --> FO
-    FO --> WF
-    FO --> DS
-    DS --> DB
-    DS --> LAKE
-    OT --> FO
-```
+<p align="center">
+  <img src="docs/assets/FloodOS_Kien_truc_cuu_ho.svg" alt="Kien truc FloodOS DX-OS Open-Core dieu phoi ung pho ngap lut do thi" width="100%">
+</p>
 
 ### 🔬 Hiện thực hóa 4 nguyên lý kỹ thuật cốt lõi
 
