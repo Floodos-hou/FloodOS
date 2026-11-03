@@ -101,7 +101,7 @@ export const WelcomeBanner: React.FC<{ user: UserAccount; state: TacticalState }
 
           <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
             <AlertCircle className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-            <span>Khu vực giám sát thí điểm: <strong>Hà Nội</strong> (Hoàng Mai, Đống Đa, Thanh Trì, Nam Từ Liêm, Tây Hồ).</span>
+            <span>Khu vực giám sát thí điểm: <strong>Hà Nội</strong> (Dữ liệu không gian địa lý mô phỏng PCTT).</span>
           </div>
         </div>
 

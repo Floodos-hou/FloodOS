@@ -42,6 +42,17 @@ const BASEMAPS = {
     style: {
       version: 8,
       sources: {
+        carto_dark: {
+          type: 'raster',
+          tiles: [
+            'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+            'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+            'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          ],
+          tileSize: 256,
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+          maxzoom: 19,
+        },
         tactical_hanoi_base: {
           type: 'geojson',
           data: HANOI_TACTICAL_BASEMAP_GEOJSON,
@@ -53,6 +64,14 @@ const BASEMAPS = {
           type: 'background',
           paint: {
             'background-color': '#070d18',
+          },
+        },
+        {
+          id: 'carto-dark-tiles',
+          type: 'raster',
+          source: 'carto_dark',
+          paint: {
+            'raster-opacity': 0.88,
           },
         },
         {
@@ -444,7 +463,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       let m = existing.get(key);
       if (!m) {
         const el = document.createElement('div');
-        el.className = 'cursor-pointer transition-transform duration-200 hover:scale-110';
+        el.className = 'cursor-pointer transition-transform duration-200 hover:scale-110 hover:z-50 relative';
         const isBreakdown = v.status === 'BREAKDOWN';
         const isBoat = v.vehicle_type === 'RESCUE_BOAT';
         el.innerHTML = `
@@ -468,7 +487,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           </div>
         `;
         el.addEventListener('click', () => onSelect?.({ type: 'vehicle', data: v }));
-        m = new Marker({ element: el }).setLngLat([v.current_lng, v.current_lat]).addTo(currentMap);
+        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([v.current_lng, v.current_lat]).addTo(currentMap);
         existing.set(key, m);
       } else {
         m.setLngLat([v.current_lng, v.current_lat]);
@@ -483,7 +502,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       let m = existing.get(key);
       if (!m) {
         const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-110 transition';
+        el.className = 'cursor-pointer hover:scale-110 hover:z-50 transition relative';
         const isUrgent = r.priority === 'URGENT' || r.priority === 'CRITICAL';
         const isResolved = r.status === 'RESOLVED' || r.status === 'CLOSED';
         el.innerHTML = `
@@ -511,7 +530,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           </div>
         `;
         el.addEventListener('click', () => onSelect?.({ type: 'report', data: r }));
-        m = new Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(currentMap);
+        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([r.lng, r.lat]).addTo(currentMap);
         existing.set(key, m);
       } else {
         m.setLngLat([r.lng, r.lat]);
@@ -526,7 +545,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       let m = existing.get(key);
       if (!m) {
         const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-105 transition';
+        el.className = 'cursor-pointer hover:scale-105 hover:z-50 transition relative';
         el.innerHTML = `
           <div class="flex items-center gap-1.5 rounded-lg bg-emerald-950 border border-emerald-500/80 px-2 py-1 text-emerald-300 shadow-xl text-xs font-mono font-bold">
             <svg class="h-4 w-4 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -540,7 +559,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           </div>
         `;
         el.addEventListener('click', () => onSelect?.({ type: 'shelter', data: sh }));
-        m = new Marker({ element: el }).setLngLat([sh.lng, sh.lat]).addTo(currentMap);
+        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([sh.lng, sh.lat]).addTo(currentMap);
         existing.set(key, m);
       } else {
         m.setLngLat([sh.lng, sh.lat]);
@@ -555,14 +574,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       let m = existing.get(key);
       if (!m) {
         const el = document.createElement('div');
-        el.className = 'cursor-pointer hover:scale-105 transition';
+        el.className = 'cursor-pointer hover:scale-105 hover:z-50 transition relative';
         const isWarn = g.alert_state === 'WARNING' || g.alert_state === 'CRITICAL';
         el.innerHTML = `
           <div class="flex items-center gap-1.5 rounded-lg bg-slate-950 border px-2 py-1 shadow-xl text-xs font-mono font-bold ${
             isWarn ? 'border-red-500 text-red-300 bg-red-950/80 ring-2 ring-red-500/30' : 'border-cyan-500/70 text-cyan-300'
           }">
             <svg class="h-4 w-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
             </svg>
             <div class="flex flex-col leading-tight">
               <span class="text-[8px] uppercase tracking-wider text-slate-400">${g.station_id}</span>
@@ -571,7 +590,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           </div>
         `;
         el.addEventListener('click', () => onSelect?.({ type: 'gauge', data: g }));
-        m = new Marker({ element: el }).setLngLat([g.lng, g.lat]).addTo(currentMap);
+        m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([g.lng, g.lat]).addTo(currentMap);
         existing.set(key, m);
       } else {
         m.setLngLat([g.lng, g.lat]);
@@ -589,7 +608,38 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   return (
     <div className={`relative w-full overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950 ${heightClass} ${className} ${isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen min-h-screen' : ''}`}>
-      {/* Map Container - Zero Hacky CSS Filter */}
+            {/* Dark Theme Overrides for MapLibre Navigation and Attribution */}
+      <style>{`
+        .maplibregl-ctrl-group {
+          background-color: #0f172a !important;
+          border: 1px solid #334155 !important;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+          border-radius: 0.75rem !important;
+          overflow: hidden;
+        }
+        .maplibregl-ctrl-group button {
+          background-color: #0f172a !important;
+          border-bottom: 1px solid #1e293b !important;
+        }
+        .maplibregl-ctrl-group button:hover {
+          background-color: #1e293b !important;
+        }
+        .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+          filter: invert(1) brightness(1.6);
+        }
+        .maplibregl-ctrl-attrib {
+          background-color: rgba(15, 23, 42, 0.85) !important;
+          color: #94a3b8 !important;
+          border: 1px solid #334155 !important;
+          border-radius: 0.5rem !important;
+          padding: 2px 8px !important;
+          font-size: 10px !important;
+        }
+        .maplibregl-ctrl-attrib a {
+          color: #38bdf8 !important;
+        }
+      `}</style>
+{/* Map Container - Zero Hacky CSS Filter */}
       <div 
         ref={mapContainer} 
         className="h-full w-full bg-slate-950" 
