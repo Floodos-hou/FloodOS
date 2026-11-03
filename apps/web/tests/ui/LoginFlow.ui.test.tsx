@@ -41,7 +41,26 @@ const renderLogin = () => render(
   </AuthProvider>,
 );
 
+const signIn = (username: string, password: string) => {
+  fireEvent.change(screen.getByLabelText('Tên đăng nhập'), { target: { value: username } });
+  fireEvent.change(screen.getByLabelText('Mật khẩu'), { target: { value: password } });
+  fireEvent.click(screen.getByRole('button', { name: /^đăng nhập$/i }));
+};
+
 describe('login UI and PKCE workflow', () => {
+  it('starts with empty credentials: no username or password is pre-filled', () => {
+    renderLogin();
+    expect((screen.getByLabelText('Tên đăng nhập') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Mật khẩu') as HTMLInputElement).value).toBe('');
+  });
+
+  it('refuses to start PKCE with a blank form', () => {
+    renderLogin();
+    fireEvent.click(screen.getByRole('button', { name: /^đăng nhập$/i }));
+    expect(screen.getByRole('alert').textContent).toMatch(/nhập tên đăng nhập và mật khẩu/i);
+    expect(apiMocks.initPkceSession).not.toHaveBeenCalled();
+  });
+
   it('completes the username/password UI through authorize URL, code and token exchange', async () => {
     pkceMocks.createPkcePair.mockResolvedValue({ verifier: 'v'.repeat(43), challenge: 'challenge' });
     pkceMocks.randomUrlSafe.mockReturnValue('state-value');
@@ -54,12 +73,12 @@ describe('login UI and PKCE workflow', () => {
     });
 
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: /đăng nhập vào trung tâm tác chiến/i }));
+    signIn('dispatcher_hoa', 'secret-pass');
 
     await waitFor(() => expect(screen.getByLabelText('authentication-state').textContent).toBe('dispatcher_hoa'));
     expect(apiMocks.initPkceSession).toHaveBeenCalledOnce();
     expect(apiMocks.acquirePkceAuthCode).toHaveBeenCalledWith(expect.objectContaining({
-      username: 'dispatcher_hoa', password: '123456', code_challenge: 'challenge',
+      username: 'dispatcher_hoa', password: 'secret-pass', code_challenge: 'challenge',
       state: 'state-value', client_id: 'floodos-web',
     }));
     expect(apiMocks.exchangePkceToken).toHaveBeenCalledWith(expect.objectContaining({
@@ -73,7 +92,7 @@ describe('login UI and PKCE workflow', () => {
     apiMocks.initPkceSession.mockRejectedValue(new TypeError('Failed to fetch'));
 
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: /đăng nhập vào trung tâm tác chiến/i }));
+    signIn('dispatcher_hoa', 'secret-pass');
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByText('Failed to fetch')).toBeTruthy();

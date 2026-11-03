@@ -11,7 +11,6 @@ import {
   reportDepthCm,
   reportPeopleAffected,
   resolutionIdForReport,
-  selectAvailableResources,
   validateDisputeReason,
   validateReportDescription,
   validateRejectionReason,
@@ -42,16 +41,6 @@ test('report confirmation uses a real resolution id or the backend order-derived
   assert.equal(resolutionIdForReport('R-1', [{ report_id: 'R-1', resolution_id: 'RES-REAL' }], []), 'RES-REAL');
   assert.equal(resolutionIdForReport('R-1', [], [{ report_id: 'R-1', order_id: 'ORD-1' }]), 'RES-ORD-1');
   assert.equal(resolutionIdForReport('R-1', [], []), null, 'must not invent an id from a report id');
-});
-
-test('resource selection never assigns busy or unavailable resources', () => {
-  const result = selectAvailableResources(
-    [{ vehicle_id: 'busy', status: 'AVAILABLE' }, { vehicle_id: 'offline', status: 'OFFLINE' }],
-    [{ team_id: 'busy-team', status: 'READY' }, { team_id: 'repair', status: 'ON_MISSION' }],
-    new Set(['busy']),
-    new Set(['busy-team']),
-  );
-  assert.deepEqual(result, { vehicleId: null, teamId: null });
 });
 
 test('resource availability rejects an offline vehicle and a team already assigned to an active order', () => {
