@@ -7,16 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - 2026-11-03
+## [0.2.0] - 2026-11-03 — C2 Tactical Operations & Flood Response Overhaul
 
-### Added & Overhauled
+### 🌟 Major Highlights & Architectural Realization
 - **H-P-D-I Operational Portal**: Full-featured emergency operations frontend for 5 distinct roles (`DISPATCHER`, `REPORTER`, `FIELD_TEAM`, `RESOURCE_MANAGER`, `PLATFORM_ADMIN`).
-- **Tactical GIS Command Map**: OpenStreetMap integration with hardware-accelerated Dark Command theme, eliminating all watermarks and providing instant day/night toggle.
-- **Embedded Dispatcher Cockpit**: Real-time map alongside the incident dispatch queue, replacing tab switching.
+- **Tactical GIS Command Map**: OpenStreetMap integration with hardware-accelerated CARTO Dark Matter raster tiles, eliminating all watermarks and providing high-contrast night tactical mode.
+- **Embedded Dispatcher Cockpit**: 3-pane command layout (incident queue with SLA countdown | tactical GIS map with live markers | incident dossier & replanning radar) replacing multi-tab switching.
 - **Unified Command Login**: Streamlined OIDC PKCE RFC 7636 login form, removing redundant SSO buttons and demo persona selectors.
-- **Flowable BPMN Live Integration**: Real-time task completion across Flowable REST Engine v7.0.0 for SOP-01 and SOP-02.
-- **Multi-layer Test Suite**: Expanded to 433 automated checks across Java core, Acceptance, Python OLAP lake, and TypeScript UI workflows.
-- **Documentation & License Compliance**: Standardized Apache-2.0 SPDX license headers across all repository files; updated web endpoints to port 3000.
+- **Flowable BPMN 2.0 Live Integration**: Real-time task completion and state mirroring across Flowable REST Engine v7.0.0 for SOP-01 (Flood Report Lifecycle) and SOP-02 (Emergency Breakdown & Re-dispatch).
+- **Anti-Fabrication & Telemetry Hardening**:
+  - Removed all fabricated default values (`fuel_pct`, `health_pct`); missing metrics explicitly show "Chưa có dữ liệu".
+  - Replaced hardcoded district lists and fabricated leader names with live spatial zones and authenticated OIDC user identities.
+  - Replaced gauge station dollar sign with official hydrology wave icon.
+  - Corrected ready vehicle counter (`AVAILABLE`, `IDLE`, `READY`) to report 3/5 ready with semantic emerald badge.
+  - Field team progress bar starts strictly at 0% baseline.
+- **Mobile Responsive Operations (360x740 px)**: Optimized touch targets (≥48px) and mobile workflow for citizens and field rescue teams.
+- **Decoupled Legacy Prototypes**: Permanently purged `apps/twin3d`, severed `/twin/*` gateway route, and eliminated legacy data-transformation layers in the frontend API client.
+- **Multi-layer Test Suite Verification**: 400 automated checks passing across Java core, Acceptance, Python OLAP lake, and TypeScript UI workflows.
+- **Documentation & License Compliance**: Standardized Apache-2.0 SPDX license headers across all repository files; synchronized README and release notes with verified behavior.
 
 ## [0.1.0] - 2026-11-02
 
@@ -81,16 +89,11 @@ Consequences for an existing machine: Docker creates NEW `floodos_*` volumes; th
 - **Tests**: `tests/e2e_full_stack_test.sh` Assertion 11 verifies bus publish, Parquet objects in S3, DuckDB query, gateway protection and no host exposure.
 - **Licensing**: the broker was switched from Redpanda (BSL 1.1, not on the project's allowed-licence list) to Apache Kafka + Karapace (both Apache-2.0).
 
-### Tier-2 App #2: harvest map with 3D view (`apps/twin3d`, served under `/twin/`)
-- Main screen is a flat MapLibre map in the style of a delivery-tracking app: harvesters are live markers (smoothed, heading inferred from movement), fields are coloured by crop stage with the harvested share drawn as the exact share of the polygon's area, a role-filtered card list on the left, order-tracking style progress steps from the real assignment/request status (red when an incident occurs).
-- Clicking a machine or field opens a bottom card with a "Xem 3D" button; the 3D view (three.js) shows a more detailed harvester model, the extruded field and shadows at true scale on a three-layer tile ground (wide, around the fields, around the focused object), headlights when it is dark. Automatic, labelled fall back to a procedural ground when tiles cannot be fetched. Logarithmic depth buffer; ground layers ordered by `renderOrder` because log depth ignores polygon offset.
-- Real product behaviour only: normal credentials sign-in, no one-click role picker, no fake time-of-day buttons, no scripted incident or reset buttons; business actions stay in the operations portal. The first two prototypes of this app (cartoon farm game; free-roaming 3D scene) were discarded on the product owner's feedback.
-- Seed data fix: seeded polygons were about 20x larger than `area_ha`; `SpatialMatchingEngine.polygonForArea` now builds rectangles of the declared area (tests: area within 1% at several latitudes, seeded polygons within 2% of declared area and non-overlapping). Java unit tests: 155.
-- Infra: compose service `twin-app`, APISIX route `/twin`, own nginx config (ES-module worker served as JavaScript) and CSP (images and tile fetches allowed only from the single tile host); e2e Assertion 17 checks page, bundle, SPA fallback and CSP; e2e also waits for the gateway and stops the demo simulator before asserting telemetry.
-- Tests: 33 `node --test` tests on the pure logic (the geometry, tracker, crop and sky code was mutation-tested with 15 injected defects, all caught); verified in real Chrome (WebGL via software rendering) through the gateway as coordinator, farmer and operator.
+### Tier-2 Experimental Visualization (Superseded in v0.2.0)
+- Historical note: Earlier prototype explored experimental 3D map views; subsequently superseded and purged in v0.2.0 in favor of the production-grade 2D C2 Tactical Command GIS Map.
 
 ### Live Map Visual Feedback
-- KPI strip above the map (working / broken / average fuel / harvest progress / active shifts) with animated counters and a pulsing card while a machine is broken.
+- KPI strip above the map (working / broken / average fuel / mission progress / active shifts) with animated counters and a pulsing card while a machine is broken.
 - Machine icons turn towards their direction of travel (compass bearing corrected for the map rotation; a parked machine never spins on GPS noise).
 - The rescue route is drawn with a glow and "marching ants" animation, and the destination field gets a pulsing ring.
 - A slide-in event feed reports status changes (breakdown, rescue proposal, rescuer moving/working, recovery); the first snapshot is a baseline, not news.
@@ -102,7 +105,7 @@ Consequences for an existing machine: Docker creates NEW `floodos_*` volumes; th
 - Tests: 22 unit tests against a protocol-faithful fake clamd (framing, multi-chunk, fail-closed on error/garbage/timeout/closed connection, limits, config, upload gate), 9/9 injected defects caught; e2e Assertion 16 with the real daemon and the EICAR test file (assembled at run time so no file in the repository contains it).
 - Not covered: the document upload paths of the farmer/acceptance flow generate their evidence server-side; only the one client-supplied attachment is a scan point today.
 
-### Tier 3: Rice Traceability Module, and Cold-Path Defects Found While Verifying It
+### Tier 3: Cold-Path Case Traceability Module, and Cold-Path Defects Found While Verifying It
 - **New `apps/traceability` (Tier 3)**: public read-only pages `/trace/{id}` (+ `.json`, `/qr.svg`) behind a dedicated APISIX route (rate limited, no token). It reads only the cold lake and **recomputes the SHA-256 of every record itself**, checking that the whole ledger epoch is unbroken (`VERIFIED` / `PARTIAL` / `FAILED`); identities are redacted. The core now streams the exact hashed bytes (`before_canonical`, `after_canonical`); the archiver stores them. A golden hash vector is asserted by both the Java and the Python test suites. 34 module tests, 9/9 injected defects caught; e2e Assertion 15.
 - **Fixed (archiver)**: offsets were **never committed** (the REST consumer API wants `{"offsets": [...]}`, the archiver sent `{"partitions": [...]}`, Karapace answered HTTP 500). Consequences: the written batch was re-written on every cycle (quadratic growth), the whole topic was replayed after every restart, and telemetry (not de-duplicated) double-counted distances. Now: correct payload; write and commit are separate steps so a failed commit never re-writes data; offsets are retried; telemetry reads are de-duplicated.
 - **Fixed (archiver)**: the consumer thread could die silently (concurrent `LOAD httpfs` -> "secret type 's3' already registered") while the API still reported UP. Extension setup is serialised and workers are supervised (restart + `worker_restarts` + state `crashed`).
