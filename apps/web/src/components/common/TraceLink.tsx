@@ -14,14 +14,14 @@ export const TraceLink: React.FC<{ traceId: string }> = ({ traceId }) => {
       href={`${ORIGIN}/trace/${safe}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 rounded-xl border border-emerald-300 bg-white p-2 pr-3 shadow-sm transition hover:border-emerald-600 hover:shadow"
+      className="group inline-flex items-center gap-3 rounded border border-line-2 bg-sheet p-2 pr-3 hover:border-river"
       title="Mở trang truy xuất nguồn gốc công khai (quét mã QR để chia sẻ)"
     >
       <img src={`${ORIGIN}/trace/${safe}/qr.svg`} alt={`Mã QR truy xuất ${traceId}`} width={64} height={64} className="rounded-md" />
       <span className="text-left text-sm leading-snug">
-        <strong className="block text-emerald-900">Truy xuất nguồn gốc</strong>
-        <span className="text-slate-600">Trang công khai, tự kiểm lại mã băm</span>
-        <ExternalLink className="ml-1 inline h-3.5 w-3.5 text-emerald-700 group-hover:translate-x-0.5" aria-hidden />
+        <strong className="block text-ink">Truy xuất nguồn gốc</strong>
+        <span className="text-ink-2">Trang công khai, tự kiểm lại mã băm</span>
+        <ExternalLink className="ml-1 inline h-3.5 w-3.5 text-river" aria-hidden />
       </span>
     </a>
   );

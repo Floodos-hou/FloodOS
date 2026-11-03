@@ -6,14 +6,16 @@
  * Users must never see raw technical codes such as IN_PROGRESS or ROAD_BLOCKED.
  */
 
-export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+export type Tone = 'good' | 'warn' | 'watch' | 'bad' | 'info' | 'neutral';
 
+/** Chip classes are defined in index.css; colour carries the state, so labels carry no emoji. */
 export const TONE_CLASS: Record<Tone, string> = {
-  good: 'border-emerald-500/40 bg-emerald-950/80 text-emerald-300',
-  warn: 'border-amber-500/40 bg-amber-950/80 text-amber-300',
-  bad: 'border-rose-500/40 bg-rose-950/80 text-rose-300',
-  info: 'border-sky-500/40 bg-sky-950/80 text-sky-300',
-  neutral: 'border-slate-700 bg-slate-800/90 text-slate-300',
+  good: 'chip-good',
+  warn: 'chip-warn',
+  watch: 'chip-watch',
+  bad: 'chip-bad',
+  info: 'chip-info',
+  neutral: 'chip-neutral',
 };
 
 export { formatLocalDateTime, formatLocalTime } from './dateTime';
@@ -24,21 +26,14 @@ export interface Label {
   icon: string;
 }
 
-const L = (text: string, tone: Tone, icon: string): Label => ({ text, tone, icon });
+const L = (text: string, tone: Tone, _icon = ''): Label => ({ text, tone, icon: '' });
 
 const ROLE: Record<string, string> = {
-  // FloodOS Roles
-  REPORTER: 'Người báo tin / Người dân',
-  DISPATCHER: 'Điều phối viên PCTT',
+  REPORTER: 'Người báo tin',
+  DISPATCHER: 'Điều phối viên',
   FIELD_TEAM: 'Đội cứu hộ hiện trường',
-  RESOURCE_MANAGER: 'Quản lý nguồn lực & phương tiện',
+  RESOURCE_MANAGER: 'Quản lý nguồn lực',
   PLATFORM_ADMIN: 'Quản trị hệ thống',
-  // Legacy Aliases
-  FARMER: 'Người báo tin / Người dân',
-  COORDINATOR: 'Điều phối viên PCTT',
-  OPERATOR: 'Đội cứu hộ hiện trường',
-  MACHINE_OWNER: 'Quản lý nguồn lực',
-  REPAIR_TEAM: 'Đội sửa chữa kỹ thuật',
 };
 
 const NEED_TYPE: Record<string, Label> = {
@@ -50,27 +45,25 @@ const NEED_TYPE: Record<string, Label> = {
 };
 
 const REPORT_STATUS: Record<string, Label> = {
-  RECEIVED: L('Mới tiếp nhận, chờ xác minh', 'info', '📨'),
-  VERIFIED: L('Đã xác minh, chờ điều phối', 'warn', '🔍'),
-  DISPATCHED: L('Đã điều động lực lượng', 'good', '🚤'),
-  IN_PROGRESS: L('Đang triển khai xử lý', 'good', '⏳'),
-  RESOLVED: L('Đã xử lý xong, chờ nghiệm thu', 'good', '✅'),
-  CANCELLED: L('Đã hủy / Báo tin sai', 'neutral', '✖️'),
-  // Legacy aliases
-  SUBMITTED: L('Mới tiếp nhận, chờ xác minh', 'info', '📨'),
-  PENDING_SCHEDULE: L('Chờ điều phối', 'info', '⏳'),
-  SCHEDULED: L('Đã có lịch điều động', 'good', '📅'),
-  WAITING_ACCEPTANCE: L('Chờ người dân xác nhận', 'warn', '✍️'),
-  COMPLETED: L('Đã hoàn tất', 'good', '✅'),
+  RECEIVED: L('Chờ xác minh', 'info'),
+  VERIFIED: L('Đã xác minh, chờ điều phối', 'warn'),
+  REJECTED: L('Đã từ chối', 'neutral'),
+  DISPATCHED: L('Đã điều lực lượng', 'good'),
+  IN_PROGRESS: L('Đang xử lý', 'good'),
+  IMPACTED: L('Gián đoạn, đang điều phối lại', 'bad'),
+  RESCHEDULED: L('Đã điều phối lại', 'warn'),
+  AWAITING_CONFIRMATION: L('Chờ người báo xác nhận', 'watch'),
+  RESOLVED: L('Đã xử lý xong', 'good'),
+  CANCELLED: L('Đã hủy', 'neutral'),
 };
 
 const ORDER_STATUS: Record<string, Label> = {
-  CONFIRMED: L('Đã chốt lệnh điều động', 'good', '📋'),
-  IN_PROGRESS: L('Đang thực hiện', 'good', '🚤'),
-  IMPACTED: L('Gặp sự cố hiện trường', 'bad', '⚠️'),
-  SUPERSEDED: L('Đã chuyển cho xe/đội khác', 'warn', '🔁'),
-  COMPLETED: L('Đã hoàn tất ca', 'good', '✅'),
-  CANCELLED: L('Đã hủy lệnh', 'neutral', '✖️'),
+  CONFIRMED: L('Đã giao, chờ đội xuất phát', 'info'),
+  IN_PROGRESS: L('Đang thực hiện', 'good'),
+  IMPACTED: L('Gặp sự cố hiện trường', 'bad'),
+  SUPERSEDED: L('Đã chuyển cho xe/đội khác', 'warn'),
+  COMPLETED: L('Đã hoàn tất', 'good'),
+  CANCELLED: L('Đã hủy lệnh', 'neutral'),
 };
 
 const VEHICLE_TYPE: Record<string, string> = {
@@ -80,25 +73,26 @@ const VEHICLE_TYPE: Record<string, string> = {
 };
 
 const VEHICLE_STATUS: Record<string, Label> = {
-  IDLE: L('Sẵn sàng / Đang rảnh', 'good', '🟢'),
-  MOVING: L('Đang di chuyển', 'info', '🔵'),
-  WORKING: L('Đang làm nhiệm vụ', 'info', '🚤'),
-  BREAKDOWN: L('Gặp sự cố / Hỏng hóc', 'bad', '🔴'),
-  MAINTENANCE: L('Đang bảo dưỡng', 'warn', '🛠️'),
+  IDLE: L('Sẵn sàng', 'good'),
+  MOVING: L('Đang di chuyển', 'info'),
+  WORKING: L('Đang làm nhiệm vụ', 'info'),
+  BREAKDOWN: L('Hỏng, không dùng được', 'bad'),
+  MAINTENANCE: L('Đang bảo dưỡng', 'warn'),
 };
 
 const ZONE_RISK: Record<string, Label> = {
-  CRITICAL: L('Nguy hiểm khẩn cấp (Ngập sâu)', 'bad', '🚨'),
-  WARNING: L('Cảnh báo ngập lụt', 'warn', '⚠️'),
-  WATCH: L('Theo dõi mực nước', 'info', '👀'),
-  NORMAL: L('Mức an toàn', 'good', '✅'),
+  CRITICAL: L('Nguy hiểm', 'bad'),
+  WARNING: L('Cảnh báo', 'warn'),
+  WATCH: L('Theo dõi', 'watch'),
+  NORMAL: L('An toàn', 'good'),
 };
 
 const GAUGE_ALERT: Record<string, Label> = {
-  CRITICAL: L('Báo động 3 (Rất nguy hiểm)', 'bad', '🔴'),
-  WARNING: L('Báo động 2 (Nguy hiểm)', 'warn', '🟠'),
-  NORMAL: L('Báo động 1 (Bình thường)', 'good', '🟢'),
-  UNKNOWN: L('Chưa có số liệu', 'neutral', '⚪'),
+  CRITICAL: L('Báo động 3', 'bad'),
+  WARNING: L('Báo động 2', 'warn'),
+  WATCH: L('Báo động 1', 'watch'),
+  NORMAL: L('Dưới báo động', 'good'),
+  UNKNOWN: L('Chưa có số liệu', 'neutral'),
 };
 
 const SHELTER_STATUS: Record<string, Label> = {
@@ -108,17 +102,16 @@ const SHELTER_STATUS: Record<string, Label> = {
 };
 
 const PRIORITY: Record<string, Label> = {
-  LOW: L('Thấp', 'neutral', ''),
-  NORMAL: L('Bình thường', 'info', ''),
-  HIGH: L('Cao', 'warn', ''),
-  URGENT: L('Khẩn cấp', 'bad', '🚨'),
+  LOW: L('Thấp', 'neutral'),
+  NORMAL: L('Bình thường', 'info'),
+  HIGH: L('Cao', 'watch'),
+  URGENT: L('Khẩn cấp', 'bad'),
 };
 
 const SEVERITY: Record<string, Label> = {
-  LOW: L('Nhẹ', 'info', ''),
-  MEDIUM: L('Vừa', 'warn', ''),
-  HIGH: L('Nặng', 'bad', ''),
-  CRITICAL: L('Rất nặng / Khẩn cấp', 'bad', ''),
+  MINOR: L('Nhẹ', 'info'),
+  MAJOR: L('Nặng', 'warn'),
+  CRITICAL: L('Rất nặng', 'bad'),
 };
 
 const INCIDENT_STATUS: Record<string, Label> = {
@@ -129,12 +122,11 @@ const INCIDENT_STATUS: Record<string, Label> = {
 };
 
 const INCIDENT_TYPE: Record<string, string> = {
-  PROPELLER_FOULED: 'Chân vịt vướng rác/cỏ',
-  ENGINE_OVERHEAT: 'Động cơ quá nhiệt',
-  ENGINE_FAILURE: 'Chết máy giữa dòng',
-  PUMP_CLOGGED: 'Kẹt rác đường ống bơm',
-  HULL_DAMAGE: 'Hỏng vỏ xuồng / va chạm',
-  ROAD_IMPASSABLE: 'Đường ngập sâu không thể qua',
+  ENGINE_FAILURE: 'Hỏng / chết máy',
+  PROPELLER_FOULED: 'Chân vịt vướng rác, lưới',
+  PUMP_CLOGGED: 'Máy bơm bị tắc',
+  ROUTE_BLOCKED: 'Đường tiếp cận bị chặn',
+  OTHER: 'Sự cố khác',
 };
 
 const PROCESS_STATUS: Record<string, Label> = {
@@ -143,10 +135,8 @@ const PROCESS_STATUS: Record<string, Label> = {
 };
 
 const PROCESS_NAME: Record<string, string> = {
-  flood_report_lifecycle: 'Quy trình Tiếp nhận & Xử lý tin ngập (SOP-01)',
-  dispatch_replan_workflow: 'Quy trình Sự cố phương tiện & Chi viện (SOP-02)',
-  harvest_service_request: 'Quy trình Tiếp nhận tin báo (SOP-01)',
-  incident_replan: 'Quy trình Chi viện khẩn cấp (SOP-02)',
+  flood_report_lifecycle: 'Vòng đời tin báo ngập (SOP-01)',
+  dispatch_replan_workflow: 'Sự cố phương tiện và điều phối lại (SOP-02)',
 };
 
 const fallback = (code: string | undefined | null): Label => ({
@@ -244,9 +234,3 @@ export const actionLabel = (action: string | undefined | null): string => {
   };
   return MAP[action] || action;
 };
-
-// Legacy compatibility aliases
-export const requestStatus = reportStatus;
-export const assignmentStatus = orderStatus;
-export const fieldStatus = zoneRisk;
-export const machineStatus = vehicleStatus;
