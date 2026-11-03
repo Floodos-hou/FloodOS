@@ -128,7 +128,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const m = mapRef.current;
     if (!m || !loaded) return;
     if (basemap?.kind === 'offline' && m.getLayer(BUILDINGS_3D)) m.setLayoutProperty(BUILDINGS_3D, 'visibility', view3d ? 'visible' : 'none');
-    m.easeTo({ pitch: view3d ? 55 : 0, bearing: view3d ? -20 : 0, duration: 600 });
+    // buildings only exist from zoom 14, so the 3D view also zooms in far enough to show them
+    m.easeTo({ pitch: view3d ? 58 : 0, bearing: view3d ? -20 : 0, zoom: view3d ? Math.max(m.getZoom(), 15.5) : m.getZoom(), duration: 700 });
   }, [loaded, view3d, basemap]);
 
   // zone polygons (seed polygons; the legend says so)
@@ -208,7 +209,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         mk.setLngLat([lng, lat]);
       }
       const el = mk.getElement();
-      el.className = 'fo-marker';
+      el.classList.add('fo-marker'); // keep maplibre's own marker class: it carries the absolute positioning
       el.setAttribute('role', 'button');
       el.setAttribute('aria-label', label);
       el.innerHTML = `<span class="${markerClassName(spec, selectedKey === key ? 'is-selected' : '')}" style="--pin:${spec.color}">${markerInnerHtml(spec, esc(label))}</span>`;
