@@ -56,7 +56,9 @@ Khi nhiều điểm ngập phát sinh cùng lúc, thông tin cứu trợ thườ
 - **Quản lý nguồn lực (`RESOURCE_MANAGER`):** Theo dõi mức độ sẵn sàng của phương tiện (xuồng, xe bơm) và các đội ứng cứu, tình trạng sức chứa tại các điểm trú an toàn; xử lý và đóng phiếu sửa chữa kỹ thuật trong đúng phạm vi quyền hạn.
 - **Người có quyền kiểm tra / Thanh tra (`AUDITOR` / `PUBLIC`):** Xem lại toàn bộ lịch sử ra quyết định và kiểm chứng chuỗi băm kiểm toán bất biến SHA-256 của từng vụ việc độc lập với cơ sở dữ liệu.
 
-> **Giá trị cốt lõi:** Đưa một vụ việc từ lúc tiếp nhận tin báo đến khi xác nhận hoàn tất qua một quy trình có người chịu trách nhiệm, có nguồn lực được phân công, có trạng thái cập nhật và có lịch sử kiểm toán bất biến. Giao diện luôn trả lời rõ ràng: *“Đang xảy ra việc gì, ở đâu, ai đang xử lý và bước tiếp theo là gì?”*
+> **Thông điệp cốt lõi:** *“Các ứng dụng cứu trợ hiện nay chủ yếu cho thấy ai đang cầu cứu; FloodOS tiến xa hơn: cho biết nên cử ai đến, vì sao lại chọn họ, và chứng minh được tính minh bạch của quyết định đó bằng chuỗi kiểm toán mật mã.”*
+>
+> **Giá trị tác chiến:** Đưa một vụ việc từ lúc tiếp nhận tin báo đến khi xác nhận hoàn tất qua một quy trình khép kín có người chịu trách nhiệm, có nguồn lực được phân công tối ưu (khoảng cách chim bay, sức chứa, kinh nghiệm đội), có trạng thái cập nhật thời gian thực và có sổ cái kiểm toán bất biến SHA-256. Giao diện luôn trả lời rõ ràng: *“Đang xảy ra việc gì, ở đâu, ai đang xử lý và bước tiếp theo là gì?”*
 
 ---
 
@@ -264,7 +266,7 @@ curl -i http://localhost:9080/api/v1/health
 
 | Giao diện / Dịch vụ | Địa chỉ URL | Ghi chú |
 |---|---|---|
-| **Trung tâm tác chiến FloodOS** | `http://localhost:3000` | Cổng web chính thức qua Nginx container (`5173` khi chạy Vite dev) |
+| **Trung tâm tác chiến FloodOS** | `http://localhost:9080` (hoặc `http://localhost:3000`) | Cổng web chính thức qua APISIX Zero-Trust Gateway (`5173` khi chạy Vite dev) |
 | **Cổng truy xuất công khai Tầng 3** | `http://localhost:9080/trace/CORR-REP-001` | Cổng tra cứu phả hệ & kiểm chứng SHA-256 |
 | **Keycloak Identity Console** | `http://localhost:8080` | Quản trị định danh & realm `floodos` |
 | **APISIX Gateway Dashboard** | `http://localhost:9080` | Cổng Zero-Trust Gateway quản trị định tuyến |
@@ -304,10 +306,9 @@ bash tests/e2e_full_stack_test.sh
   [Acceptance Golden Path Tests]    :  50/50  PASS  (100%)
   [Python Lake & Telemetry Tests]   : 114/114 PASS  (100%)
   [Web Tactical Frontend Tests]     :  33/33  PASS  (100%)
-  [Digital Twin 3D Logic Tests]     :  33/33  PASS  (100%)
   [Full-Stack Container Assertions] :  12/12  PASS  (100%)
 ========================================================================
-  TOTAL AUTOMATED TEST COVERAGE     : 433/433 PASS  (100%)
+  TOTAL AUTOMATED TEST COVERAGE     : 400/400 PASS  (100%)
 ========================================================================
 ```
 
