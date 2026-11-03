@@ -58,7 +58,7 @@ export const MapLegend: React.FC<{ defaultOpen?: boolean }> = ({ defaultOpen = t
       </button>
       {open && (
         <div className="grid max-h-56 gap-x-6 gap-y-4 overflow-y-auto px-3 pb-3 pt-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-          <Group title="Tin báo ngập (giọt)" hint="Hình trong giọt là loại nhu cầu. Số bên cạnh là độ ngập (cm) do người báo ước lượng. Viền nhấp nháy là khẩn cấp.">
+          <Group title="Tin báo ngập (tròn có vòng sáng)" hint="Hình bên trong là loại nhu cầu. Số bên cạnh là độ ngập (cm) do người báo ước lượng. Vòng nhấp nháy là khẩn cấp.">
             <Item spec={needs('EVACUATION')} text="Cần sơ tán" />
             <Item spec={needs('MEDICAL')} text="Cần cứu thương" />
             <Item spec={needs('FOOD_WATER')} text="Cần tiếp tế lương thực, nước" />
@@ -73,7 +73,7 @@ export const MapLegend: React.FC<{ defaultOpen?: boolean }> = ({ defaultOpen = t
             <Item spec={needs('EVACUATION', 'RESOLVED')} text="Đã xong hoặc đã từ chối" />
           </Group>
 
-          <Group title="Phương tiện (tròn)" hint="Hình trong vòng là loại xe; màu là tình trạng.">
+          <Group title="Phương tiện (tròn nhỏ)" hint="Hình trong vòng là loại xe; màu là tình trạng.">
             <Item spec={vehicleSpec({ vehicle_type: 'RESCUE_BOAT', status: 'IDLE' })} text="Xuồng cứu hộ, đang rảnh" />
             <Item spec={vehicleSpec({ vehicle_type: 'HIGH_CLEARANCE_TRUCK', status: 'WORKING' })} text="Xe gầm cao, đang làm nhiệm vụ" />
             <Item spec={vehicleSpec({ vehicle_type: 'MOBILE_PUMP', status: 'IDLE' })} text="Máy bơm di động" />
@@ -81,13 +81,13 @@ export const MapLegend: React.FC<{ defaultOpen?: boolean }> = ({ defaultOpen = t
             <Item spec={vehicleSpec({ vehicle_type: 'RESCUE_BOAT', status: 'MAINTENANCE' })} text="Đang bảo dưỡng" />
           </Group>
 
-          <Group title="Điểm trú an toàn (vuông)" hint="Thanh dưới biểu tượng là mức đầy của điểm trú.">
+          <Group title="Điểm trú an toàn (tròn có thanh)" hint="Thanh dưới biểu tượng là mức đầy của điểm trú.">
             <Item spec={shelterSpec({ capacity: 100, occupancy: 35 })} text="Còn nhiều chỗ" />
             <Item spec={shelterSpec({ capacity: 100, occupancy: 88 })} text="Sắp đầy (từ 80%)" />
             <Item spec={shelterSpec({ capacity: 100, occupancy: 100 })} text="Đã đầy" />
           </Group>
 
-          <Group title="Trạm đo mực nước (thoi)" hint="Hình thước đo; số bên cạnh là mực nước (cm).">
+          <Group title="Trạm đo mực nước (tròn rỗng)" hint="Hình thước đo; số bên cạnh là mực nước (cm).">
             <Item spec={gaugeSpec({ alert_state: 'NORMAL', level_cm: 40 })} text="Dưới mức báo động" />
             <Item spec={gaugeSpec({ alert_state: 'WATCH', level_cm: 80 })} text="Báo động 1" />
             <Item spec={gaugeSpec({ alert_state: 'WARNING', level_cm: 100 })} text="Báo động 2" />

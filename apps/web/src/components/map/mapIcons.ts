@@ -4,7 +4,7 @@
 /**
  * What each map marker looks like and why. One spec per object, built from real fields only; the map draws it and the
  * legend draws the very same spec, so the legend can never drift from the map.
- *   shape  = what kind of object   (drop = incident, circle = vehicle, square = shelter, diamond = gauge)
+ *   shape  = what kind of object   (all round: beacon = incident with halo, disc = vehicle, badge = shelter with fill bar, ring = gauge, hollow)
  *   glyph  = what it is / needs    (lifebuoy = evacuation, cross = medical, ... boat, truck, pump, wrench, house, staff)
  *   colour = its state             (red = urgent/danger/broken, amber = waiting or warning, green = ready/safe, blue = busy)
  *   chip   = the number that matters (flood depth, water level)
@@ -12,7 +12,7 @@
  * Pure data and strings, no DOM, so it runs under `node --test`.
  */
 
-export type MarkerShape = 'drop' | 'circle' | 'square' | 'diamond';
+export type MarkerShape = 'beacon' | 'disc' | 'badge' | 'ring';
 export type GlyphName = 'lifebuoy' | 'medical' | 'supply' | 'pump' | 'blocked' | 'alert' | 'boat' | 'truck' | 'wrench' | 'house' | 'staff';
 
 export interface MarkerSpec {
@@ -72,17 +72,17 @@ export function reportSpec(r: ReportLike): MarkerSpec {
   const urgent = (r.priority === 'URGENT' || r.priority === 'CRITICAL') && !closed;
   const color = closed ? COLOR.mute : urgent ? COLOR.crit : r.status === 'RECEIVED' ? COLOR.watch : COLOR.warn;
   return {
-    shape: 'drop', glyph: needGlyph(r.need_type), color, pulse: urgent, dim: closed,
+    shape: 'beacon', glyph: needGlyph(r.need_type), color, pulse: urgent, dim: closed,
     chip: r.depth_cm == null ? undefined : String(Math.round(r.depth_cm)),
   };
 }
 
 export interface VehicleLike { vehicle_type?: string; status: string }
 export function vehicleSpec(v: VehicleLike): MarkerSpec {
-  if (v.status === 'BREAKDOWN') return { shape: 'circle', glyph: 'wrench', color: COLOR.crit, pulse: true };
-  if (v.status === 'MAINTENANCE') return { shape: 'circle', glyph: 'wrench', color: COLOR.warn };
+  if (v.status === 'BREAKDOWN') return { shape: 'disc', glyph: 'wrench', color: COLOR.crit, pulse: true };
+  if (v.status === 'MAINTENANCE') return { shape: 'disc', glyph: 'wrench', color: COLOR.warn };
   const busy = v.status === 'MOVING' || v.status === 'WORKING';
-  return { shape: 'circle', glyph: vehicleGlyph(v.vehicle_type), color: busy ? COLOR.river : COLOR.safe };
+  return { shape: 'disc', glyph: vehicleGlyph(v.vehicle_type), color: busy ? COLOR.river : COLOR.safe };
 }
 
 export interface ShelterLike { capacity: number; occupancy?: number; current_occupancy?: number; status?: string }
@@ -90,7 +90,7 @@ export function shelterSpec(s: ShelterLike): MarkerSpec {
   const occ = s.occupancy ?? s.current_occupancy ?? 0;
   const pct = s.capacity > 0 ? Math.min(100, Math.round((occ / s.capacity) * 100)) : 0;
   const color = s.status === 'CLOSED' ? COLOR.mute : s.status === 'FULL' || pct >= 100 ? COLOR.crit : pct >= 80 ? COLOR.warn : COLOR.safe;
-  return { shape: 'square', glyph: 'house', color, fill: pct, dim: s.status === 'CLOSED' };
+  return { shape: 'badge', glyph: 'house', color, fill: pct, dim: s.status === 'CLOSED' };
 }
 
 export interface GaugeLike { alert_state?: string; level_cm?: number | null }
@@ -100,7 +100,7 @@ export function gaugeSpec(g: GaugeLike): MarkerSpec {
     : g.alert_state === 'WARNING' ? COLOR.warn
     : g.alert_state === 'WATCH' ? COLOR.watch
     : g.level_cm == null ? COLOR.mute : COLOR.safe;
-  return { shape: 'diamond', glyph: 'staff', color, chip: g.level_cm == null ? undefined : String(Math.round(g.level_cm)) };
+  return { shape: 'ring', glyph: 'staff', color, chip: g.level_cm == null ? undefined : String(Math.round(g.level_cm)) };
 }
 
 /** Markup shared by the map marker and the legend swatch. `label` is shown on hover (escaped by the caller). */

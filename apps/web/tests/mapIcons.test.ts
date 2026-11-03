@@ -12,9 +12,9 @@ test('every need type has its own pictogram, and an unknown need falls back to a
   assert.equal(needGlyph(undefined), 'alert');
 });
 
-test('an open urgent report is a red pulsing drop; a closed one is grey and dimmed', () => {
+test('an open urgent report is a red pulsing beacon; a closed one is grey and dimmed', () => {
   const urgent = reportSpec({ need_type: 'EVACUATION', priority: 'URGENT', status: 'VERIFIED', depth_cm: 70.4 });
-  assert.deepEqual([urgent.shape, urgent.color, urgent.pulse, urgent.chip], ['drop', COLOR.crit, true, '70']);
+  assert.deepEqual([urgent.shape, urgent.color, urgent.pulse, urgent.chip], ['beacon', COLOR.crit, true, '70']);
   const done = reportSpec({ need_type: 'EVACUATION', priority: 'URGENT', status: 'RESOLVED', depth_cm: 70 });
   assert.deepEqual([done.color, done.pulse, done.dim], [COLOR.mute, false, true]);
 });
@@ -58,5 +58,5 @@ test('marker markup contains its pictogram, number and bar, and escapes nothing 
   assert.match(html, /Nhà văn hóa/);
   assert.match(markerInnerHtml(reportSpec({ need_type: 'PUMPING', priority: 'HIGH', status: 'VERIFIED', depth_cm: 30 })), />30</);
   assert.equal(Object.keys(GLYPH).length, 11);
-  assert.equal(markerClassName(vehicleSpec({ status: 'BREAKDOWN' }), 'is-selected'), 'fo-pin fo-circle is-pulse is-selected');
+  assert.equal(markerClassName(vehicleSpec({ status: 'BREAKDOWN' }), 'is-selected'), 'fo-pin fo-disc is-pulse is-selected');
 });

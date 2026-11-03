@@ -170,7 +170,8 @@ Trung tâm tác chiến số tại [`apps/web`](apps/web) được xây dựng t
 ### 🗺️ 1. Bản đồ tác chiến số thời gian thực & Bản đồ vector ngoại tuyến PMTiles
 - **Ngôn ngữ thiết kế Bản vẽ Thủy văn (Hydrology Blueprint):** Chuyển đổi toàn diện sang phong cách bản vẽ công vụ sáng rõ (giấy bản đồ, mực xanh sẫm, 4 cấp màu báo động thủy văn, thước đo mực nước và dòng sông tiến trình 5 trạm của vụ việc).
 - **Bản đồ vector ngoại tuyến tự lưu trữ (PMTiles):** Phục vụ tệp vector OpenStreetMap nội bộ (`hanoi.pmtiles`, 9.1 MB, 392 vector tiles, z0–z14) qua HTTP Range Requests, hoạt động độc lập hoàn toàn không cần kết nối Internet với chú thích xác nhận trên màn hình: *"Nền: dữ liệu OpenStreetMap lưu trong hệ thống."*
-- **Ký hiệu chuẩn hóa & Chú thích tương tác:** Phân cấp trực quan theo hình học (*giọt nước = tin báo ngập, hình tròn = phương tiện, hình vuông = điểm sơ tán, hình thoi = trạm đo thủy văn*), chip hiển thị số đo thực tế và thanh tỷ lệ đầy điểm sơ tán.
+- **Ký hiệu chuẩn hóa & Chú thích tương tác:** Phân cấp trực quan theo vòng tròn nhận diện ngữ nghĩa (vòng sáng khẩn cấp, hình tròn nhỏ cho phương tiện, vòng có thanh tỷ lệ đầy điểm trú, vòng viền trạm đo thủy văn), chip số đo thực tế và bảng chú thích tương tác có thể thu gọn.
+- **Dựng khối nhà 3D ngoại tuyến (3D Vector Buildings):** Nút chuyển góc nhìn 3D trực quan trên bản đồ, nghiêng camera ($55^\circ$) và dựng khối công trình kiến trúc từ dữ liệu vector OpenStreetMap nội bộ qua thuộc tính `fill-extrusion`.
 
 <p align="center">
   <img src="docs/assets/screenshots/floodos-overview.png" alt="Bản đồ tác chiến số thời gian thực FloodOS" width="100%">

@@ -146,12 +146,12 @@ h1, h2, h3, h4 {
   background: var(--pin, var(--color-river)); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(20, 38, 46, 0.5);
 }
 .fo-body svg { width: 15px; height: 15px; }
-.fo-circle .fo-body { border-radius: 50%; }
-.fo-square .fo-body { border-radius: 6px; }
-.fo-diamond .fo-body { border-radius: 5px; transform: rotate(45deg) scale(0.82); }
-.fo-diamond .fo-body svg { transform: rotate(-45deg); }
-.fo-drop .fo-body { border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
-.fo-drop .fo-body svg { transform: rotate(45deg); }
+/* every marker is round; the kind of object is told by halo / size / hollow centre / bar */
+.fo-body { border-radius: 50%; }
+.fo-beacon .fo-body { box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 28%, transparent), 0 1px 3px rgba(20, 38, 46, 0.5); }
+.fo-disc { width: 26px; height: 26px; }
+.fo-ring .fo-body { background: #fff; color: var(--pin); border: 3px solid var(--pin); }
+.fo-ring .fo-body svg { width: 14px; height: 14px; }
 .fo-pin.is-selected { z-index: 5; }
 .fo-pin.is-selected .fo-body { outline: 3px solid var(--color-ink); outline-offset: 2px; }
 .fo-pin.is-dim { opacity: 0.55; }
