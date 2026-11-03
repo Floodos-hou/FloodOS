@@ -2,39 +2,13 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useState } from 'react';
-import {
-  DispatchOrder,
-  RescueTeam,
-  RescueVehicle,
-  FloodReport,
-  FieldIncident,
-  DispatchOrderStatus,
-} from '../../types';
-import {
-  orderStatus,
-  needType,
-  vehicleType,
-  vehicleStatus,
-  incidentType,
-} from '../../utils/labels';
-import { Modal } from '../common/Modal';
-import { StatusBadge } from '../common/StatusBadge';
+import { Camera, ExternalLink } from 'lucide-react';
+import type { DispatchOrder, RescueTeam, RescueVehicle, FloodReport, FieldIncident, DispatchOrderStatus } from '../../types';
+import { needType, vehicleType, incidentType, incidentStatus, severity, formatLocalDateTime } from '../../utils/labels';
 import { isActiveDispatchOrder, reportDepthCm, reportPeopleAffected } from '../../utils/workflowRules';
-import {
-  AlertOctagon,
-  Camera,
-  CheckCircle2,
-  Clock,
-  Compass,
-  Fuel,
-  MapPin,
-  Navigation,
-  Radio,
-  ShieldCheck,
-  Truck,
-  Users,
-  Waves,
-} from 'lucide-react';
+import { StatusBadge } from '../common/StatusBadge';
+import { Modal } from '../common/Modal';
+import { EmptyState, Field, ageText } from '../ui/kit';
 
 interface FieldTeamWorkspaceProps {
   currentUserId: string;
@@ -46,594 +20,267 @@ interface FieldTeamWorkspaceProps {
   onUpdateOrderStatus: (
     orderId: string,
     status: DispatchOrderStatus,
-    payload?: {
-      progress_pct?: number;
-      note?: string;
-      outcome?: 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED' | string;
-      final_depth_cm?: number;
-      evidence_filename?: string;
-      evidence_data_url?: string;
-    } | string
+    payload?: { progress_pct?: number; note?: string; outcome?: string; final_depth_cm?: number; evidence_filename?: string; evidence_data_url?: string },
   ) => Promise<void>;
   onReportIncident: (data: {
-    order_id: string;
-    vehicle_id: string;
-    incident_type: string;
-    severity: string;
-    description: string;
-    photo_bytes?: string;
+    order_id: string; vehicle_id: string; incident_type: string; severity: string; description: string;
+    estimated_downtime_hours: number; photo_bytes?: string;
   }) => Promise<void>;
   onSelectReport?: (report: FloodReport) => void;
 }
 
-const INPUT_STYLE = 'w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-white outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all';
-const LABEL_STYLE = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-300';
+const INCIDENT_TYPES = ['ENGINE_FAILURE', 'PROPELLER_FOULED', 'PUMP_CLOGGED', 'ROUTE_BLOCKED', 'OTHER'] as const;
+const SEVERITIES = ['MINOR', 'MAJOR', 'CRITICAL'] as const;
+const PROGRESS_STEPS = [25, 50, 75];
+const OUTCOMES: { value: 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED'; label: string; hint: string }[] = [
+  { value: 'RESOLVED', label: 'Đã xử lý xong', hint: 'Người dân đã an toàn / điểm ngập đã hết' },
+  { value: 'PARTIAL', label: 'Xử lý một phần', hint: 'Còn việc cần làm tiếp' },
+  { value: 'UNRESOLVED', label: 'Chưa xử lý được', hint: 'Không tiếp cận hoặc không đủ khả năng' },
+];
+
+const readImage = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const rd = new FileReader();
+    rd.onload = () => resolve(rd.result as string);
+    rd.onerror = () => reject(new Error('Không đọc được ảnh.'));
+    rd.readAsDataURL(file);
+  });
 
 export const FieldTeamWorkspace: React.FC<FieldTeamWorkspaceProps> = ({
-  currentUserId,
-  teams,
-  vehicles,
-  orders,
-  reports,
-  incidents,
-  onUpdateOrderStatus,
-  onReportIncident,
-  onSelectReport,
+  currentUserId, teams, vehicles, orders, reports, incidents, onUpdateOrderStatus, onReportIncident, onSelectReport,
 }) => {
-  // Resolve team
-  const myTeam =
-    teams.find(
-      (t) =>
-        t.team_id.toLowerCase() === currentUserId.toLowerCase() ||
-        (t.leader_name && t.leader_name.toLowerCase().includes(currentUserId.toLowerCase())) ||
-        currentUserId.toLowerCase().includes(t.team_id.toLowerCase())
-    ) || teams[0];
+  // the team this account leads; never fall back to "the first team"
+  const myTeam = teams.find((t) => t.lead_user_id === currentUserId) ?? null;
+  const myOrders = myTeam ? orders.filter((o) => o.team_id === myTeam.team_id) : [];
+  const active = myOrders.find((o) => isActiveDispatchOrder(o.status)) ?? null;
+  const history = myOrders.filter((o) => !isActiveDispatchOrder(o.status)).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 5);
+  const target = active ? reports.find((r) => r.report_id === active.report_id) ?? null : null;
+  const vehicle = active ? vehicles.find((v) => v.vehicle_id === active.vehicle_id) ?? null : null;
+  const myIncidents = incidents.filter((i) => active && i.vehicle_id === active.vehicle_id && i.status !== 'RESOLVED');
 
-  // Team orders
-  const teamOrders = orders.filter((o) => !myTeam || o.team_id === myTeam.team_id);
-  const activeOrder =
-    teamOrders.find((o) => isActiveDispatchOrder(o.status)) ||
-    orders.find((o) => isActiveDispatchOrder(o.status));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<'complete' | 'incident' | null>(null);
 
-  const targetReport = reports.find((r) => r.report_id === activeOrder?.report_id);
-  const assignedVehicle = vehicles.find((v) => v.vehicle_id === activeOrder?.vehicle_id);
+  // completion form
+  const [outcome, setOutcome] = useState<'RESOLVED' | 'PARTIAL' | 'UNRESOLVED' | ''>('');
+  const [finalDepth, setFinalDepth] = useState('');
+  const [notes, setNotes] = useState('');
+  const [photo, setPhoto] = useState<{ name: string; dataUrl: string } | null>(null);
+  // incident form
+  const [incType, setIncType] = useState('');
+  const [incSeverity, setIncSeverity] = useState('');
+  const [incDesc, setIncDesc] = useState('');
+  const [downtime, setDowntime] = useState('');
 
-  // Status transition state
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [statusError, setStatusError] = useState<string | null>(null);
-
-  // Incident reporting modal state
-  const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
-  const [incType, setIncType] = useState('PROPELLER_FOULED');
-  const [incSeverity, setIncSeverity] = useState('CRITICAL');
-  const [incDesc, setIncDesc] = useState('Chân vịt xuồng cứu nạn mắc phải rác nổi và lưới rách; động cơ quá nhiệt.');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [isReportingIncident, setIsReportingIncident] = useState(false);
-  const [incidentError, setIncidentError] = useState<string | null>(null);
-
-  // Complete modal state
-  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [compOutcome, setCompOutcome] = useState<'RESOLVED' | 'PARTIAL' | 'UNRESOLVED'>('RESOLVED');
-  const [compFinalDepth, setCompFinalDepth] = useState<number>(0);
-  const [completionNotes, setCompletionNotes] = useState('Đã tiếp cận hiện trường, hỗ trợ đưa người dân đến điểm sơ tán an toàn.');
-  const [isCompleting, setIsCompleting] = useState(false);
-
-  // Field progress update state
-  const [interimProgress, setInterimProgress] = useState<number>(50);
-  const [interimNote, setInterimNote] = useState<string>('');
-
-  // Advance status handler
-  const handleAdvanceStatus = async (
-    nextStatus: DispatchOrderStatus,
-    payload?: { progress_pct?: number; note?: string } | string
-  ) => {
-    if (!activeOrder) return;
-    setIsUpdatingStatus(true);
-    setStatusError(null);
-    try {
-      await onUpdateOrderStatus(activeOrder.order_id, nextStatus, payload);
-    } catch (err: unknown) {
-      setStatusError(err instanceof Error ? err.message : 'Cập nhật trạng thái tác chiến thất bại.');
-    } finally {
-      setIsUpdatingStatus(false);
-    }
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError(null);
+    try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : 'Thao tác thất bại. Vui lòng thử lại.'); } finally { setBusy(false); }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setPhotoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const onPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setError('Chỉ nhận ảnh (JPEG, PNG, WebP).'); return; }
+    setPhoto({ name: f.name, dataUrl: await readImage(f) });
   };
 
-  const handleIncidentSubmit = async (e: React.FormEvent) => {
+  const openSheet = (s: 'complete' | 'incident') => {
+    setError(null); setPhoto(null);
+    setOutcome(''); setFinalDepth(''); setNotes('');
+    setIncType(''); setIncSeverity(''); setIncDesc(''); setDowntime('');
+    setSheet(s);
+  };
+
+  const submitComplete = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeOrder) return;
-    setIsReportingIncident(true);
-    setIncidentError(null);
-    try {
-      await onReportIncident({
-        order_id: activeOrder.order_id,
-        vehicle_id: activeOrder.vehicle_id,
-        incident_type: incType,
-        severity: incSeverity,
-        description: incDesc,
-        photo_bytes: photoPreview || undefined,
-      });
-      setIsIncidentModalOpen(false);
-    } catch (err: unknown) {
-      setIncidentError(err instanceof Error ? err.message : 'Báo cáo sự cố thất bại.');
-    } finally {
-      setIsReportingIncident(false);
-    }
+    if (!active) return;
+    if (!outcome || finalDepth === '' || notes.trim().length < 3) { setError('Chọn kết quả, nhập độ ngập sau xử lý và ghi chú kết quả (ít nhất 3 ký tự).'); return; }
+    void run(async () => {
+      await onUpdateOrderStatus(active.order_id, 'COMPLETED', { progress_pct: 100, outcome, final_depth_cm: Number(finalDepth), note: notes.trim(), evidence_filename: photo?.name, evidence_data_url: photo?.dataUrl });
+      setSheet(null);
+    });
   };
 
-  const handleCompleteSubmit = async (e: React.FormEvent) => {
+  const submitIncident = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeOrder) return;
-    if (completionNotes.trim().length < 3) {
-      setStatusError('Báo cáo hoàn tất yêu cầu ghi rõ kết quả (ít nhất 3 ký tự).');
-      return;
-    }
-    setIsCompleting(true);
-    try {
-      await onUpdateOrderStatus(activeOrder.order_id, 'COMPLETED', {
-        progress_pct: 100,
-        outcome: compOutcome,
-        final_depth_cm: compFinalDepth,
-        note: completionNotes.trim(),
-        evidence_data_url: photoPreview || undefined,
-      });
-      setIsCompleteModalOpen(false);
-    } catch (err: unknown) {
-      setStatusError(err instanceof Error ? err.message : 'Hoàn tất nhiệm vụ thất bại.');
-    } finally {
-      setIsCompleting(false);
-    }
+    if (!active) return;
+    if (!incType || !incSeverity || downtime === '' || incDesc.trim().length < 3) { setError('Chọn loại và mức độ sự cố, nhập thời gian ngừng ước tính và mô tả.'); return; }
+    void run(async () => {
+      await onReportIncident({ order_id: active.order_id, vehicle_id: active.vehicle_id, incident_type: incType, severity: incSeverity, description: incDesc.trim(), estimated_downtime_hours: Number(downtime), photo_bytes: photo?.dataUrl });
+      setSheet(null);
+    });
   };
+
+  if (!myTeam) {
+    return (
+      <div className="mx-auto max-w-xl panel">
+        <EmptyState title="Tài khoản này chưa được gán đội cứu hộ" hint="Nhờ quản lý nguồn lực gán bạn làm đội trưởng của một đội để nhận nhiệm vụ." />
+      </div>
+    );
+  }
+
+  const where = target?.address_hint || (target ? 'Điểm ngập đã báo' : '');
+  const fuel = vehicle ? vehicle.fuel_pct ?? vehicle.fuel_percent : undefined;
 
   return (
-    <div className="space-y-6">
-      {/* Team Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-900 to-indigo-950 p-5 rounded-2xl border border-blue-800 text-white shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-blue-500/20 rounded-xl text-blue-300 border border-blue-500/30">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">
-              {myTeam ? myTeam.team_name : 'Đội Ứng Cứu Xung Kích'}
-            </h2>
-            <p className="text-xs text-blue-200">
-              Đội trưởng: <strong>{myTeam?.leader_name || 'Chưa phân công'}</strong> • Chuyên trách: {myTeam?.specialty || 'Cứu hộ vùng ngập sâu'}
-            </p>
-          </div>
+    <div className="mx-auto grid max-w-3xl gap-4">
+      <div className="panel flex flex-wrap items-center justify-between gap-2 p-4">
+        <div>
+          <div className="eyebrow">Đội của bạn</div>
+          <h2 className="text-lg">{myTeam.name}</h2>
+          <p className="text-xs text-ink-3">{myTeam.member_count} người{myTeam.specialty ? ` · ${myTeam.specialty}` : ''}</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 border border-emerald-400 text-emerald-300 flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 animate-pulse" />
-            Kênh Điều Hành C2 Trực Tuyến
-          </span>
-        </div>
+        <span className={`chip ${active ? 'chip-info' : 'chip-good'}`}>{active ? 'Đang có nhiệm vụ' : 'Sẵn sàng nhận lệnh'}</span>
       </div>
 
-      {statusError && (
-        <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 text-sm font-medium">
-          {statusError}
-        </div>
-      )}
+      {error && !sheet && <p role="alert" className="rounded border border-crit bg-crit-soft p-3 text-sm text-crit">{error}</p>}
 
-      {/* ACTIVE MISSION COCKPIT */}
-      {activeOrder ? (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6 text-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 block mb-0.5">
-                Nhiệm Vụ Tác Chiến Hiện Tại
-              </span>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                Lệnh #{activeOrder.order_id}
-              </h3>
-            </div>
-            <StatusBadge status={activeOrder.status} type="order" />
-          </div>
-
-          {/* Target Info Card */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2 text-slate-200">
-              <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-                <MapPin className="w-4 h-4" />
-                {targetReport?.address_hint || `Khu vực ngập [${(targetReport?.latitude ?? targetReport?.lat ?? 0).toFixed(4)}, ${(targetReport?.longitude ?? targetReport?.lng ?? 0).toFixed(4)}]`}
-              </div>
-              <div className="text-xs text-slate-400 space-y-1">
-                <div>Nhu cầu: <strong className="text-white">{targetReport ? needType(targetReport.need_type).text : "Cứu trợ khẩn cấp"}</strong></div>
-                <div>Độ ngập ước tính: <strong className="text-rose-600">{targetReport ? reportDepthCm(targetReport) : 0} cm</strong></div>
-                <div>Số người cần cứu: <strong className="text-white">{targetReport ? reportPeopleAffected(targetReport) : 0} người</strong></div>
-                <div>Người liên hệ: <strong className="text-white">{targetReport?.reporter_name || targetReport?.reporter_phone ? `${targetReport.reporter_name || "Người dân"} ${targetReport.reporter_phone ? `(${targetReport.reporter_phone})` : ""}` : "Chưa có thông tin liên hệ"}</strong></div>
-              </div>
-              {targetReport && onSelectReport && (
-                <button
-                  type="button"
-                  onClick={() => onSelectReport(targetReport)}
-                  className="mt-2 text-xs text-blue-600 hover:underline font-semibold block"
-                >
-                  Xem lộ trình trên bản đồ tác chiến →
-                </button>
-              )}
-            </div>
-
-            {/* Vehicle & Telemetry Card */}
-            <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2 text-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase text-slate-500 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-blue-600" />
-                  Phương tiện điều phối
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded font-bold bg-blue-100 text-blue-800">
-                  {assignedVehicle ? vehicleType(assignedVehicle.vehicle_type) : 'Xuồng cứu nạn'}
-                </span>
-              </div>
-              <div className="text-sm font-bold text-white">
-                {assignedVehicle?.vehicle_name || activeOrder.vehicle_id}
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 pt-1">
-                <div className="flex items-center gap-1">
-                  <Fuel className="w-3.5 h-3.5 text-amber-500" />
-                  Nhiên liệu: <strong className="font-mono">{assignedVehicle?.fuel_pct ?? assignedVehicle?.fuel_percent ?? 0}%</strong>
-                </div>
-                <div className="flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  Tình trạng: <strong className="text-white">{assignedVehicle ? vehicleStatus(assignedVehicle.status).text : 'Chưa có dữ liệu'}</strong>
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 italic pt-1">
-                * Toạ độ GPS lấy từ IoT định vị hiện trường; khoảng cách tính bằng vector Haversine đường chim bay.
-              </div>
-            </div>
-          </div>
-
-          {/* Commander Order Notes */}
-          {activeOrder.notes && (
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
-              <strong>Mệnh lệnh từ Sở Chỉ huy:</strong> {activeOrder.notes}
-            </div>
-          )}
-
-          {/* Action Step Bar (Mobile-friendly large buttons) */}
-          <div className="pt-2">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Cập nhật tiến độ ca tác chiến:
-            </div>
-
-            <div className="space-y-4">
-              {/* Progress visual bar */}
-              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span>Tiến độ ca tác chiến hiện tại:</span>
-                  <span className="text-cyan-400 text-sm font-mono">{Math.round(activeOrder.progress_pct || 0)}%</span>
-                </div>
-                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-sky-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(0, Math.min(100, activeOrder.progress_pct || 0))}%` }}
-                  />
-                </div>
-              </div>
-
-              {activeOrder.status === 'CONFIRMED' || activeOrder.status === 'DISPATCHED' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    disabled={isUpdatingStatus}
-                    onClick={() => handleAdvanceStatus('IN_PROGRESS', {
-                      progress_pct: 25,
-                      note: 'Đội đã nhận lệnh và bắt đầu cơ động đến hiện trường.'
-                    })}
-                    className="py-4 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-lg shadow-cyan-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
-                  >
-                    <Navigation className="w-5 h-5 animate-bounce" />
-                    🚀 Xuất Phát Đến Hiện Trường (IN_PROGRESS)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsIncidentModalOpen(true)}
-                    className="py-4 px-4 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  >
-                    <AlertOctagon className="w-5 h-5 text-rose-600" />
-                    🚨 Báo Sự Cố Kỹ Thuật
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Interim progress quick-updates */}
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-                    <div className="text-xs font-bold text-blue-900">Cập nhật tiến độ tiếp cận &amp; cứu nạn:</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {[50, 75, 90].map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          disabled={isUpdatingStatus || (activeOrder.progress_pct >= pct)}
-                          onClick={() => {
-                            const noteMap: Record<number, string> = {
-                              50: 'Đã tiếp cận vị trí ngập, triển khai xuồng/phao cứu hộ.',
-                              75: 'Đang hỗ trợ sơ tán người dân và vận chuyển nhu yếu phẩm.',
-                              90: 'Người dân đã lên xuồng an toàn, chuẩn bị đưa về điểm sơ tán.',
-                            };
-                            handleAdvanceStatus('IN_PROGRESS', { progress_pct: pct, note: noteMap[pct] });
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                            activeOrder.progress_pct >= pct
-                              ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                              : 'bg-white text-blue-800 border border-blue-300 hover:bg-blue-100 shadow-sm'
-                          }`}
-                        >
-                          Cập nhật {pct}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      disabled={isUpdatingStatus}
-                      onClick={() => setIsCompleteModalOpen(true)}
-                      className="py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="w-5 h-5" />
-                      ✅ Hoàn Tất Ca Cứu Nạn &amp; Bàn Giao
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsIncidentModalOpen(true)}
-                      className="py-4 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-300 text-rose-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                    >
-                      <AlertOctagon className="w-5 h-5 text-rose-600" />
-                      🚨 Báo Sự Cố Phương Tiện
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {!active ? (
+        <div className="panel"><EmptyState title="Chưa có nhiệm vụ" hint="Khi điều phối viên giao lệnh, nhiệm vụ sẽ hiện ở đây và trang tự cập nhật." /></div>
       ) : (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-600">
-          <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <h3 className="font-bold text-lg">Chưa có lệnh điều động mới</h3>
-          <p className="text-sm text-slate-500 mt-1">
-            Đội xung kích đang ở chế độ thường trực sẵn sàng tại vị trí căn cứ.
-          </p>
-        </div>
-      )}
-
-      {/* RECENT INCIDENTS / SỰ CỐ VỪA BÁO */}
-      {incidents.length > 0 && (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3 text-slate-100">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <AlertOctagon className="w-4 h-4 text-rose-500" />
-            Nhật ký sự cố hiện trường gần nhất:
-          </h4>
-          <div className="space-y-2">
-            {incidents.slice(0, 3).map((inc) => (
-              <div
-                key={inc.incident_id}
-                className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-              >
-                <div>
-                  <span className="font-bold text-slate-800">{incidentType(inc.incident_type) || inc.incident_type}: </span>
-                  <span className="text-slate-600">{inc.description}</span>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Phương tiện: {inc.vehicle_id} • Thời gian: {new Date(inc.reported_at || inc.created_at).toLocaleTimeString('vi-VN')}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded font-bold ${inc.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                    {inc.status === 'RESOLVED' ? 'Đã khắc phục' : 'Đang xử lý / Chi viện'}
-                  </span>
-                </div>
-              </div>
-            ))}
+        <section className="panel" aria-label="Nhiệm vụ hiện tại">
+          <div className="panel-head">
+            <div className="min-w-0"><div className="eyebrow">Nhiệm vụ {active.order_id}</div><h3 className="truncate text-base">{where || 'Điểm ngập'}</h3></div>
+            <StatusBadge status={active.status} type="order" />
           </div>
-        </div>
-      )}
+          <div className="space-y-4 p-4">
+            {target && (
+              <>
+                <dl className="grid grid-cols-3 gap-3 text-sm">
+                  <div><dt className="eyebrow">Nhu cầu</dt><dd className="font-semibold">{needType(target.need_type).text}</dd></div>
+                  <div><dt className="eyebrow">Độ ngập báo</dt><dd className="num font-semibold">{reportDepthCm(target)} cm</dd></div>
+                  <div><dt className="eyebrow">Người cần hỗ trợ</dt><dd className="num font-semibold">{reportPeopleAffected(target)}</dd></div>
+                </dl>
+                {(target.description || target.notes) && <p className="rounded border border-line bg-sheet-2 p-2.5 text-sm">{target.description || target.notes}</p>}
+                {(target.reporter_name || target.reporter_phone) && (
+                  <p className="text-sm">
+                    <span className="text-ink-3">Liên hệ: </span>
+                    {target.reporter_name}{target.reporter_phone && <> <a className="font-semibold text-river underline" href={`tel:${target.reporter_phone}`}>{target.reporter_phone}</a></>}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <a className="btn" target="_blank" rel="noopener noreferrer" href={`https://www.openstreetmap.org/?mlat=${target.lat}&mlon=${target.lng}#map=17/${target.lat}/${target.lng}`}>
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" /> Mở bản đồ
+                  </a>
+                  {onSelectReport && <button type="button" className="btn" onClick={() => onSelectReport(target)}>Xem trên bản đồ FloodOS</button>}
+                </div>
+              </>
+            )}
 
-      {/* MODAL: REPORT INCIDENT */}
-      {isIncidentModalOpen && activeOrder && (
-        <Modal
-          isOpen={true}
-          onClose={() => setIsIncidentModalOpen(false)}
-          title="🚨 Báo Sự Cố Phương Tiện Hiện Trường"
-        >
-          <form onSubmit={handleIncidentSubmit} className="space-y-4">
-            {incidentError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
-                {incidentError}
+            {vehicle && (
+              <div className="rounded border border-line p-3 text-sm">
+                <div className="eyebrow mb-0.5">Phương tiện</div>
+                <div className="font-semibold">{vehicle.name} <span className="font-normal text-ink-3">· {vehicleType(vehicle.vehicle_type)}</span></div>
+                <div className="mt-0.5 text-xs text-ink-3">
+                  Nhiên liệu {fuel == null ? 'chưa có dữ liệu' : `${Math.round(fuel)}%`} · vị trí cập nhật {ageText(vehicle.telemetry_updated_at) ?? 'chưa có bản ghi'}{vehicle.position_is_simulated ? ' (mô phỏng)' : ''}
+                </div>
               </div>
             )}
 
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
-              <div><strong>Nhiệm vụ:</strong> Lệnh #{activeOrder.order_id}</div>
-              <div><strong>Phương tiện:</strong> {assignedVehicle?.vehicle_name || activeOrder.vehicle_id}</div>
-              <div className="text-rose-700 font-semibold">
-                * Báo cáo này sẽ lập tức kích hoạt quy trình Điều Phối Lại (SOP-02 Replan Workflow) tại Sở Chỉ huy.
+            <div>
+              <div className="flex justify-between text-xs text-ink-3"><span>Tiến độ</span><span className="num font-semibold text-ink">{active.progress_pct}%</span></div>
+              <div className="mt-1 h-2 rounded-sm bg-sheet-2 ring-1 ring-line"><div className="h-full rounded-sm bg-river" style={{ width: `${active.progress_pct}%` }} /></div>
+            </div>
+
+            {active.notes && <p className="text-sm"><span className="font-semibold">Chỉ đạo:</span> {active.notes}</p>}
+
+            {myIncidents.map((i) => (
+              <div key={i.incident_id} className="rounded border border-crit bg-crit-soft p-3 text-sm">
+                <div className="font-semibold text-crit">Sự cố đã báo: {incidentType(i.incident_type)}</div>
+                <div className="text-xs text-ink-2">{incidentStatus(i.status).text}. {i.status === 'OPEN_REPLANNING' ? 'Điều phối viên đang chọn phương tiện thay thế.' : ''}</div>
               </div>
-            </div>
+            ))}
 
-            <div>
-              <label className={LABEL_STYLE}>Loại sự cố kỹ thuật</label>
-              <select
-                value={incType}
-                onChange={(e) => setIncType(e.target.value)}
-                className={INPUT_STYLE}
-              >
-                <option value="PROPELLER_FOULED">Mắc kẹt chân vịt / rác nổi cuốn chân vịt</option>
-                <option value="ENGINE_STALL">Chết máy động cơ / sự cố nhiên liệu</option>
-                <option value="FLOODED_CABIN">Nước tràn khoang máy / nguy cơ chìm</option>
-                <option value="GROUNDED">Mắc cạn bãi bùn / vật cản ngầm</option>
-                <option value="OTHER">Sự cố khác</option>
-              </select>
+            {/* one primary action per state */}
+            <div className="grid gap-2">
+              {active.status === 'CONFIRMED' && (
+                <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => run(() => onUpdateOrderStatus(active.order_id, 'IN_PROGRESS', { progress_pct: 0 }))}>Nhận lệnh, bắt đầu di chuyển</button>
+              )}
+              {active.status === 'IN_PROGRESS' && (
+                <>
+                  <div className="grid grid-cols-3 gap-2" aria-label="Cập nhật tiến độ">
+                    {PROGRESS_STEPS.map((p) => (
+                      <button key={p} type="button" className="btn !min-h-12" disabled={busy || p <= active.progress_pct} onClick={() => run(() => onUpdateOrderStatus(active.order_id, 'IN_PROGRESS', { progress_pct: p }))}>{p}%</button>
+                    ))}
+                  </div>
+                  <button type="button" className="btn btn-primary btn-lg" onClick={() => openSheet('complete')}>Hoàn thành nhiệm vụ</button>
+                </>
+              )}
+              {active.status === 'IMPACTED' && <p className="rounded border border-warn bg-warn-soft p-3 text-sm">Nhiệm vụ đang bị gián đoạn do sự cố phương tiện. Chờ điều phối viên chọn phương án thay thế.</p>}
+              {active.status !== 'IMPACTED' && (
+                <button type="button" className="btn btn-lg text-crit" onClick={() => openSheet('incident')}>Báo sự cố phương tiện</button>
+              )}
             </div>
+          </div>
+        </section>
+      )}
 
-            <div>
-              <label className={LABEL_STYLE}>Mức độ nghiêm trọng</label>
-              <select
-                value={incSeverity}
-                onChange={(e) => setIncSeverity(e.target.value)}
-                className={INPUT_STYLE}
-              >
-                <option value="CRITICAL">🔴 KHẨN CẤP (Không thể tự di chuyển, cần chi viện ngay)</option>
-                <option value="MAJOR">🟠 NẶNG (Tốc độ giảm mạnh, khả năng hư hỏng thêm)</option>
-                <option value="MINOR">🟡 NHẸ (Có thể tự xử lý sơ bộ trong 15 phút)</option>
-              </select>
-            </div>
+      {history.length > 0 && (
+        <section className="panel" aria-label="Nhiệm vụ gần đây">
+          <div className="panel-head"><h3 className="text-sm">Nhiệm vụ gần đây</h3></div>
+          <ul className="rule-y">
+            {history.map((o) => (
+              <li key={o.order_id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                <span>{o.order_id} <span className="text-xs text-ink-3">· {formatLocalDateTime(o.created_at)}</span></span>
+                <StatusBadge status={o.status} type="order" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-            <div>
-              <label className={LABEL_STYLE}>Mô tả chi tiết hiện trạng</label>
-              <textarea
-                rows={3}
-                value={incDesc}
-                onChange={(e) => setIncDesc(e.target.value)}
-                className={INPUT_STYLE}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={LABEL_STYLE}>Ảnh chụp minh chứng hiện trường (ClamAV scanned)</label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer text-xs font-semibold text-slate-700">
-                  <Camera className="w-4 h-4 text-slate-500" />
-                  <span>Chọn ảnh chụp</span>
-                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                </label>
-                {photoPreview && (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Đã chọn ảnh minh chứng
-                  </span>
-                )}
+      {sheet === 'complete' && (
+        <Modal title="Hoàn thành nhiệm vụ" onClose={() => setSheet(null)}>
+          <form onSubmit={submitComplete} className="space-y-4" aria-label="Hoàn thành nhiệm vụ">
+            {error && <p role="alert" className="rounded border border-crit bg-crit-soft p-2.5 text-sm text-crit">{error}</p>}
+            <fieldset>
+              <legend className="label">Kết quả</legend>
+              <div className="grid gap-2" role="radiogroup" aria-label="Kết quả">
+                {OUTCOMES.map((o) => (
+                  <button key={o.value} type="button" role="radio" aria-checked={outcome === o.value} onClick={() => setOutcome(o.value)} className={`rounded border p-3 text-left ${outcome === o.value ? 'border-ink bg-ink text-sheet' : 'border-line-2 hover:bg-sheet-2'}`}>
+                    <span className="block text-sm font-semibold">{o.label}</span><span className={`text-xs ${outcome === o.value ? 'text-sheet/70' : 'text-ink-3'}`}>{o.hint}</span>
+                  </button>
+                ))}
               </div>
+            </fieldset>
+            <Field label="Độ ngập tại chỗ sau xử lý (cm)" htmlFor="final-depth"><input id="final-depth" inputMode="numeric" className="input !w-32" value={finalDepth} onChange={(e) => setFinalDepth(e.target.value.replace(/[^0-9]/g, ''))} /></Field>
+            <Field label="Ghi chú kết quả" htmlFor="done-notes"><textarea id="done-notes" rows={3} className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+            <div>
+              <label htmlFor="done-photo" className="btn w-full !min-h-12 cursor-pointer"><Camera className="h-4 w-4" aria-hidden="true" /> {photo ? 'Đổi ảnh' : 'Chụp ảnh hiện trường (tuỳ chọn)'}</label>
+              <input id="done-photo" type="file" accept="image/*" capture="environment" className="sr-only" onChange={onPhoto} />
+              {photo && <img src={photo.dataUrl} alt="Ảnh kết quả đã chọn" className="mt-2 max-h-40 rounded border border-line" />}
             </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setIsIncidentModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isReportingIncident}
-                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow flex items-center gap-2 disabled:opacity-50"
-              >
-                {isReportingIncident ? 'Đang gửi sự cố...' : 'Gửi Khẩn Cấp Lên Chỉ Huy'}
-              </button>
-            </div>
+            <button type="submit" className="btn btn-primary btn-lg w-full" disabled={busy}>{busy ? 'Đang gửi…' : 'Gửi báo cáo hoàn thành'}</button>
           </form>
         </Modal>
       )}
 
-      {/* MODAL: COMPLETE MISSION */}
-      {isCompleteModalOpen && activeOrder && (
-        <Modal
-          isOpen={true}
-          onClose={() => setIsCompleteModalOpen(false)}
-          title={`Hoàn Tất Ca Tác Chiến #${activeOrder.order_id}`}
-        >
-          <form onSubmit={handleCompleteSubmit} className="space-y-4">
-            {statusError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
-                {statusError}
+      {sheet === 'incident' && (
+        <Modal title="Báo sự cố phương tiện" onClose={() => setSheet(null)}>
+          <form onSubmit={submitIncident} className="space-y-4" aria-label="Báo sự cố phương tiện">
+            {error && <p role="alert" className="rounded border border-crit bg-crit-soft p-2.5 text-sm text-crit">{error}</p>}
+            <fieldset>
+              <legend className="label">Sự cố gì?</legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Loại sự cố">
+                {INCIDENT_TYPES.map((t) => <button key={t} type="button" role="radio" aria-checked={incType === t} onClick={() => setIncType(t)} className={`btn !min-h-12 ${incType === t ? 'btn-primary' : ''}`}>{incidentType(t)}</button>)}
               </div>
-            )}
-
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
-              <div><strong>Khu vực:</strong> {targetReport?.address_hint || 'Hà Nội'}</div>
-              <div><strong>Người báo:</strong> {targetReport?.reporter_name}</div>
-              <div className="text-emerald-800 font-semibold">
-                * Khi nộp báo cáo, hồ sơ sẽ chuyển sang trạng thái chờ người dân nghiệm thu an toàn.
+            </fieldset>
+            <fieldset>
+              <legend className="label">Mức độ</legend>
+              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Mức độ">
+                {SEVERITIES.map((s) => <button key={s} type="button" role="radio" aria-checked={incSeverity === s} onClick={() => setIncSeverity(s)} className={`btn !min-h-12 ${incSeverity === s ? 'btn-primary' : ''}`}>{severity(s).text}</button>)}
               </div>
-            </div>
-
+            </fieldset>
+            <Field label="Ước tính ngừng hoạt động (giờ)" htmlFor="downtime"><input id="downtime" inputMode="decimal" className="input !w-32" value={downtime} onChange={(e) => setDowntime(e.target.value.replace(/[^0-9.]/g, ''))} /></Field>
+            <Field label="Mô tả" htmlFor="inc-desc"><textarea id="inc-desc" rows={3} className="input" value={incDesc} onChange={(e) => setIncDesc(e.target.value)} /></Field>
             <div>
-              <label className={LABEL_STYLE}>Kết quả xử lý hiện trường (Outcome)</label>
-              <select
-                value={compOutcome}
-                onChange={(e) => setCompOutcome(e.target.value as any)}
-                className={INPUT_STYLE}
-              >
-                <option value="RESOLVED">✅ RESOLVED - Đã cứu nạn / giải cứu an toàn toàn bộ</option>
-                <option value="PARTIAL">⚠️ PARTIAL - Đã hỗ trợ một phần, cần lực lượng tiếp ứng</option>
-                <option value="UNRESOLVED">❌ UNRESOLVED - Không thể tiếp cận mục tiêu</option>
-              </select>
+              <label htmlFor="inc-photo" className="btn w-full !min-h-12 cursor-pointer"><Camera className="h-4 w-4" aria-hidden="true" /> {photo ? 'Đổi ảnh' : 'Chụp ảnh sự cố (tuỳ chọn)'}</label>
+              <input id="inc-photo" type="file" accept="image/*" capture="environment" className="sr-only" onChange={onPhoto} />
+              {photo && <img src={photo.dataUrl} alt="Ảnh sự cố đã chọn" className="mt-2 max-h-40 rounded border border-line" />}
             </div>
-
-            <div>
-              <label className={LABEL_STYLE}>Độ sâu mực nước đo đạc sau cứu nạn (cm)</label>
-              <input
-                type="number"
-                min="0"
-                max="500"
-                value={compFinalDepth}
-                onChange={(e) => setCompFinalDepth(Number(e.target.value))}
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            <div>
-              <label className={LABEL_STYLE}>Báo cáo kết quả cứu nạn &amp; bàn giao (Bắt buộc)</label>
-              <textarea
-                rows={4}
-                value={completionNotes}
-                onChange={(e) => setCompletionNotes(e.target.value)}
-                placeholder="Số người được cứu, tình trạng sức khỏe, điểm tập kết sơ tán an toàn..."
-                className={INPUT_STYLE}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={LABEL_STYLE}>Ảnh chụp minh chứng hoàn thành (quét ClamAV)</label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer text-xs font-semibold text-slate-700">
-                  <Camera className="w-4 h-4 text-slate-500" />
-                  <span>Chọn ảnh hiện trường</span>
-                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                </label>
-                {photoPreview && (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Đã chọn ảnh minh chứng
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setIsCompleteModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isCompleting}
-                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow flex items-center gap-2 disabled:opacity-50"
-              >
-                {isCompleting ? 'Đang lưu...' : 'Xác Nhận Hoàn Tất'}
-              </button>
-            </div>
+            <button type="submit" className="btn btn-danger btn-lg w-full" disabled={busy}>{busy ? 'Đang gửi…' : 'Gửi báo cáo sự cố'}</button>
+            <p className="text-[11px] text-ink-3">Hệ thống sẽ xếp hạng các phương án thay thế; điều phối viên chọn và duyệt.</p>
           </form>
         </Modal>
       )}
