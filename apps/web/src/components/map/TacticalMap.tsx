@@ -10,6 +10,8 @@ import { Maximize, TriangleAlert } from 'lucide-react';
 import type { FloodZone, RescueVehicle, FloodReport, GaugeStation, SafeShelter } from '../../types';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 import type { MapSelection } from './MapDetailPanel';
+import { MapLegend } from './MapLegend';
+import { gaugeSpec, markerClassName, markerInnerHtml, reportSpec, shelterSpec, vehicleSpec, type MarkerSpec } from './mapIcons';
 import { OFFLINE_BASEMAP_PATH, isPmtilesHeader, offlineStyle, onlineStyle, type BasemapKind } from './basemap';
 setWorkerUrl(maplibreWorkerUrl);
 addProtocol('pmtiles', new Protocol().tile);
@@ -35,6 +37,8 @@ interface TacticalMapProps {
   onSelect?: (selection: MapSelection) => void;
   className?: string;
   heightClass?: string;
+  /** legend starts expanded (full map tab) or as a one-line summary (narrow console panel) */
+  legendOpen?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [105.845, 20.978];
@@ -54,40 +58,13 @@ async function resolveBasemap(): Promise<Basemap> {
 
 const RISK_COLOR = ['match', ['get', 'risk_level'], 'CRITICAL', '#b73220', 'WARNING', '#c85f17', 'WATCH', '#a87908', '#2f7d4f'];
 
-const ICON: Record<string, string> = {
-  report: '<path d="M12 3 2.5 20h19L12 3z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4M12 17.2v.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
-  boat: '<path d="M3 17h18l-2 4H5l-2-4zM7 17V9h10v8M12 4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>',
-  truck: '<path d="M2 6h11v10H2zM13 9h5l3 3v4h-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7" cy="18" r="1.8" fill="currentColor"/><circle cx="17" cy="18" r="1.8" fill="currentColor"/>',
-  pump: '<path d="M12 3c3 4 5 6.5 5 9.5a5 5 0 0 1-10 0C7 9.5 9 7 12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
-  shelter: '<path d="M3 11 12 4l9 7M5 10v10h14V10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
-  gauge: '<path d="M9 3v18M9 6h5M9 10h3M9 14h5M9 18h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-};
-
-const vehicleGlyph = (t: string) => (t === 'RESCUE_BOAT' ? 'boat' : t === 'MOBILE_PUMP' ? 'pump' : 'truck');
-
-const CLOSED_STATUSES = ['RESOLVED', 'REJECTED', 'CANCELLED'];
-
-const reportColor = (r: FloodReport): string => {
-  if (CLOSED_STATUSES.includes(r.status)) return 'var(--color-ink-3)';
-  if (r.priority === 'URGENT' || r.priority === 'CRITICAL') return 'var(--color-crit)';
-  if (r.status === 'RECEIVED') return 'var(--color-watch)';
-  return 'var(--color-warn)';
-};
-
-const gaugeColor = (g: GaugeStation): string => {
-  if (g.alert_state === 'CRITICAL') return 'var(--color-crit)';
-  if (g.alert_state === 'WARNING') return 'var(--color-warn)';
-  if (g.alert_state === 'WATCH') return 'var(--color-watch)';
-  return g.level_cm == null ? 'var(--color-ink-3)' : 'var(--color-safe)';
-};
-
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
 export const TacticalMap: React.FC<TacticalMapProps> = ({
   zones = [], vehicles = [], reports = [], gauges = [], shelters = [],
   route = null, trails = {}, live, selectedKey = null, onSelect,
-  className = '', heightClass = 'h-full min-h-[420px]',
+  className = '', heightClass = 'h-full min-h-[420px]', legendOpen = true,
 }) => {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -211,40 +188,30 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const m = mapRef.current;
     if (!m) return;
     const touched = new Set<string>();
-    const upsert = (key: string, lng: number, lat: number, cls: string, color: string, glyph: string, label: string, sel: MapSelection) => {
+    const upsert = (key: string, lng: number, lat: number, spec: MarkerSpec, label: string, sel: MapSelection) => {
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
       touched.add(key);
       let mk = markers.current.get(key);
       if (!mk) {
-        mk = new Marker({ element: document.createElement('div') }).setLngLat([lng, lat]).addTo(m);
+        // the incident drop points down at its location; every other marker is centred on it
+        const isDrop = spec.shape === 'drop';
+        mk = new Marker({ element: document.createElement('div'), anchor: 'center', offset: isDrop ? [0, -21] : [0, 0] }).setLngLat([lng, lat]).addTo(m);
         markers.current.set(key, mk);
       } else {
         mk.setLngLat([lng, lat]);
       }
       const el = mk.getElement();
-      el.className = `fo-pin ${cls}${selectedKey === key ? ' is-selected' : ''}`;
-      el.style.setProperty('--pin', color);
+      el.className = 'fo-marker';
       el.setAttribute('role', 'button');
       el.setAttribute('aria-label', label);
-      el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[glyph]}</svg><span class="fo-pin-label">${esc(label)}</span>`;
+      el.innerHTML = `<span class="${markerClassName(spec, selectedKey === key ? 'is-selected' : '')}" style="--pin:${spec.color}">${markerInnerHtml(spec, esc(label))}</span>`;
       el.onclick = () => onSelectRef.current?.(sel);
     };
 
-    if (layers.shelters) shelters.forEach((s) => upsert(`shelter:${s.shelter_id}`, s.lng, s.lat, 'fo-square', 'var(--color-safe)', 'shelter', `${s.name} · ${s.occupancy}/${s.capacity} chỗ`, { type: 'shelter', data: s }));
-    if (layers.gauges) gauges.forEach((g) => upsert(`gauge:${g.station_id}`, g.lng, g.lat, 'fo-diamond', gaugeColor(g), 'gauge', `${g.name}${g.level_cm != null ? ` · ${g.level_cm} cm` : ' · chưa có số liệu'}`, { type: 'gauge', data: g }));
-    if (layers.vehicles) {
-      vehicles.forEach((v) => {
-        const broken = v.status === 'BREAKDOWN';
-        upsert(`vehicle:${v.vehicle_id}`, v.current_lng, v.current_lat, broken ? 'is-pulse' : '', broken ? 'var(--color-crit)' : 'var(--color-river)', vehicleGlyph(v.vehicle_type), `${v.name}${broken ? ' · hỏng' : ''}`, { type: 'vehicle', data: v });
-      });
-    }
-    if (layers.reports) {
-      reports.forEach((r) => {
-        const closed = CLOSED_STATUSES.includes(r.status);
-        const urgent = (r.priority === 'URGENT' || r.priority === 'CRITICAL') && !closed;
-        upsert(`report:${r.report_id}`, r.lng, r.lat, `${urgent ? 'is-pulse' : ''} ${closed ? 'is-dim' : ''}`, reportColor(r), 'report', `${r.report_id} · ${r.depth_cm} cm`, { type: 'report', data: r });
-      });
-    }
+    if (layers.shelters) shelters.forEach((s) => upsert(`shelter:${s.shelter_id}`, s.lng, s.lat, shelterSpec(s), `${s.name} · ${s.occupancy}/${s.capacity} chỗ`, { type: 'shelter', data: s }));
+    if (layers.gauges) gauges.forEach((g) => upsert(`gauge:${g.station_id}`, g.lng, g.lat, gaugeSpec(g), `${g.name}${g.level_cm != null ? ` · ${g.level_cm} cm` : ' · chưa có số liệu'}`, { type: 'gauge', data: g }));
+    if (layers.vehicles) vehicles.forEach((v) => upsert(`vehicle:${v.vehicle_id}`, v.current_lng, v.current_lat, vehicleSpec(v), `${v.name}${v.status === 'BREAKDOWN' ? ' · hỏng' : ''}`, { type: 'vehicle', data: v }));
+    if (layers.reports) reports.forEach((r) => upsert(`report:${r.report_id}`, r.lng, r.lat, reportSpec(r), `${r.report_id} · ${r.depth_cm} cm`, { type: 'report', data: r }));
 
     markers.current.forEach((mk, key) => { if (!touched.has(key)) { mk.remove(); markers.current.delete(key); } });
   }, [loaded, vehicles, reports, shelters, gauges, layers, selectedKey]);
@@ -259,7 +226,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   ];
 
   return (
-    <div className={`relative overflow-hidden bg-paper ${heightClass} ${className}`}>
+    <div className={`flex flex-col overflow-hidden bg-paper ${heightClass} ${className}`}>
+      <div className="relative min-h-0 flex-1">
       {/* inline style: maplibre-gl.css sets .maplibregl-map to position:relative and would beat a utility class */}
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
 
@@ -282,8 +250,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         <Maximize className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      <div className="absolute bottom-3 left-3 z-10 max-w-[75%] rounded border border-line bg-sheet/95 px-2 py-1 text-[11px] text-ink-2 shadow-sm">
-        Nền: {basemap?.kind === 'offline' ? 'dữ liệu OpenStreetMap lưu trong hệ thống' : 'OpenStreetMap trực tuyến'}. Vùng giám sát: dữ liệu thí điểm.
+      <div className="absolute bottom-8 left-3 z-10 max-w-[40%] rounded border border-line bg-sheet/95 px-2 py-1 text-[11px] text-ink-2 shadow-sm">
+        Nền: {basemap?.kind === 'offline' ? 'OpenStreetMap, lưu trong hệ thống' : 'OpenStreetMap trực tuyến'}.
         {live?.enabled && !live.connected && ' Mất kết nối bản sao số, vị trí xe có thể cũ.'}
         {route && ` Nét đứt: đường chim bay ${route.label}.`}
       </div>
@@ -294,6 +262,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           Không tải được nền bản đồ. Các điểm dữ liệu vẫn đúng vị trí nhưng không có nền đường.
         </div>
       )}
+      </div>
+      <MapLegend defaultOpen={legendOpen} />
     </div>
   );
 };
