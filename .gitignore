@@ -39,6 +39,11 @@ FloodOS_Ke_hoach*
 tests/postman/postman/
 tests/postman/.postman/
 
+# Binary executables and tools
+*.exe
+apps/web/tools/pmtiles
+apps/web/tools/*.exe
+
 # Node & Frontend Web
 node_modules/
 dist/

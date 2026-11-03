@@ -365,7 +365,9 @@ bash tests/e2e_full_stack_test.sh
 | **Thu nhận dữ liệu IoT** | Eclipse Mosquitto 2.0.18 | Broker MQTT xác thực và phân quyền theo topic | EPL-2.0 / EDL-1.0 |
 | **Phân tích kho lạnh** | DuckDB & Apache Parquet | Động cơ OLAP truy vấn hồ dữ liệu lạnh tốc độ cao | MIT |
 | **Cổng quét mã độc** | ClamAV 1.4.3 | Quét virus tệp tải lên fail-closed ở chế độ INSTREAM | GPL-2.0 |
-| **Giao diện tác chiến** | React 19, TypeScript, MapLibre GL | Trung tâm chỉ huy trực quan hóa thời gian thực | MIT / BSD |
+| **Giao diện tác chiến** | React 19, TypeScript, MapLibre GL | Trung tâm chỉ huy trực quan hóa thời gian thực | MIT / BSD-3 |
+| **Bản đồ vector ngoại tuyến** | PMTiles 4.5 & Protomaps schema | Bản đồ vector tự phục vụ không phụ thuộc Internet | BSD-3-Clause |
+| **Dữ liệu bản đồ nền** | OpenStreetMap (Hà Nội pilot bbox) | Dữ liệu không gian địa lý mở © OpenStreetMap contributors | ODbL 1.0 |
 
 ---
 

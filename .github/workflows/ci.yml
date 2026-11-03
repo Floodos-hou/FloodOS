@@ -85,4 +85,14 @@ jobs:
     - name: Run Full-Stack Container Integration Tests
       run: |
         chmod +x tests/e2e_full_stack_test.sh
-        bash tests/e2e_full_stack_test.sh
+        bash tests/e2e_full_stack_test.sh 2>&1 | tee /tmp/e2e_run.log
+
+    - name: Publish E2E Container Logs on Failure
+      if: always()
+      run: |
+        if [ -f /tmp/e2e_run.log ]; then
+          echo "### Full-Stack Container Integration Test Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 250 /tmp/e2e_run.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
