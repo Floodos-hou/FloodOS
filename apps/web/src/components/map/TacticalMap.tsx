@@ -2,14 +2,17 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, LngLatBounds, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
+import { Map as MapLibreMap, Marker, NavigationControl, AttributionControl, LngLatBounds, addProtocol, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { Maximize, TriangleAlert } from 'lucide-react';
 import type { FloodZone, RescueVehicle, FloodReport, GaugeStation, SafeShelter } from '../../types';
 import type { LiveFleetInfo } from '../../hooks/useLiveFleet';
 import type { MapSelection } from './MapDetailPanel';
+import { OFFLINE_BASEMAP_PATH, isPmtilesHeader, offlineStyle, onlineStyle, type BasemapKind } from './basemap';
 setWorkerUrl(maplibreWorkerUrl);
+addProtocol('pmtiles', new Protocol().tile);
 
 export interface MapRoute {
   from: { lat: number; lng: number };
@@ -36,23 +39,18 @@ interface TacticalMapProps {
 
 const DEFAULT_CENTER: [number, number] = [105.845, 20.978];
 
-/** Real OpenStreetMap raster, desaturated so the case markers carry the colour. No hand-drawn geography. */
-const STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    },
-  },
-  layers: [
-    { id: 'paper', type: 'background', paint: { 'background-color': '#ece8dc' } },
-    { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.55, 'raster-contrast': -0.05, 'raster-brightness-max': 0.95 } },
-  ],
-};
+interface Basemap { kind: BasemapKind; style: StyleSpecification }
+
+/** Use the bundled OpenStreetMap PMTiles file when it is really there; otherwise the public OSM tiles. */
+async function resolveBasemap(): Promise<Basemap> {
+  try {
+    const res = await fetch(OFFLINE_BASEMAP_PATH, { headers: { Range: 'bytes=0-6' } });
+    if (res.ok && isPmtilesHeader(new Uint8Array(await res.arrayBuffer()))) {
+      return { kind: 'offline', style: offlineStyle(`${window.location.origin}${OFFLINE_BASEMAP_PATH}`) as unknown as StyleSpecification };
+    }
+  } catch { /* fall through to the online map */ }
+  return { kind: 'online', style: onlineStyle() as unknown as StyleSpecification };
+}
 
 const RISK_COLOR = ['match', ['get', 'risk_level'], 'CRITICAL', '#b73220', 'WARNING', '#c85f17', 'WATCH', '#a87908', '#2f7d4f'];
 
@@ -97,6 +95,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const zonesRef = useRef(zones);
   const onSelectRef = useRef(onSelect);
   const fitted = useRef(false);
+  const [basemap, setBasemap] = useState<Basemap | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [tilesFailed, setTilesFailed] = useState(false);
   const [layers, setLayers] = useState({ reports: true, vehicles: true, shelters: true, gauges: true, zones: true });
@@ -107,14 +106,20 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   });
 
   useEffect(() => {
-    if (!container.current || mapRef.current) return;
-    const m = new MapLibreMap({ container: container.current, style: STYLE, center: DEFAULT_CENTER, zoom: 12.5, attributionControl: false });
+    let cancelled = false;
+    void resolveBasemap().then((b) => { if (!cancelled) setBasemap(b); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!container.current || mapRef.current || !basemap) return;
+    const m = new MapLibreMap({ container: container.current, style: basemap.style, center: DEFAULT_CENTER, zoom: 12.5, attributionControl: false });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     m.addControl(new AttributionControl({ compact: true }), 'bottom-right');
-    m.on('error', (e) => { if ((e as { sourceId?: string }).sourceId === 'osm') setTilesFailed(true); });
+    m.on('error', (e) => { const id = (e as { sourceId?: string }).sourceId; if (id === 'osm' || id === 'basemap') setTilesFailed(true); });
     m.on('data', (e) => {
       const ev = e as { sourceId?: string; tile?: unknown };
-      if (ev.sourceId === 'osm' && ev.tile) setTilesFailed(false);
+      if ((ev.sourceId === 'osm' || ev.sourceId === 'basemap') && ev.tile) setTilesFailed(false);
     });
     m.on('load', () => {
       m.addSource('zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -138,7 +143,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     ro.observe(container.current);
     const markerStore = markers.current;
     return () => { ro.disconnect(); markerStore.clear(); m.remove(); mapRef.current = null; };
-  }, []);
+  }, [basemap]);
 
   // zone polygons (seed polygons; the legend says so)
   useEffect(() => {
@@ -278,7 +283,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       </button>
 
       <div className="absolute bottom-3 left-3 z-10 max-w-[75%] rounded border border-line bg-sheet/95 px-2 py-1 text-[11px] text-ink-2 shadow-sm">
-        Vùng giám sát: dữ liệu thí điểm.
+        Nền: {basemap?.kind === 'offline' ? 'dữ liệu OpenStreetMap lưu trong hệ thống' : 'OpenStreetMap trực tuyến'}. Vùng giám sát: dữ liệu thí điểm.
         {live?.enabled && !live.connected && ' Mất kết nối bản sao số, vị trí xe có thể cũ.'}
         {route && ` Nét đứt: đường chim bay ${route.label}.`}
       </div>
@@ -286,7 +291,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       {tilesFailed && (
         <div role="status" className="absolute inset-x-3 bottom-16 z-10 mx-auto flex max-w-md items-center gap-2 rounded border border-warn bg-warn-soft px-3 py-2 text-xs text-ink">
           <TriangleAlert className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
-          Không tải được bản đồ nền (OpenStreetMap). Các điểm dữ liệu vẫn đúng vị trí nhưng không có nền đường.
+          Không tải được nền bản đồ. Các điểm dữ liệu vẫn đúng vị trí nhưng không có nền đường.
         </div>
       )}
     </div>
