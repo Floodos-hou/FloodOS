@@ -1,0 +1,148 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1320" viewBox="0 0 1800 1320"><defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#071521" /><stop offset="1" stop-color="#102b3c" /></linearGradient><pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#52a3bd" stroke-opacity=".045" /></pattern><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#62c7d9" stroke-width="1.2" /></marker></defs><style>text{font-family:DejaVu Sans,Arial,sans-serif}</style><rect width="1800" height="1320" fill="url(#bg)" /><rect width="1800" height="1320" fill="url(#grid)" />
+<path d="M0 1260Q180 1210 360 1260T720 1260T1080 1260T1440 1260T1800 1260V1320H0Z" fill="#1e8eab" opacity=".10" />
+<rect x="48" y="36" width="58" height="58" rx="17" fill="#123d50" stroke="#28c9da" />
+<path d="M58 72q8-10 16 0t16 0M58 82q8-10 16 0t16 0" fill="none" stroke="#5de5ee" stroke-width="3" />
+<text x="124" y="70" fill="#f0fbff" font-size="40" font-weight="750">FloodOS</text>
+<text x="325" y="67" fill="#acd8e9" font-size="22" font-weight="600">KIẾN TRÚC ĐIỀU PHỐI ỨNG PHÓ NGẬP LỤT ĐÔ THỊ</text>
+<text x="50" y="124" fill="#62c7d9" font-size="13" font-weight="600">DX-OS LÕI MỞ  /  NỀN TẢNG DỊCH VỤ KHÔNG GIAO DIỆN  /  THÍ ĐIỂM HÀ NỘI</text>
+<rect x="1440" y="45" width="310" height="44" rx="12" fill="#382c24" stroke="#f0a35d" />
+<text x="1460" y="73" fill="#ffc48d" font-size="16" font-weight="650">OLP 2026 · MÃ NGUỒN MỞ</text>
+<rect x="410" y="165" width="980" height="195" rx="24" fill="#0e2030" stroke="#dc9d60" />
+<rect x="430" y="185" width="36" height="30" rx="9" fill="#dc9d60" stroke="#dc9d60" />
+<text x="439" y="207" fill="#071622" font-size="16" font-weight="700">↧</text>
+<text x="480" y="208" fill="#eff8ff" font-size="21" font-weight="700">NGUỒN THÔNG TIN HIỆN TRƯỜNG</text>
+<text x="434" y="241" fill="#8faebf" font-size="14" font-weight="400">Dữ liệu đầu vào được phân biệt theo nguồn và thời điểm cập nhật</text>
+<rect x="435" y="260" width="285" height="78" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="435" y="274" width="4" height="50" rx="2" fill="#f4a364" />
+<text x="453" y="291" fill="#f3faff" font-size="19" font-weight="650">Tin báo người dân</text>
+<text x="453" y="317" fill="#b8cddb" font-size="15" font-weight="400">Vị trí · mức ngập · ảnh hiện trường</text>
+<rect x="750" y="260" width="285" height="78" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="750" y="274" width="4" height="50" rx="2" fill="#f4a364" />
+<text x="768" y="291" fill="#f3faff" font-size="19" font-weight="650">Dữ liệu thiết bị qua MQTT</text>
+<text x="768" y="317" fill="#b8cddb" font-size="15" font-weight="400">Dữ liệu mẫu / mô phỏng / thiết bị¹</text>
+<rect x="1065" y="260" width="300" height="78" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="1065" y="274" width="4" height="50" rx="2" fill="#f4a364" />
+<text x="1083" y="291" fill="#f3faff" font-size="19" font-weight="650">Đội cứu hộ &amp; nguồn lực</text>
+<text x="1083" y="317" fill="#b8cddb" font-size="15" font-weight="400">Tiến độ · sự cố · phương tiện</text>
+<rect x="45" y="405" width="330" height="710" rx="24" fill="#0e2030" stroke="#32c9db" />
+<rect x="65" y="425" width="36" height="30" rx="9" fill="#32c9db" stroke="#32c9db" />
+<text x="74" y="447" fill="#071622" font-size="16" font-weight="700">02</text>
+<text x="115" y="448" fill="#eff8ff" font-size="21" font-weight="700">KHÔNG GIAN H–P–D–I</text>
+<text x="69" y="481" fill="#8faebf" font-size="14" font-weight="400">TẦNG 2 · Trải nghiệm &amp; năng lực số</text>
+<rect x="70" y="520" width="280" height="140" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="70" y="534" width="4" height="112" rx="2" fill="#28c9da" />
+<text x="88" y="551" fill="#f3faff" font-size="19" font-weight="650">Trung tâm tác chiến</text>
+<text x="88" y="577" fill="#b8cddb" font-size="15" font-weight="400">apps/web · React / MapLibre</text>
+<text x="88" y="599" fill="#b8cddb" font-size="15" font-weight="400">Bản đồ · tin báo · điều phối</text>
+<text x="88" y="621" fill="#b8cddb" font-size="15" font-weight="400">Giao diện theo 5 vai trò</text>
+<rect x="70" y="700" width="280" height="140" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="70" y="714" width="4" height="112" rx="2" fill="#f4a364" />
+<text x="88" y="731" fill="#f3faff" font-size="19" font-weight="650">Bản sao số 3D</text>
+<text x="88" y="757" fill="#b8cddb" font-size="15" font-weight="400">apps/twin3d · Three.js</text>
+<text x="88" y="779" fill="#b8cddb" font-size="15" font-weight="400">Vị trí &amp; trạng thái tài nguyên</text>
+<text x="88" y="825" fill="#f4a364" font-size="12" font-weight="600">CÒN THÀNH PHẦN KẾ THỪA²</text>
+<rect x="70" y="880" width="280" height="125" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="70" y="894" width="4" height="97" rx="2" fill="#28c9da" />
+<text x="88" y="911" fill="#f3faff" font-size="19" font-weight="650">Tác nghiệp hiện trường</text>
+<text x="88" y="937" fill="#b8cddb" font-size="15" font-weight="400">Người dân · điều phối viên</text>
+<text x="88" y="959" fill="#b8cddb" font-size="15" font-weight="400">Đội cứu hộ · quản lý nguồn lực</text>
+<rect x="430" y="405" width="820" height="710" rx="24" fill="#0e2030" stroke="#48a9ee" />
+<rect x="450" y="425" width="36" height="30" rx="9" fill="#48a9ee" stroke="#48a9ee" />
+<text x="459" y="447" fill="#071622" font-size="16" font-weight="700">01</text>
+<text x="500" y="448" fill="#eff8ff" font-size="21" font-weight="700">NỀN TẢNG DỊCH VỤ LÕI</text>
+<text x="454" y="481" fill="#8faebf" font-size="14" font-weight="400">TẦNG 1 · Không giao diện · Dịch vụ dùng chung</text>
+<rect x="465" y="520" width="345" height="110" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="465" y="534" width="4" height="82" rx="2" fill="#28c9da" />
+<text x="483" y="551" fill="#f3faff" font-size="19" font-weight="650">APISIX · Cổng bảo mật</text>
+<text x="483" y="577" fill="#b8cddb" font-size="15" font-weight="400">Giao tiếp API · kiểm tra mã truy cập</text>
+<text x="483" y="599" fill="#b8cddb" font-size="15" font-weight="400">Chặn /api/v1/internal/*</text>
+<rect x="865" y="520" width="350" height="110" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="865" y="534" width="4" height="82" rx="2" fill="#28c9da" />
+<text x="883" y="551" fill="#f3faff" font-size="19" font-weight="650">Keycloak · Định danh tập trung</text>
+<text x="883" y="577" fill="#b8cddb" font-size="15" font-weight="400">Đăng nhập một lần · OIDC / PKCE</text>
+<text x="883" y="599" fill="#b8cddb" font-size="15" font-weight="400">Xác thực &amp; vai trò truy cập</text>
+<rect x="465" y="700" width="345" height="120" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="465" y="714" width="4" height="92" rx="2" fill="#28c9da" />
+<text x="483" y="731" fill="#f3faff" font-size="19" font-weight="650">Dịch vụ lõi Java 21</text>
+<text x="483" y="757" fill="#b8cddb" font-size="15" font-weight="400">Phân tách đơn vị · truy cập dữ liệu</text>
+<text x="483" y="779" fill="#b8cddb" font-size="15" font-weight="400">Kiểm toán SHA-256 · tích hợp dịch vụ</text>
+<rect x="865" y="700" width="350" height="120" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="865" y="714" width="4" height="92" rx="2" fill="#f4a364" />
+<text x="883" y="731" fill="#f3faff" font-size="19" font-weight="650">Flowable · BPMN 2.0</text>
+<text x="883" y="757" fill="#b8cddb" font-size="15" font-weight="400">Triển khai và tạo tiến trình thật</text>
+<text x="883" y="779" fill="#b8cddb" font-size="15" font-weight="400">Chưa hoàn tất tác vụ qua API</text>
+<rect x="465" y="900" width="345" height="125" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="465" y="914" width="4" height="97" rx="2" fill="#28c9da" />
+<text x="483" y="931" fill="#f3faff" font-size="19" font-weight="650">Mosquitto → Bộ thu nhận</text>
+<text x="483" y="957" fill="#b8cddb" font-size="15" font-weight="400">Tiếp nhận dữ liệu thiết bị hiện trường</text>
+<text x="483" y="979" fill="#b8cddb" font-size="15" font-weight="400">Chuẩn hóa dữ liệu NGSI-LD</text>
+<rect x="865" y="900" width="350" height="125" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="865" y="914" width="4" height="97" rx="2" fill="#28c9da" />
+<text x="883" y="931" fill="#f3faff" font-size="19" font-weight="650">ClamAV · Kiểm dịch tệp</text>
+<text x="883" y="957" fill="#b8cddb" font-size="15" font-weight="400">Quét ảnh / tệp trước lưu trữ</text>
+<text x="883" y="979" fill="#b8cddb" font-size="15" font-weight="400">Chặn tải lên khi máy quét gặp lỗi</text>
+<rect x="1310" y="405" width="445" height="710" rx="24" fill="#0e2030" stroke="#a291ef" />
+<rect x="1330" y="425" width="36" height="30" rx="9" fill="#a291ef" stroke="#a291ef" />
+<text x="1339" y="447" fill="#071622" font-size="16" font-weight="700">DB</text>
+<text x="1380" y="448" fill="#eff8ff" font-size="21" font-weight="700">DỮ LIỆU &amp; KIỂM TOÁN</text>
+<text x="1334" y="481" fill="#8faebf" font-size="14" font-weight="400">Dịch vụ lưu trữ thuộc nền tảng lõi Tầng 1</text>
+<rect x="1335" y="520" width="395" height="115" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="1335" y="534" width="4" height="87" rx="2" fill="#a291ef" />
+<text x="1353" y="551" fill="#f3faff" font-size="19" font-weight="650">PostgreSQL 16</text>
+<text x="1353" y="577" fill="#b8cddb" font-size="15" font-weight="400">Giao dịch · cưỡng chế quyền từng dòng</text>
+<text x="1353" y="599" fill="#b8cddb" font-size="13" font-weight="400">GiST chống trùng lịch · nhật ký kiểm toán</text>
+<rect x="1335" y="700" width="395" height="115" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="1335" y="714" width="4" height="87" rx="2" fill="#a291ef" />
+<text x="1353" y="731" fill="#f3faff" font-size="19" font-weight="650">SeaweedFS · S3</text>
+<text x="1353" y="757" fill="#b8cddb" font-size="15" font-weight="400">Ảnh &amp; tệp chứng cứ</text>
+<text x="1353" y="779" fill="#b8cddb" font-size="15" font-weight="400">Lưu trữ đối tượng · tệp Parquet</text>
+<rect x="1335" y="900" width="395" height="125" rx="14" fill="#142d40" stroke="#28495e" />
+<rect x="1335" y="914" width="4" height="97" rx="2" fill="#a291ef" />
+<text x="1353" y="931" fill="#f3faff" font-size="19" font-weight="650">Luồng sự kiện &amp; kho phân tích</text>
+<text x="1353" y="957" fill="#b8cddb" font-size="15" font-weight="400">Kafka → Bộ lưu trữ dữ liệu lịch sử</text>
+<text x="1353" y="979" fill="#b8cddb" font-size="15" font-weight="400">Tệp Parquet trên S3 → DuckDB</text>
+<path d="M580 338 V380 H395 V565 H465" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="394" y="374" width="42.4" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="400" y="391" fill="#9cdbea" font-size="13" font-weight="400">REST</text>
+<path d="M890 338 V383 H841 V863 H635 V900" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="844" y="374" width="42.4" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="850" y="391" fill="#9cdbea" font-size="13" font-weight="400">MQTT</text>
+<path d="M1215 338 V370 H395" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<path d="M350 580 H465" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="359" y="545" width="34.8" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="365" y="562" fill="#9cdbea" font-size="13" font-weight="400">API</text>
+<path d="M350 760 H405 V610 H465" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<path d="M810 570 H865" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="811" y="536" width="42.4" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="817" y="553" fill="#9cdbea" font-size="13" font-weight="400">OIDC</text>
+<path d="M635 630 V700" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="640" y="655" width="65.19999999999999" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="646" y="672" fill="#9cdbea" font-size="13" font-weight="400">Gọi dịch vụ</text>
+<path d="M810 760 H865" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<path d="M810 790 H840 V665 H1280 V575 H1335" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="1084" y="639" width="80.39999999999999" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="1090" y="656" fill="#9cdbea" font-size="13" font-weight="400">SQL / Phân quyền</text>
+<path d="M1215 958 H1280 V755 H1335" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="1249" y="833" width="27.2" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="1255" y="850" fill="#9cdbea" font-size="13" font-weight="400">S3</text>
+<path d="M635 900 V863 H835 V835 H1280 V960 H1335" fill="none" stroke="#43c4da" stroke-width="2.3" marker-end="url(#arrow)" />
+<rect x="1094" y="836" width="65.19999999999999" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="1100" y="853" fill="#9cdbea" font-size="13" font-weight="400">Sự kiện</text>
+<rect x="430" y="1140" width="1325" height="105" rx="20" fill="#102434" stroke="#355668" />
+<rect x="450" y="1159" width="36" height="29" rx="8" fill="#e59b5d" stroke="#e59b5d" />
+<text x="458" y="1180" fill="#102434" font-size="15" font-weight="700">03</text>
+<text x="505" y="1180" fill="#f6c391" font-size="19" font-weight="650">TẦNG 3 · ỨNG DỤNG NGHIỆP VỤ</text>
+<text x="455" y="1216" fill="#e6f2fa" font-size="17" font-weight="400">apps/floodos · Báo ngập → xác minh → điều phối → chi viện → hoàn tất</text>
+<text x="1145" y="1180" fill="#d6e2ff" font-size="18" font-weight="650">apps/traceability</text>
+<text x="1145" y="1214" fill="#b8cddb" font-size="15" font-weight="400">Truy xuất chỉ đọc · kiểm chứng SHA-256</text>
+<path d="M1075 1140 V1090 H840 V820" fill="none" stroke="#62c7d9" stroke-width="2.3" stroke-dasharray="6 6" marker-end="url(#arrow)" />
+<rect x="861" y="1085" width="156.4" height="25" rx="5" fill="#0a1927" stroke="#0a1927" />
+<text x="867" y="1102" fill="#9cdbea" font-size="13" font-weight="400">Sử dụng dịch vụ lõi</text>
+<path d="M1495 1140 V1025" fill="none" stroke="#a291ef" stroke-width="2.3" stroke-dasharray="6 6" marker-end="url(#arrow)" />
+<text x="48" y="1162" fill="#f3b77d" font-size="14" font-weight="650">LUỒNG TÁC CHIẾN</text>
+<text x="48" y="1190" fill="#c5dae6" font-size="16" font-weight="400">Báo tin · điều phối · cứu hộ</text>
+<text x="48" y="1216" fill="#86a6b9" font-size="13" font-weight="400">Mỗi quyết định có dấu vết kiểm toán</text>
+<text x="48" y="1275" fill="#94b2c3" font-size="13" font-weight="400">¹ Nhãn nguồn hỗ trợ dữ liệu thiết bị; chưa kiểm chứng kết nối cảm biến quan trắc thật.</text>
+<text x="48" y="1300" fill="#94b2c3" font-size="13" font-weight="400">² Ứng dụng 3D còn mô hình và thuật ngữ cũ. Sơ đồ mô tả cấu trúc dịch vụ, không biểu thị các tiến trình triển khai riêng.</text>
+</svg>

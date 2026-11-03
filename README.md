@@ -69,6 +69,10 @@ Khi mưa lớn cực đoan gây ngập lụt diện rộng, thông tin cứu n�
 
 FloodOS tuân thủ tuyệt đối quy tắc **tách biệt ranh giới 3 tầng** theo chuẩn đề thi OLP 2026: **Lõi nền tảng PaaS Tầng 1 hoàn toàn trung lập miền**, không chứa bất kỳ thuật ngữ hay bảng dữ liệu nào của nghiệp vụ ngập lụt. Nghiệp vụ PCTT được đóng gói trọn vẹn tại Tầng 3 và giao diện Tầng 2.
 
+<p align="center">
+  <img src="docs/assets/FloodOS_Kien_truc_cuu_ho.svg" alt="Kiến trúc FloodOS DX-OS Open-Core điều phối ứng phó ngập lụt đô thị" width="100%">
+</p>
+
 ```mermaid
 flowchart TD
     subgraph T3 ["TẦNG 3 — ỨNG DỤNG NGHIỆP VỤ CHUYÊN BIỆT (Domain Applications)"]
