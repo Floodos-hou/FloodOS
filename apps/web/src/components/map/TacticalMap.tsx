@@ -58,6 +58,9 @@ async function resolveBasemap(): Promise<Basemap> {
 
 const RISK_COLOR = ['match', ['get', 'risk_level'], 'CRITICAL', '#b73220', 'WARNING', '#c85f17', 'WATCH', '#a87908', '#2f7d4f'];
 
+/** camera of the 3D view (the default) */
+const TILT = { pitch: 58, bearing: -20 };
+
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
@@ -75,10 +78,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const [basemap, setBasemap] = useState<Basemap | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [tilesFailed, setTilesFailed] = useState(false);
-  const [view3d, setView3d] = useState(false);
+  const [view3d, setView3d] = useState(true); // 3D is the default view
+  const zoomForBuildings = useRef(false);
+  const view3dRef = useRef(true);
   const [layers, setLayers] = useState({ reports: true, vehicles: true, shelters: true, gauges: true, zones: true });
 
   useEffect(() => {
+    view3dRef.current = view3d;
     zonesRef.current = zones;
     onSelectRef.current = onSelect;
   });
@@ -91,7 +97,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   useEffect(() => {
     if (!container.current || mapRef.current || !basemap) return;
-    const m = new MapLibreMap({ container: container.current, style: basemap.style, center: DEFAULT_CENTER, zoom: 12.5, attributionControl: false });
+    const m = new MapLibreMap({ container: container.current, style: basemap.style, center: DEFAULT_CENTER, zoom: 12.5, pitch: TILT.pitch, bearing: TILT.bearing, attributionControl: false });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     m.addControl(new AttributionControl({ compact: true }), 'bottom-right');
     m.on('error', (e) => { const id = (e as { sourceId?: string }).sourceId; if (id === 'osm' || id === 'basemap') setTilesFailed(true); });
@@ -128,8 +134,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const m = mapRef.current;
     if (!m || !loaded) return;
     if (basemap?.kind === 'offline' && m.getLayer(BUILDINGS_3D)) m.setLayoutProperty(BUILDINGS_3D, 'visibility', view3d ? 'visible' : 'none');
-    // buildings only exist from zoom 14, so the 3D view also zooms in far enough to show them
-    m.easeTo({ pitch: view3d ? 58 : 0, bearing: view3d ? -20 : 0, zoom: view3d ? Math.max(m.getZoom(), 15.5) : m.getZoom(), duration: 700 });
+    // buildings only exist from zoom 14: when the user switches 3D on, zoom in far enough to show them (not on first load, which fits all data)
+    m.easeTo({ pitch: view3d ? TILT.pitch : 0, bearing: view3d ? TILT.bearing : 0, zoom: view3d && zoomForBuildings.current ? Math.max(m.getZoom(), 15.5) : m.getZoom(), duration: 700 });
   }, [loaded, view3d, basemap]);
 
   // zone polygons (seed polygons; the legend says so)
@@ -186,7 +192,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     if (!m || points.length === 0) return;
     const b = new LngLatBounds();
     points.forEach((p) => b.extend([p.lng, p.lat]));
-    m.fitBounds(b, { padding: 70, maxZoom: 15, duration: 600 });
+    // keep the tilt: fitBounds resets pitch and bearing to 0 unless told otherwise
+    m.fitBounds(b, { padding: 70, maxZoom: 15, duration: 600, ...(view3dRef.current ? TILT : { pitch: 0, bearing: 0 }) });
   }, [points]);
 
   useEffect(() => {
@@ -212,7 +219,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       el.classList.add('fo-marker'); // keep maplibre's own marker class: it carries the absolute positioning
       el.setAttribute('role', 'button');
       el.setAttribute('aria-label', label);
-      el.innerHTML = `<span class="${markerClassName(spec, selectedKey === key ? 'is-selected' : '')}" style="--pin:${spec.color}">${markerInnerHtml(spec, esc(label))}</span>`;
+      el.innerHTML = `<span class="${markerClassName(spec, `${selectedKey === key ? 'is-selected' : ''} ${view3d ? 'is-3d' : ''}`.trim())}" style="--pin:${spec.color}">${markerInnerHtml(spec, esc(label))}</span>`;
       el.onclick = () => onSelectRef.current?.(sel);
     };
 
@@ -222,7 +229,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     if (layers.reports) reports.forEach((r) => upsert(`report:${r.report_id}`, r.lng, r.lat, reportSpec(r), `${r.report_id} · ${r.depth_cm} cm`, { type: 'report', data: r }));
 
     markers.current.forEach((mk, key) => { if (!touched.has(key)) { mk.remove(); markers.current.delete(key); } });
-  }, [loaded, vehicles, reports, shelters, gauges, layers, selectedKey]);
+  }, [loaded, vehicles, reports, shelters, gauges, layers, selectedKey, view3d]);
 
   const toggle = (k: keyof typeof layers) => setLayers((s) => ({ ...s, [k]: !s[k] }));
   const items: { k: keyof typeof layers; label: string; n: number; color: string }[] = [
@@ -255,7 +262,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       </div>
 
       <button
-        type="button" onClick={() => setView3d((v) => !v)} aria-pressed={view3d}
+        type="button" onClick={() => { zoomForBuildings.current = true; setView3d((v) => !v); }} aria-pressed={view3d}
         title={view3d ? 'Về góc nhìn phẳng' : 'Nghiêng bản đồ, nhà dựng khối 3D'} aria-label="Chế độ 3D"
         className={`btn absolute right-3 top-[128px] z-10 !min-h-8 !px-2 ${view3d ? '!border-river !bg-river-soft !text-river' : ''}`}
       >

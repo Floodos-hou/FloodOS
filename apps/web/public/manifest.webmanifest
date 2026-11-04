@@ -1,0 +1,63 @@
+{
+  "name": "FloodOS — Hệ điều hành ứng phó ngập lụt",
+  "short_name": "FloodOS",
+  "description": "Nền tảng chuyển đổi số chỉ huy và điều phối ứng phó ngập lụt đô thị thời gian thực.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbfaf6",
+  "theme_color": "#0284c7",
+  "lang": "vi",
+  "categories": [
+    "government",
+    "utilities",
+    "navigation"
+  ],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Báo ngập khẩn cấp (GPS)",
+      "short_name": "SOS",
+      "description": "Phát tín hiệu cứu nạn khẩn cấp với tọa độ GPS tự động",
+      "url": "/?action=sos",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    },
+    {
+      "name": "Bản đồ tác chiến ngập lụt",
+      "short_name": "Bản đồ",
+      "description": "Xem bản đồ ngập lụt và vị trí đội cứu hộ thời gian thực",
+      "url": "/?tab=MAP",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    }
+  ]
+}
