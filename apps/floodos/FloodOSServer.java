@@ -137,6 +137,7 @@ public final class FloodOSServer {
 
             if ("/".equals(path) || "/api/v1".equals(path)) {
                 Map<String, Object> endpoints = new LinkedHashMap<>();
+                endpoints.put("system_capabilities", "GET /api/v1/system/capabilities");
                 endpoints.put("health", "GET /api/v1/health");
                 endpoints.put("demo_accounts", "GET /api/v1/auth/accounts");
                 endpoints.put("pkce_auth_url", "GET /api/v1/auth/pkce/authorize-url");
@@ -188,6 +189,10 @@ public final class FloodOSServer {
                 }
                 return;
             }
+            if ("/api/v1/system/capabilities".equals(path) || "/api/v1/capabilities".equals(path)) {
+                sendJson(ex, 200, DeploymentProfile.getSystemCapabilities(service.getStore()), null);
+                return;
+            }
             if ("/api/v1/health".equals(path)) {
                 var store = service.getStore();
                 Map<String, Object> coreServices = new LinkedHashMap<>();
@@ -202,6 +207,9 @@ public final class FloodOSServer {
                 coreServices.put("cold_analytics_lake", store.analyticsLake.probe());
                 Map<String, Object> health = new LinkedHashMap<>();
                 health.put("status", "HEALTHY");
+                health.put("deployment_profile", DeploymentProfile.getActiveProfile().name());
+                health.put("deployment_profile_label", DeploymentProfile.getActiveProfile().getLabel());
+                health.put("memory_footprint", DeploymentProfile.getActiveProfile().getMemoryFootprint());
                 health.put("stage", "DEVELOPER_PREVIEW_MVP");
                 health.put("platform", "FloodOS DX-OS Open-Core Headless PaaS (Java 21 LTS) + FloodOS");
                 health.put("license", "Apache-2.0");

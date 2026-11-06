@@ -331,6 +331,9 @@ export interface TacticalState {
     latest_hash: string;
     algorithm: string;
   };
+  deployment_profile?: 'FULL' | 'STANDARD' | 'EDGE_FIELD' | string;
+  deployment_profile_label?: string;
+  system_capabilities?: Record<string, unknown>;
   sim_clock?: {
     sim_time: string;
     tick_step_seconds: number;
