@@ -20,11 +20,13 @@ interface HeaderProps {
   isStale?: boolean;
   updatedAt?: Date | null;
   dataNotice?: string;
+  deploymentProfile?: string;
+  deploymentProfileLabel?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   simTime, onTick, onReset, onOpenProofInspector, onRefresh, isRefreshing = false,
-  showStaffTools, orgName, isStale = false, updatedAt, dataNotice,
+  showStaffTools, orgName, isStale = false, updatedAt, dataNotice, deploymentProfile, deploymentProfileLabel,
 }) => {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
@@ -47,6 +49,20 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="sm:hidden">Mô phỏng</span><span className="hidden sm:inline">Dữ liệu thí điểm / mô phỏng</span>
       </span>
 
+      {deploymentProfile && (
+        <span
+          className={`chip hidden sm:inline-flex ${
+            deploymentProfile === 'EDGE_FIELD'
+              ? 'chip-good'
+              : deploymentProfile === 'STANDARD'
+              ? 'chip-info'
+              : 'chip-neutral'
+          }`}
+          title={`Hồ sơ Tầng 1: ${deploymentProfileLabel || deploymentProfile}`}
+        >
+          {deploymentProfile === 'EDGE_FIELD' ? 'Dã chiến (Edge)' : deploymentProfile === 'STANDARD' ? 'Khu vực (Standard)' : 'Trung tâm (Full)'}
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-2">
         {isStale && (
           <span className="chip chip-warn"><TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" /> Dữ liệu chậm</span>

@@ -38,6 +38,7 @@ services:
   # 2. IDENTITY / SSO / RBAC / MULTI-TENANCY (Keycloak 24 - Apache-2.0 License)
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.5
+    profiles: ["full", "standard", "demo"]
     container_name: floodos-keycloak
     command: ["start-dev", "--import-realm"]
     environment:
@@ -62,6 +63,7 @@ services:
   # 3. UNSTRUCTURED S3 OBJECT STORAGE (SeaweedFS S3 - Apache-2.0 License, Pinned v3.64)
   object-storage:
     image: chrislusf/seaweedfs:3.64
+    profiles: ["full", "standard", "demo"]
     container_name: floodos-s3-storage
     command: "server -s3 -s3.port=9000 -dir=/data"
     ports:
@@ -78,6 +80,7 @@ services:
   # 4. WORKFLOW ENGINE (Flowable BPMN 2.0 REST - Apache-2.0 License, Pinned v7.0.0)
   flowable:
     image: flowable/flowable-rest:7.0.0
+    profiles: ["full", "standard", "demo"]
     container_name: floodos-flowable
     environment:
       SERVER_PORT: 8081
@@ -94,6 +97,7 @@ services:
   # 5. ZERO-TRUST API GATEWAY (Apache APISIX Standalone - Apache-2.0 License, Pinned v3.9.0)
   apisix:
     image: apache/apisix:3.9.0-debian
+    profiles: ["full", "standard", "demo"]
     container_name: floodos-apisix
     environment:
       APISIX_STAND_ALONE: "true"
@@ -114,6 +118,7 @@ services:
     container_name: floodos-core-api
     environment:
       PORT: 8000
+      FLOODOS_PROFILE: ${FLOODOS_PROFILE:-FULL}
       FLOODOS_AUTH_MODE: KEYCLOAK_PRODUCTION
       KEYCLOAK_ISSUER: http://keycloak:8080/realms/floodos
       KEYCLOAK_PUBLIC_ISSUER: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/floodos}
@@ -143,14 +148,19 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+        required: false
       object-storage:
         condition: service_started
+        required: false
       flowable:
         condition: service_started
+        required: false
       kafka-rest:
         condition: service_healthy
+        required: false
       clamav:
         condition: service_started
+        required: false
 
   # 7. FLOODOS EXPERIENCE & OPERATIONS PORTAL (H-P-D-I Web Application)
   web-app:
@@ -174,6 +184,7 @@ services:
   # 8. EVENT BUS — HOT PATH (Apache Kafka 3.7, KRaft single node, no ZooKeeper - Apache-2.0 License)
   kafka:
     image: apache/kafka:3.7.1
+    profiles: ["full", "demo"]
     container_name: floodos-kafka
     environment:
       KAFKA_NODE_ID: 1
@@ -200,6 +211,7 @@ services:
   # 8b. Idempotent topic bootstrap (re-runs on every `up`; --if-not-exists makes it safe)
   kafka-init:
     image: apache/kafka:3.7.1
+    profiles: ["full", "demo"]
     container_name: floodos-kafka-init
     restart: "no"
     depends_on:
@@ -215,6 +227,7 @@ services:
   # 8c. Kafka REST Proxy (Karapace - Apache-2.0 License): HTTP produce/consume so the Java core needs no Kafka client
   kafka-rest:
     image: ghcr.io/aiven-open/karapace:4.1.0
+    profiles: ["full", "demo"]
     container_name: floodos-kafka-rest
     entrypoint: ["/bin/sh", "-c", "/opt/karapace/start.sh rest"]
     environment:
@@ -234,6 +247,7 @@ services:
 
   # 9. COLD TIER — consumes the bus, writes Parquet to S3, answers analytics with DuckDB (internal-only port)
   lake-archiver:
+    profiles: ["full", "demo"]
     build:
       context: ./services/lake-archiver
     container_name: floodos-lake-archiver
@@ -252,6 +266,7 @@ services:
   # 10. OT TELEMETRY BROKER (Eclipse Mosquitto 2 - EPL-2.0 / EDL-1.0). Users + ACL are regenerated on every start.
   mosquitto:
     image: eclipse-mosquitto:2.0.18
+    profiles: ["full", "standard", "demo"]
     container_name: floodos-mosquitto
     restart: unless-stopped
     environment:
@@ -274,6 +289,7 @@ services:
 
   # 11. MQTT -> validate -> Core API internal endpoint (digital twin + Kafka telemetry topic)
   telemetry-ingestor:
+    profiles: ["full", "standard", "demo"]
     build:
       context: ./services/telemetry
     container_name: floodos-telemetry-ingestor
@@ -316,6 +332,7 @@ services:
 
   # 13. TIER-3 DOMAIN MODULE: flood-case traceability. Read-only on the cold lake; independently re-verifies the SHA-256 chain.
   traceability:
+    profiles: ["full", "demo"]
     build:
       context: ./apps/traceability
     container_name: floodos-traceability
@@ -333,6 +350,7 @@ services:
   # 14. MALWARE GATE (ClamAV daemon - GPL-2.0 License). Client uploads are scanned over clamd INSTREAM, fail-closed.
   clamav:
     image: clamav/clamav:1.4.3
+    profiles: ["full", "demo"]
     container_name: floodos-clamav
     restart: unless-stopped
     volumes:

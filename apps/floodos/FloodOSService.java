@@ -278,6 +278,9 @@ public final class FloodOSService {
         ctx.put("rls_policy", TenantRlsContext.buildPostgresRlsPolicySql(auth));
 
         Map<String, Object> res = new LinkedHashMap<>();
+        res.put("deployment_profile", DeploymentProfile.getActiveProfile().name());
+        res.put("deployment_profile_label", DeploymentProfile.getActiveProfile().getLabel());
+        res.put("system_capabilities", DeploymentProfile.getSystemCapabilities(store));
         res.put("auth_context", ctx);
         res.put("server_time", nowIso());
         res.put("data_notice", DISCLAIMER);

@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.floodos.apps.floodos.DeploymentProfile;
 import org.floodos.apps.floodos.FloodDataStore;
 import org.floodos.apps.floodos.FloodModels.DispatchOrder;
 import org.floodos.apps.floodos.FloodModels.FloodReport;
@@ -1087,6 +1088,37 @@ final class PlatformTests {
                 Map<?, ?> bus = (Map<?, ?>) core.get("event_bus");
                 notNull(bus.get("mode"), "event bus mode");
                 notNull(core.get("cold_analytics_lake"), "cold tier status");
+            });
+            test("capabilities exposes active deployment profile and modular services", () -> {
+                HttpResponse<String> r = http(base, "GET", "/api/v1/system/capabilities", null);
+                equal(200, r.statusCode(), "status");
+                Map<?, ?> caps = JsonCodec.parseObject(r.body());
+                equal(1, ((Number) caps.get("tier")).intValue(), "tier 1");
+                equal("OPERATIONAL", caps.get("status"), "operational");
+                notNull(caps.get("profile"), "profile code");
+                notNull(caps.get("profile_label"), "profile label");
+                Map<?, ?> s = (Map<?, ?>) caps.get("services");
+                notNull(s.get("identity"), "identity service");
+                notNull(s.get("workflow"), "workflow service");
+                notNull(s.get("database"), "database service");
+                notNull(s.get("storage"), "storage service");
+                notNull(s.get("gateway"), "gateway service");
+            });
+            test("DeploymentProfile switches dynamically between FULL, STANDARD, and EDGE_FIELD", () -> {
+                try {
+                    DeploymentProfile.setProfileForTesting(DeploymentProfile.EDGE_FIELD);
+                    isTrue(DeploymentProfile.isEdgeField(), "is edge field");
+                    equal("EDGE_FIELD", DeploymentProfile.getActiveProfile().name(), "code");
+                    isTrue(DeploymentProfile.getActiveProfile().getMemoryFootprint().contains("<800MB"), "lightweight footprint");
+
+                    DeploymentProfile.setProfileForTesting(DeploymentProfile.STANDARD);
+                    equal("STANDARD", DeploymentProfile.getActiveProfile().name(), "standard");
+
+                    DeploymentProfile.setProfileForTesting(DeploymentProfile.FULL);
+                    isTrue(DeploymentProfile.isFull(), "is full");
+                } finally {
+                    DeploymentProfile.resetProfileForTesting();
+                }
             });
         } finally {
             server.stop();
