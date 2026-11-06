@@ -109,7 +109,7 @@ export function markerInnerHtml(spec: MarkerSpec, labelHtml = ''): string {
   const chip = spec.chip ? `<span class="fo-chip">${spec.chip}</span>` : '';
   const bar = spec.fill != null ? `<span class="fo-bar"><i style="width:${spec.fill}%"></i></span>` : '';
   const label = labelHtml ? `<span class="fo-pin-label">${labelHtml}</span>` : '';
-  return `<span class="fo-body">${svg}</span>${chip}${bar}${label}`;
+  return `<i class="fo-stem"></i><span class="fo-body">${svg}</span>${chip}${bar}${label}`;
 }
 
 export function markerClassName(spec: MarkerSpec, extra = ''): string {

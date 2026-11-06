@@ -13,9 +13,10 @@
 set -euo pipefail
 
 PMTILES_BIN="${PMTILES_BIN:-pmtiles}"
-# west,south,east,north: Hanoi urban area plus the surrounding flood-prone districts
-BBOX="${BBOX:-105.65,20.85,106.0,21.15}"
-MAXZOOM="${MAXZOOM:-14}"
+# west,south,east,north: the pilot area (inner Hanoi plus the Red River / Hồ Tây / Hoàng Mai flood belt). z15 holds the full building
+# footprints that the 3D view extrudes (z14 only has the larger ones); keep the box tight, size grows about 4x per zoom level.
+BBOX="${BBOX:-105.72,20.93,105.95,21.12}"
+MAXZOOM="${MAXZOOM:-15}"
 OUT="$(cd "$(dirname "$0")/.." && pwd)/public/basemap/hanoi.pmtiles"
 
 build_date="${1:-}"

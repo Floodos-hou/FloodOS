@@ -30,6 +30,12 @@ Giao diện điều hành ứng phó ngập lụt đô thị: thiết kế chuy�
 
 Bảng màu "Tác chiến & Thủy văn Đô thị" (Tactical Dark Slate & Hydrology) khai báo bằng `@theme` trong `src/index.css`: nhóm màu slate chỉ huy (`slate-*`), xanh thủy văn tác chiến (`sky-*`, `cyan-*`), và cảnh báo khẩn cấp (`amber-*`, `red-*`). Hỗ trợ chế độ bản đồ tác chiến ban đêm và ban ngày.
 
+## Trải nghiệm Di động Hiện trường (Mobile-First PWA & Cảnh báo Giọng nói)
+
+- **Mobile PWA (Progressive Web App):** Hỗ trợ cài đặt độc lập (Standalone App) trên Android và iOS với `manifest.webmanifest`, lưu đệm offline shell (`sw.js`), và hỗ trợ hoạt động ngoại tuyến khi mất sóng Internet hoặc mạng gián đoạn.
+- **Cảnh báo Giọng nói Tiếng Việt (Web Speech API):** Phát thông báo khẩn cấp tự động bằng tiếng Việt tự nhiên kèm chuông âm thanh tác chiến (Tactical Audio Chime) khi có tin báo ngập nguy cấp (`CRITICAL`/`URGENT`), lệnh điều động mới cho đội hiện trường, sự cố phương tiện hoặc trạm đo vượt ngưỡng báo động. Có công tắc bật/tắt âm thanh trực tiếp trên thanh tác vụ di động.
+- **Nút Báo Ngập Khẩn Cấp 1-Chạm (1-Tap Quick GPS SOS):** Thanh điều khiển nổi tối ưu thao tác một tay trên màn hình điện thoại (`< 768px`). Tự động quét và lấy tọa độ GPS độ chính xác cao từ thiết bị di động, cho phép người dân và đội cứu hộ gửi tín hiệu khẩn cấp đến trung tâm chỉ huy chỉ sau 1 lần bấm.
+
 ## Bảo mật
 
 - Nginx áp dụng CSP + các header bảo mật cho **mọi** location (`security-headers.conf`).

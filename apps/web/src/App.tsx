@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, GitBranch, LayoutDashboard, Map as MapIcon, ScrollText, TriangleAlert, X } from 'lucide-react';
 import { useAuth } from './context/useAuth';
 import { api } from './services/api';
@@ -18,8 +18,15 @@ import { ReporterWorkspace } from './components/workspaces/ReporterWorkspace';
 import { DispatcherWorkspace } from './components/workspaces/DispatcherWorkspace';
 import { FieldTeamWorkspace } from './components/workspaces/FieldTeamWorkspace';
 import { ResourceManagerWorkspace } from './components/workspaces/ResourceManagerWorkspace';
+import { MobileFloatingBar } from './components/mobile/MobileFloatingBar';
+import { MobileSOSModal } from './components/mobile/MobileSOSModal';
 import { useLiveFleet, mergeLive } from './hooks/useLiveFleet';
 import { priority as priorityLabel } from './utils/labels';
+import {
+  speakVoiceAlert,
+  formatReportVoiceAlert,
+  formatIncidentVoiceAlert,
+} from './utils/voiceAlert';
 
 const TacticalMap = lazy(() => import('./components/map/TacticalMap').then((m) => ({ default: m.TacticalMap })));
 
@@ -51,16 +58,57 @@ export const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  const [tab, setTab] = useState<Tab>('HOME');
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search).get('tab');
+      if (q === 'MAP' || q === 'PROCESS' || q === 'AUDIT') return q;
+    }
+    return 'HOME';
+  });
+  const [showMobileSos, setShowMobileSos] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('action') === 'sos';
+    }
+    return false;
+  });
   const [showProofInspector, setShowProofInspector] = useState(false);
   const [lineageId, setLineageId] = useState<string | null>(null);
   const [selection, setSelection] = useState<MapSelection | null>(null);
+
+  const announcedReportIds = useRef<Set<string>>(new Set());
+  const announcedIncidentIds = useRef<Set<string>>(new Set());
+  const isInitialLoad = useRef<boolean>(true);
 
   const loadState = useCallback(async () => {
     if (!token) return;
     setIsLoading(true);
     try {
       const data = await api.getTacticalState(token);
+
+      // Tactical Voice Announcements for incoming emergency events
+      if (isInitialLoad.current) {
+        (data.reports || []).forEach((r) => announcedReportIds.current.add(r.report_id));
+        (data.incidents || []).forEach((i) => announcedIncidentIds.current.add(i.incident_id));
+        isInitialLoad.current = false;
+      } else {
+        for (const report of data.reports || []) {
+          if (!announcedReportIds.current.has(report.report_id)) {
+            announcedReportIds.current.add(report.report_id);
+            if (report.priority === 'CRITICAL' || report.priority === 'URGENT') {
+              speakVoiceAlert(formatReportVoiceAlert(report), { urgent: true });
+            }
+          }
+        }
+        for (const inc of data.incidents || []) {
+          if (!announcedIncidentIds.current.has(inc.incident_id)) {
+            announcedIncidentIds.current.add(inc.incident_id);
+            if (inc.status === 'OPEN_REPLANNING') {
+              speakVoiceAlert(formatIncidentVoiceAlert(inc), { urgent: true });
+            }
+          }
+        }
+      }
+
       setState(data);
       setUpdatedAt(new Date());
       setError(null);
@@ -248,7 +296,7 @@ export const App: React.FC = () => {
           ))}
         </nav>
 
-        <main className="min-w-0 flex-1 p-3 pb-20 sm:p-4 md:pb-4">
+        <main className="min-w-0 flex-1 p-3 pb-24 sm:p-4 md:pb-4">
           {error && (
             <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded border border-crit bg-crit-soft px-3 py-2.5 text-sm">
               <span className="flex items-center gap-2"><TriangleAlert className="h-4 w-4 text-crit" aria-hidden="true" />
@@ -313,6 +361,13 @@ export const App: React.FC = () => {
         </main>
       </div>
 
+      {/* Mobile Floating Quick Bar (SOS 1-tap, Voice Toggle, Quick Switch) */}
+      <MobileFloatingBar
+        currentTab={tab}
+        onSelectTab={(t) => setTab(t)}
+        onOpenSOS={() => setShowMobileSos(true)}
+      />
+
       {/* phone bottom navigation */}
       <nav aria-label="Điều hướng chính (điện thoại)" className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-sheet md:hidden" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map(({ id, label, Icon }) => (
@@ -330,6 +385,14 @@ export const App: React.FC = () => {
           <button type="button" aria-label="Đóng thông báo" onClick={() => setNotice(null)}><X className="h-4 w-4" aria-hidden="true" /></button>
         </div>
       )}
+
+      {/* Mobile 1-Tap SOS Emergency Modal */}
+      <MobileSOSModal
+        isOpen={showMobileSos}
+        onClose={() => setShowMobileSos(false)}
+        zones={state?.zones}
+        onSubmit={handleCreateReport}
+      />
 
       <ProofInspectorModal isOpen={showProofInspector} onClose={() => setShowProofInspector(false)} />
       <DataLineageModal isOpen={!!lineageId} correlationId={lineageId || ''} onClose={() => setLineageId(null)} />
