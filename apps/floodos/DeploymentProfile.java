@@ -143,6 +143,13 @@ public enum DeploymentProfile {
         antivirus.put("status", store.malwareScanner.status());
         services.put("antivirus", antivirus);
 
+        // 8. AI Tactical Co-pilot Assistant
+        Map<String, Object> ai = new LinkedHashMap<>();
+        ai.put("name", "AI Tactical Assistant");
+        ai.put("provider", "FastAPI LLM Microservice & Deterministic Fallback");
+        ai.put("status", store.aiAssistant.probe());
+        services.put("ai_assistant", ai);
+
         Map<String, Object> capabilities = new LinkedHashMap<>();
         capabilities.put("profile", profile.getCode());
         capabilities.put("profile_label", profile.getLabel());

@@ -63,6 +63,7 @@ public final class FloodDataStore {
     public final FloodRepository repository;
     public final EventBusPublisher eventBus = EventBusPublisher.fromEnvironment();
     public final AnalyticsLakeClient analyticsLake = new AnalyticsLakeClient();
+    public final AiAssistantClient aiAssistant = new AiAssistantClient();
     /** Malware gate for client uploads (ClamAV). Replaceable so tests can inject a scanner against a fake daemon. */
     public MalwareScanner malwareScanner = MalwareScanner.fromEnvironment();
 

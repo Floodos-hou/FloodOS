@@ -1425,4 +1425,126 @@ public final class FloodOSService {
         }
         return Map.of("assets", assets);
     }
+
+    // ------------------------------------------------------------------------
+    // AI Tactical Assistant Features
+    // ------------------------------------------------------------------------
+
+    public synchronized HttpResult getReportAiSummary(AuthContext auth, String reportId) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.FIELD_TEAM, FloodRoles.PLATFORM_ADMIN),
+                "GET_AI_SUMMARY", "FloodReport", reportId);
+        if (denied != null) return denied;
+
+        FloodReport report = store.reports.get(reportId);
+        if (report == null || !report.organizationId.equals(auth.organizationId())) {
+            return fail(404, "REPORT_NOT_FOUND", "Không tìm thấy tin báo " + reportId);
+        }
+
+        String ordersInfo = "Chưa có lệnh điều phối";
+        String teamName = "";
+        String vehicleName = "";
+        String activeVehicleId = "";
+        for (DispatchOrder o : store.orders.values()) {
+            if (reportId.equals(o.reportId)) {
+                RescueVehicle v = store.vehicles.get(o.vehicleId);
+                RescueTeam t = store.teams.get(o.teamId);
+                vehicleName = v != null ? v.name : o.vehicleId;
+                teamName = t != null ? t.name() : o.teamId;
+                activeVehicleId = o.vehicleId;
+                ordersInfo = String.format(Locale.ROOT, "Lệnh %s (%s) giao cho %s vận hành %s",
+                        o.orderId, o.status, teamName, vehicleName);
+                break;
+            }
+        }
+
+        String incidentsInfo = "Không có sự cố phương tiện";
+        for (FieldIncident inc : store.incidents.values()) {
+            if (!activeVehicleId.isEmpty() && activeVehicleId.equals(inc.vehicleId)) {
+                incidentsInfo = String.format(Locale.ROOT, "Sự cố %s trên xe %s: %s (Trạng thái: %s)",
+                        inc.incidentId, inc.vehicleId, inc.description, inc.status);
+                break;
+            }
+        }
+
+        FloodZone zone = store.zones.get(report.zoneId);
+        String location = zone != null ? zone.name : "Tọa độ " + report.lat + ", " + report.lng;
+
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("report_id", report.reportId);
+        req.put("status", report.status);
+        req.put("priority", report.priority);
+        req.put("need_type", report.needType);
+        req.put("depth_cm", report.depthCm);
+        req.put("people_affected", report.peopleAffected);
+        req.put("description", report.description);
+        req.put("location", location);
+        req.put("created_at", report.createdAt);
+        req.put("orders_info", ordersInfo);
+        req.put("incidents_info", incidentsInfo);
+
+        AiAssistantClient.Result res = store.aiAssistant.summarize(req);
+        return new HttpResult(res.status(), res.body());
+    }
+
+    public synchronized HttpResult classifyPriority(AuthContext auth, Map<String, Object> body) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.REPORTER, FloodRoles.DISPATCHER, FloodRoles.PLATFORM_ADMIN),
+                "CLASSIFY_PRIORITY", "AiAssistant", "SUGGEST");
+        if (denied != null) return denied;
+
+        AiAssistantClient.Result res = store.aiAssistant.classifyPriority(body);
+        return new HttpResult(res.status(), res.body());
+    }
+
+    public synchronized HttpResult getReportAfterActionReport(AuthContext auth, String reportId) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.REPORTER, FloodRoles.PLATFORM_ADMIN),
+                "GET_AFTER_ACTION_REPORT", "FloodReport", reportId);
+        if (denied != null) return denied;
+
+        FloodReport report = store.reports.get(reportId);
+        if (report == null || !report.organizationId.equals(auth.organizationId())) {
+            return fail(404, "REPORT_NOT_FOUND", "Không tìm thấy tin báo " + reportId);
+        }
+
+        ReportResolution res = null;
+        for (ReportResolution r : store.resolutions.values()) {
+            if (reportId.equals(r.reportId)) {
+                res = r;
+                break;
+            }
+        }
+
+        String teamName = "Đội ứng cứu cơ động";
+        String vehicleName = "Phương tiện cứu hộ";
+        for (DispatchOrder o : store.orders.values()) {
+            if (reportId.equals(o.reportId)) {
+                RescueVehicle v = store.vehicles.get(o.vehicleId);
+                RescueTeam t = store.teams.get(o.teamId);
+                if (v != null) vehicleName = v.name;
+                if (t != null) teamName = t.name();
+                break;
+            }
+        }
+
+        String chainProof = store.auditLedger.verifyChainIntegrity().getOrDefault("last_record_hash", "Valid SHA-256").toString();
+
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("report_id", report.reportId);
+        req.put("created_at", report.createdAt);
+        req.put("resolved_at", res != null ? res.confirmedAt : report.updatedAt);
+        req.put("priority", report.priority);
+        req.put("need_type", report.needType);
+        req.put("depth_cm", report.depthCm);
+        req.put("final_depth_cm", res != null && res.finalDepthCm != null ? res.finalDepthCm : 0.0);
+        req.put("people_affected", report.peopleAffected);
+        req.put("team_name", teamName);
+        req.put("vehicle_name", vehicleName);
+        req.put("outcome", res != null ? res.outcome : "RESOLVED");
+        req.put("field_notes", res != null ? res.notes : "Đã hoàn thành cứu hộ.");
+        req.put("confirmation_status", res != null ? res.confirmationStatus : "CONFIRMED");
+        req.put("confirmation_notes", res != null ? res.notes : "");
+        req.put("chain_proof", chainProof);
+
+        AiAssistantClient.Result clientRes = store.aiAssistant.afterActionReport(req);
+        return new HttpResult(clientRes.status(), clientRes.body());
+    }
 }

@@ -160,6 +160,9 @@ public final class FloodOSServer {
                 endpoints.put("verify_audit_chain", "GET /api/v1/audit/verify");
                 endpoints.put("data_lineage", "GET /api/v1/audit/lineage/{correlation_id}");
                 endpoints.put("cold_analytics", "GET /api/v1/analytics/{summary|actions-by-day|asset-utilization}");
+                endpoints.put("ai_report_summary", "GET /api/v1/flood-reports/{report_id}/ai-summary");
+                endpoints.put("ai_classify_priority", "POST /api/v1/ai/classify-priority");
+                endpoints.put("ai_after_action_report", "GET /api/v1/flood-reports/{report_id}/after-action-report");
                 endpoints.put("demo_reset", "POST /api/v1/sim/reset (PLATFORM_ADMIN, only when FLOODOS_ALLOW_DEMO_RESET=true)");
                 Map<String, Object> manifest = new LinkedHashMap<>();
                 manifest.put("service", "FloodOS Tier-1 Headless Core PaaS + FloodOS application API (Java 21)");
@@ -205,6 +208,7 @@ public final class FloodOSServer {
                 coreServices.put("event_bus", store.eventBus.status());
                 coreServices.put("malware_scanner", store.malwareScanner.status());
                 coreServices.put("cold_analytics_lake", store.analyticsLake.probe());
+                coreServices.put("ai_assistant", store.aiAssistant.probe());
                 Map<String, Object> health = new LinkedHashMap<>();
                 health.put("status", "HEALTHY");
                 health.put("deployment_profile", DeploymentProfile.getActiveProfile().name());
@@ -261,6 +265,18 @@ public final class FloodOSServer {
             if (path.startsWith("/api/v1/audit/lineage/")) {
                 String corrId = segment(path, path.split("/").length - 1);
                 sendJson(ex, 200, service.getStore().auditLedger.getLineageByCorrelation(who.organizationId(), corrId), who);
+                return;
+            }
+            if (path.startsWith("/api/v1/flood-reports/") && path.endsWith("/ai-summary")) {
+                String rptId = segment(path, 4);
+                HttpResult r = service.getReportAiSummary(who, rptId);
+                sendJson(ex, r.status(), r.body(), who);
+                return;
+            }
+            if (path.startsWith("/api/v1/flood-reports/") && path.endsWith("/after-action-report")) {
+                String rptId = segment(path, 4);
+                HttpResult r = service.getReportAfterActionReport(who, rptId);
+                sendJson(ex, r.status(), r.body(), who);
                 return;
             }
             sendJson(ex, 404, Map.of("error", "NOT_FOUND", "path", path), who);
@@ -329,6 +345,17 @@ public final class FloodOSServer {
             }
             if (path.startsWith("/api/v1/shelters/") && path.endsWith("/occupancy")) {
                 return service.updateShelterOccupancy(who, segment(path, 4), body);
+            }
+            if ("/api/v1/ai/classify-priority".equals(path)) {
+                return service.classifyPriority(who, body);
+            }
+            if ("/api/v1/ai/summarize".equals(path)) {
+                var aiRes = service.getStore().aiAssistant.summarize(body);
+                return new HttpResult(aiRes.status(), aiRes.body());
+            }
+            if ("/api/v1/ai/after-action-report".equals(path)) {
+                var aiRes = service.getStore().aiAssistant.afterActionReport(body);
+                return new HttpResult(aiRes.status(), aiRes.body());
             }
             return new HttpResult(404, Map.of("error", "NOT_FOUND", "path", path));
         }

@@ -138,6 +138,7 @@ services:
       FLOODOS_EVENT_BUS_URL: http://kafka-rest:8082
       FLOODOS_ANALYTICS_URL: http://lake-archiver:8090
       CLAMAV_HOST: clamav
+      AI_ASSISTANT_URL: ${AI_ASSISTANT_URL:-http://ai-assistant:8088}
       FLOODOS_INGEST_TOKEN: ${FLOODOS_INGEST_TOKEN:-ingest_dev_only_token}
       # POST /api/v1/sim/reset (PLATFORM_ADMIN only) wipes the demo data: allowed in development, closed in production.
       FLOODOS_ALLOW_DEMO_RESET: ${FLOODOS_ALLOW_DEMO_RESET:-true}
@@ -159,6 +160,9 @@ services:
         condition: service_healthy
         required: false
       clamav:
+        condition: service_started
+        required: false
+      ai-assistant:
         condition: service_started
         required: false
 
@@ -361,6 +365,27 @@ services:
       timeout: 10s
       retries: 10
       start_period: 180s
+
+  # 15. AI TACTICAL ASSISTANT: LLM situational summaries, priority recommendations, and after-action reporting.
+  ai-assistant:
+    profiles: ["full", "ai", "demo"]
+    build:
+      context: ./services/ai-assistant
+    container_name: floodos-ai-assistant
+    restart: unless-stopped
+    environment:
+      PORT: 8088
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:8088:8088"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8088/health',timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:
