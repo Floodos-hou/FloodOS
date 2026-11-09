@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-const CACHE_NAME = 'floodos-shell-v3';
+const CACHE_NAME = 'floodos-shell-v4';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',

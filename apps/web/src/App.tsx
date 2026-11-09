@@ -270,8 +270,8 @@ export const App: React.FC = () => {
         live={liveInfo}
         selectedKey={selection ? selectionKey(selection) : null}
         onSelect={setSelection}
-        legendOpen={tab === 'MAP'}
-        heightClass={tab === 'MAP' ? 'h-[calc(100vh-9.5rem)] min-h-[420px]' : 'h-full'}
+        legendOpen={false}
+        heightClass={tab === 'MAP' ? 'h-[calc(100vh-7.5rem)] min-h-[500px]' : 'h-full'}
       />
     </Suspense>
   );
@@ -407,7 +407,7 @@ export const App: React.FC = () => {
           )}
 
           {state && tab === 'MAP' && (
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-3.5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="panel min-w-0 overflow-hidden">{mapEl}</div>
               <div className="min-h-0">
                 {selection ? (
@@ -415,8 +415,48 @@ export const App: React.FC = () => {
                     selection={selection} onClose={() => setSelection(null)} currentUserRole={role} orders={state.orders} zones={state.zones}
                   />
                 ) : (
-                  <div className="panel p-4 text-sm text-ink-2">
-                    <span className="font-semibold text-ink">Chọn một điểm trên bản đồ</span> (tin báo, phương tiện, điểm trú, trạm đo hoặc vùng) để xem chi tiết và nguồn dữ liệu.
+                  <div className="panel overflow-hidden">
+                    <div className="bg-gradient-to-r from-[#082f49] via-[#0c4a6e] to-[#0284c7] px-4 py-3.5 text-white">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-sky-200">Bản đồ Tác chiến GIS</div>
+                      <div className="text-sm font-bold">Chọn đối tượng để tra cứu nhanh</div>
+                    </div>
+                    <div className="p-4 text-xs leading-relaxed text-ink-2 border-b border-line bg-sky-50/40">
+                      Bấm trực tiếp vào điểm đánh dấu trên bản đồ hoặc chọn nhanh trạm đo / điểm trú bên dưới để xem chi tiết.
+                    </div>
+                    <div className="max-h-[calc(100vh-15rem)] overflow-y-auto rule-y">
+                      {state.gauges.map((g) => (
+                        <button
+                          key={g.station_id}
+                          type="button"
+                          onClick={() => setSelection({ type: 'gauge', data: g })}
+                          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-sheet-2"
+                        >
+                          <div>
+                            <div className="font-bold text-ink">{g.name}</div>
+                            <div className="text-[11px] text-ink-3">Trạm đo mực nước</div>
+                          </div>
+                          <span className="num rounded-md bg-sky-100 px-2 py-0.5 font-bold text-sky-800">
+                            {g.level_cm != null ? `${g.level_cm} cm` : '—'}
+                          </span>
+                        </button>
+                      ))}
+                      {state.shelters.map((s) => (
+                        <button
+                          key={s.shelter_id}
+                          type="button"
+                          onClick={() => setSelection({ type: 'shelter', data: s })}
+                          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-sheet-2"
+                        >
+                          <div>
+                            <div className="font-bold text-ink">{s.name}</div>
+                            <div className="text-[11px] text-ink-3">Điểm trú an toàn</div>
+                          </div>
+                          <span className="num rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+                            {s.occupancy ?? 0}/{s.capacity} chỗ
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
