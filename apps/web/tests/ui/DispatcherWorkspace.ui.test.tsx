@@ -147,4 +147,17 @@ describe('Dispatcher console safety rules', () => {
     fireEvent.click(approve);
     await waitFor(() => expect(onApproveReplan).toHaveBeenCalledWith('INC-1', 'OPT-B'));
   });
+
+  it('exposes AI Tactical Summary and After-Action Report actions on reports', async () => {
+    const resolvedReport = { ...baseReport, report_id: 'R-RESOLVED', status: 'RESOLVED' };
+    setup({ reports: [baseReport as never, resolvedReport as never] });
+    pickFirstRow();
+    expect(screen.getByRole('button', { name: /tóm tắt ai/i })).toBeTruthy();
+
+    openQueue(/tất cả/i);
+    const rows = screen.getByLabelText('Hàng đợi vụ việc');
+    const resolvedBtn = within(rows).getByText(/đã xử lý xong/i);
+    fireEvent.click(resolvedBtn);
+    expect(screen.getByRole('button', { name: /xem báo cáo sau vụ việc/i })).toBeTruthy();
+  });
 });

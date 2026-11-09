@@ -345,8 +345,58 @@ export const api = {
     return request('/sim/reset', { method: 'POST', body: '{}' }, token);
   },
 
+  async simEnrich(token: string) {
+    return request('/sim/enrich', { method: 'POST', body: '{}' }, token);
+  },
+
   async simTick(token: string) {
     // Stub for UI simulation clock tick
     return { ok: true };
+  },
+
+  // --------------------------------------------------------------------------
+  // AI Tactical Assistant (Summarize, Priority Classification, After-Action)
+  // --------------------------------------------------------------------------
+  async getReportAiSummary(token: string, reportId: string): Promise<{
+    report_id: string;
+    summary_text: string;
+    current_status: string;
+    timeline: string[];
+    suggested_actions: string[];
+    engine: string;
+    generated_at: string;
+  }> {
+    return request(`/flood-reports/${reportId}/ai-summary`, {}, token);
+  },
+
+  async classifyPriority(token: string, payload: {
+    description: string;
+    depth_cm?: number;
+    people_affected?: number;
+    need_type?: string;
+    location_hint?: string;
+  }): Promise<{
+    suggested_priority: 'CRITICAL' | 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
+    confidence: number;
+    reasoning: string;
+    key_factors: string[];
+    engine: string;
+    generated_at: string;
+  }> {
+    return request('/ai/classify-priority', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token);
+  },
+
+  async getAfterActionReport(token: string, reportId: string): Promise<{
+    report_id: string;
+    report_title: string;
+    executive_summary: string;
+    markdown_content: string;
+    engine: string;
+    generated_at: string;
+  }> {
+    return request(`/flood-reports/${reportId}/after-action-report`, {}, token);
   },
 };

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 FloodOS Contributors
 
-import React, { useMemo, useState } from 'react';
+import React, { useContext, useMemo, useState } from 'react';
 import type {
   FloodReport, DispatchOrder, RescueTeam, RescueVehicle, FieldIncident, FloodZone, FloodPriority, CandidateRescueOption,
 } from '../../types';
@@ -15,6 +15,10 @@ import {
 import { StatusBadge } from '../common/StatusBadge';
 import { CaseRiver, EmptyState, Field, ageText } from '../ui/kit';
 import { MapDetailPanel, type MapSelection } from '../map/MapDetailPanel';
+import { Sparkles, FileText, Loader2, ShieldCheck, Check } from 'lucide-react';
+import { api } from '../../services/api';
+import { AuthContext } from '../../context/authCore';
+import { Modal } from '../common/Modal';
 
 interface DispatcherWorkspaceProps {
   reports: FloodReport[];
@@ -216,7 +220,73 @@ interface CasePanelProps {
 }
 
 const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams, vehicles, busyVehicleIds, busyTeamIds, onVerify, onDispatch }) => {
+  const auth = useContext(AuthContext);
+  const token = auth?.token ?? null;
   const order = orders.find((o) => o.report_id === report.report_id && o.status !== 'SUPERSEDED' && o.status !== 'CANCELLED');
+
+  const [aiSummary, setAiSummary] = useState<{
+    report_id: string;
+    summary_text: string;
+    current_status: string;
+    timeline: string[];
+    suggested_actions: string[];
+    engine: string;
+    generated_at: string;
+  } | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+
+  const [aarReport, setAarReport] = useState<{
+    report_id: string;
+    report_title: string;
+    executive_summary: string;
+    markdown_content: string;
+    engine: string;
+    generated_at: string;
+  } | null>(null);
+  const [loadingAar, setLoadingAar] = useState(false);
+  const [showAarModal, setShowAarModal] = useState(false);
+
+  const handleToggleAiSummary = async () => {
+    if (showSummary) {
+      setShowSummary(false);
+      return;
+    }
+    if (aiSummary && aiSummary.report_id === report.report_id) {
+      setShowSummary(true);
+      return;
+    }
+    if (!token) return;
+    setLoadingSummary(true);
+    try {
+      const data = await api.getReportAiSummary(token, report.report_id);
+      setAiSummary(data);
+      setShowSummary(true);
+    } catch (err) {
+      console.error('Failed to get AI summary', err);
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
+  const handleOpenAar = async () => {
+    if (!token) return;
+    setShowAarModal(true);
+    if (!aarReport || aarReport.report_id !== report.report_id) {
+      setLoadingAar(true);
+      try {
+        const data = await api.getAfterActionReport(token, report.report_id);
+        setAarReport(data);
+      } catch (err) {
+        console.error('Failed to get AAR', err);
+      } finally {
+        setLoadingAar(false);
+      }
+    }
+  };
+
+  const isResolvedOrClosed = ['RESOLVED', 'CLOSED', 'AWAITING_CONFIRMATION'].includes(report.status);
+
   return (
     <section className="panel flex h-full flex-col" aria-label={`Hồ sơ ${report.report_id}`}>
       <div className="panel-head">
@@ -224,9 +294,61 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
           <div className="eyebrow">Hồ sơ {report.report_id}</div>
           <h3 className="truncate text-base">{zoneLabel}</h3>
         </div>
-        <StatusBadge status={report.priority} type="priority" />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggleAiSummary}
+            className="btn btn-secondary !min-h-8 text-xs py-1 px-2.5 inline-flex items-center gap-1.5 border-line bg-sheet-2 hover:border-river-2"
+            title="Gọi AI tổng hợp tình huống, diễn biến và đề xuất hành động"
+          >
+            {loadingSummary ? <Loader2 className="w-3.5 h-3.5 animate-spin text-river" /> : <Sparkles className="w-3.5 h-3.5 text-river" />}
+            <span>{showSummary ? 'Ẩn tóm tắt' : '✨ Tóm tắt AI'}</span>
+          </button>
+          <StatusBadge status={report.priority} type="priority" />
+        </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {showSummary && aiSummary && (
+          <div className="rounded-lg border border-river/30 bg-river-soft/30 p-3.5 text-sm space-y-2.5 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-river-2 text-xs uppercase tracking-wide">
+                <Sparkles className="w-3.5 h-3.5 text-river" />
+                Tóm tắt Tình huống Điều phối (AI Co-pilot)
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sheet text-ink-2 border border-line">
+                {aiSummary.engine}
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed text-ink font-medium">{aiSummary.summary_text}</p>
+            {aiSummary.timeline?.length > 0 && (
+              <div>
+                <div className="eyebrow mb-1 text-[11px]">Diễn biến xử lý</div>
+                <ul className="space-y-1 text-xs text-ink-2">
+                  {aiSummary.timeline.map((step, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5">
+                      <span className="text-river font-bold">•</span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {aiSummary.suggested_actions?.length > 0 && (
+              <div>
+                <div className="eyebrow mb-1 text-[11px]">Đề xuất hành động tiếp theo</div>
+                <ul className="space-y-1 text-xs text-ink-2">
+                  {aiSummary.suggested_actions.map((act, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5">
+                      <span className="text-grass font-bold">✓</span>
+                      <span>{act}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         <CaseRiver stages={reportStages(report.status)} />
         <dl className="grid grid-cols-3 gap-3 text-sm">
           <div><dt className="eyebrow">Nhu cầu</dt><dd className="font-semibold">{needType(report.need_type).text}</dd></div>
@@ -251,17 +373,96 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
             <div className="mt-2 h-1.5 rounded-sm bg-sheet-2 ring-1 ring-line"><div className="h-full rounded-sm bg-river" style={{ width: `${order.progress_pct}%` }} /></div>
           </div>
         )}
+
+        {isResolvedOrClosed && (
+          <div className="pt-2 border-t border-line">
+            <button
+              type="button"
+              onClick={handleOpenAar}
+              className="btn btn-secondary w-full inline-flex items-center justify-center gap-2 text-xs py-2 bg-sheet hover:bg-sheet-2 border-line hover:border-river-2"
+            >
+              <FileText className="w-4 h-4 text-river" />
+              <span>📄 Xem Báo cáo Sau Vụ việc (AI After-Action Report)</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {showAarModal && (
+        <Modal
+          title={`Báo cáo Tổng kết Vụ việc ${report.report_id} (AAR)`}
+          onClose={() => setShowAarModal(false)}
+          size="max-w-2xl"
+        >
+          {loadingAar ? (
+            <div className="p-8 text-center text-sm text-ink-3 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-river" />
+              <span>Đang trích xuất dữ liệu từ chuỗi Hash-Chain và khởi tạo báo cáo...</span>
+            </div>
+          ) : aarReport ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-2.5 rounded bg-river-soft/30 border border-river/20 text-xs">
+                <div className="flex items-center gap-2 text-river-2 font-medium">
+                  <ShieldCheck className="w-4 h-4 text-river" />
+                  <span>Xác thực bởi Chuỗi khối SHA-256 (Tamper-evident)</span>
+                </div>
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-sheet border border-line">
+                  {aarReport.engine}
+                </span>
+              </div>
+              <div className="p-3 bg-sheet-2 rounded border border-line text-xs font-medium text-ink">
+                <div className="eyebrow mb-1">Tóm lược Lãnh đạo (Executive Summary)</div>
+                {aarReport.executive_summary}
+              </div>
+              <div className="p-4 bg-sheet rounded border border-line text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto">
+                {aarReport.markdown_content}
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 text-center text-xs text-crit">Không tải được báo cáo AAR.</div>
+          )}
+        </Modal>
+      )}
     </section>
   );
 };
 
 const VerifyForm: React.FC<{ report: FloodReport; onVerify: DispatcherWorkspaceProps['onVerifyReport'] }> = ({ report, onVerify }) => {
+  const auth = useContext(AuthContext);
+  const token = auth?.token ?? null;
   const [decision, setDecision] = useState<'VERIFIED' | 'REJECTED'>('VERIFIED');
   const [priority, setPriority] = useState<FloodPriority>(report.priority === 'CRITICAL' ? 'URGENT' : report.priority);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [aiRec, setAiRec] = useState<{
+    suggested_priority: 'CRITICAL' | 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
+    confidence: number;
+    reasoning: string;
+    key_factors: string[];
+    engine: string;
+  } | null>(null);
+  const [loadingAiRec, setLoadingAiRec] = useState(false);
+
+  React.useEffect(() => {
+    if (!token) return;
+    let active = true;
+    setLoadingAiRec(true);
+    api.classifyPriority(token, {
+      description: report.description || report.notes || 'Tin báo người dân',
+      depth_cm: report.depth_cm,
+      people_affected: report.people_affected,
+      need_type: report.need_type,
+    }).then((res) => {
+      if (active) setAiRec(res);
+    }).catch(() => {
+      // Graceful fallback
+    }).finally(() => {
+      if (active) setLoadingAiRec(false);
+    });
+    return () => { active = false; };
+  }, [report.report_id, report.depth_cm, report.people_affected, report.need_type, token]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,15 +484,70 @@ const VerifyForm: React.FC<{ report: FloodReport; onVerify: DispatcherWorkspaceP
         ))}
       </div>
       {decision === 'VERIFIED' && (
-        <Field label="Mức ưu tiên" hint={`Người báo chọn: ${PRIORITIES.find((p) => p.value === report.priority)?.label ?? report.priority}. Đổi nếu thẩm định khác.`}>
-          <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Mức ưu tiên">
-            {PRIORITIES.map((p) => (
-              <button key={p.value} type="button" role="radio" aria-checked={priority === p.value} onClick={() => setPriority(p.value)} className={`rounded border px-2 py-1.5 text-left text-xs ${priority === p.value ? 'border-ink bg-ink text-sheet' : 'border-line-2 bg-sheet hover:bg-sheet-2'}`}>
-                <span className="block font-semibold">{p.label}</span><span className={priority === p.value ? 'text-sheet/70' : 'text-ink-3'}>{p.hint}</span>
-              </button>
-            ))}
+        <>
+          <div className="rounded border border-river/30 bg-river-soft/20 p-2.5 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-semibold text-river-2">
+                <Sparkles className="w-3.5 h-3.5 text-river" /> Gợi ý AI phân loại ưu tiên
+              </span>
+              {loadingAiRec ? (
+                <span className="text-ink-3 inline-flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Đang đánh giá…
+                </span>
+              ) : aiRec ? (
+                <span className="num font-semibold text-ink-2">
+                  {(aiRec.confidence * 100).toFixed(0)}% tin cậy
+                </span>
+              ) : null}
+            </div>
+
+            {aiRec && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-ink">Gợi ý:</span>
+                  <StatusBadge status={aiRec.suggested_priority} type="priority" />
+                  {priority !== aiRec.suggested_priority && (
+                    <button
+                      type="button"
+                      onClick={() => setPriority(aiRec.suggested_priority)}
+                      className="btn btn-secondary text-[11px] py-0.5 px-2 bg-sheet hover:bg-sheet-2 border-line text-river-2 font-medium"
+                    >
+                      Áp dụng gợi ý
+                    </button>
+                  )}
+                  {priority === aiRec.suggested_priority && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-grass font-medium">
+                      <Check className="w-3 h-3" /> Đã áp dụng
+                    </span>
+                  )}
+                </div>
+                <p className="text-ink-2 text-[11px] italic">"{aiRec.reasoning}"</p>
+                {aiRec.key_factors?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {aiRec.key_factors.map((f, i) => (
+                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-sheet text-ink-3 border border-line">
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[10px] text-ink-3 font-mono">
+                  Quyết định con người là tối thượng · Engine: {aiRec.engine}
+                </div>
+              </div>
+            )}
           </div>
-        </Field>
+
+          <Field label="Mức ưu tiên" hint={`Người báo chọn: ${PRIORITIES.find((p) => p.value === report.priority)?.label ?? report.priority}. Đổi nếu thẩm định khác.`}>
+            <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Mức ưu tiên">
+              {PRIORITIES.map((p) => (
+                <button key={p.value} type="button" role="radio" aria-checked={priority === p.value} onClick={() => setPriority(p.value)} className={`rounded border px-2 py-1.5 text-left text-xs ${priority === p.value ? 'border-ink bg-ink text-sheet' : 'border-line-2 bg-sheet hover:bg-sheet-2'}`}>
+                  <span className="block font-semibold">{p.label}</span><span className={priority === p.value ? 'text-sheet/70' : 'text-ink-3'}>{p.hint}</span>
+                </button>
+              ))}
+            </div>
+          </Field>
+        </>
       )}
       <Field label={decision === 'REJECTED' ? 'Lý do từ chối (bắt buộc)' : 'Ghi chú xác minh (tuỳ chọn)'} htmlFor="verify-note">
         <textarea id="verify-note" rows={2} className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'REJECTED' ? 'Ví dụ: tin trùng, đã gọi lại người báo, ngoài địa bàn' : 'Ví dụ: đã gọi lại người báo, xác nhận nước đang lên'} />

@@ -1120,6 +1120,44 @@ final class PlatformTests {
                     DeploymentProfile.resetProfileForTesting();
                 }
             });
+            test("health exposes ai_assistant status and capabilities includes ai co-pilot", () -> {
+                HttpResponse<String> r = http(base, "GET", "/api/v1/health", null);
+                equal(200, r.statusCode(), "status");
+                Map<?, ?> core = (Map<?, ?>) JsonCodec.parseObject(r.body()).get("core_services");
+                notNull(core.get("ai_assistant"), "ai_assistant in core_services");
+
+                HttpResponse<String> capRes = http(base, "GET", "/api/v1/system/capabilities", null);
+                equal(200, capRes.statusCode(), "caps status");
+                Map<?, ?> caps = JsonCodec.parseObject(capRes.body());
+                Map<?, ?> s = (Map<?, ?>) caps.get("services");
+                notNull(s.get("ai_assistant"), "ai assistant in capabilities");
+            });
+            test("ai situation summary and priority classification work seamlessly with fallback", () -> {
+                String tok = KeycloakOidcEngine.issueJwt(new KeycloakOidcEngine.UserAccount("usr_dispatcher_hoa", "dispatcher_hoa", "pw", "Hoa", "hoa@x", "ORG_HN_PILOT_01", FloodRoles.DISPATCHER));
+                HttpResponse<String> summaryRes = http(base, "GET", "/api/v1/flood-reports/FR-0001/ai-summary", null, "Authorization", "Bearer " + tok);
+                equal(200, summaryRes.statusCode(), "ai summary status");
+                Map<?, ?> sumBody = JsonCodec.parseObject(summaryRes.body());
+                equal("FR-0001", sumBody.get("report_id"), "report id");
+                notNull(sumBody.get("summary_text"), "summary text");
+                notNull(sumBody.get("suggested_actions"), "suggested actions");
+                isTrue(String.valueOf(sumBody.get("engine")).contains("FALLBACK"), "fallback engine active");
+
+                Map<String, Object> classifyReq = Map.of(
+                        "description", "Cần cấp cứu khẩn cấp, người già mắc kẹt nguy kịch",
+                        "depth_cm", 110.0,
+                        "people_affected", 3,
+                        "need_type", "MEDICAL"
+                );
+                HttpResponse<String> clsRes = http(base, "POST", "/api/v1/ai/classify-priority", JsonCodec.toJson(classifyReq), "Authorization", "Bearer " + tok);
+                equal(200, clsRes.statusCode(), "classify status");
+                Map<?, ?> clsBody = JsonCodec.parseObject(clsRes.body());
+                equal("CRITICAL", clsBody.get("suggested_priority"), "critical priority");
+
+                HttpResponse<String> aarRes = http(base, "GET", "/api/v1/flood-reports/FR-0001/after-action-report", null, "Authorization", "Bearer " + tok);
+                equal(200, aarRes.statusCode(), "aar status");
+                Map<?, ?> aarBody = JsonCodec.parseObject(aarRes.body());
+                isTrue(String.valueOf(aarBody.get("markdown_content")).contains("BÁO CÁO TỔNG KẾT"), "aar markdown header");
+            });
         } finally {
             server.stop();
             KeycloakOidcEngine.resetAuthModeForTesting();
