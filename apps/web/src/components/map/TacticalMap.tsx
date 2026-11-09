@@ -253,10 +253,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             type="button"
             aria-pressed={layers[it.k]}
             onClick={() => toggle(it.k)}
-            className={`flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-semibold shadow-sm ${layers[it.k] ? 'border-line-2 bg-sheet text-ink' : 'border-line bg-sheet/70 text-ink-3'}`}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold shadow-md backdrop-blur-md transition-all ${layers[it.k] ? 'border-river/30 bg-sheet/95 text-ink ring-1 ring-river/10' : 'border-line bg-sheet/75 text-ink-3 hover:bg-sheet/90'}`}
           >
-            <span className={`h-2 w-2 rounded-full ${it.color} ${layers[it.k] ? '' : 'opacity-30'}`} />
-            {it.label} <span className="num text-ink-3">{it.n}</span>
+            <span className={`h-2 w-2 rounded-full ${it.color} ${layers[it.k] ? 'ring-2 ring-current/20' : 'opacity-30'}`} />
+            {it.label} <span className={`num rounded-full px-1.5 py-0.2 text-[10px] font-bold ${layers[it.k] ? 'bg-sheet-2 text-ink-2' : 'text-ink-3'}`}>{it.n}</span>
           </button>
         ))}
       </div>
@@ -264,16 +264,16 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       <button
         type="button" onClick={() => { zoomForBuildings.current = true; setView3d((v) => !v); }} aria-pressed={view3d}
         title={view3d ? 'Về góc nhìn phẳng' : 'Nghiêng bản đồ, nhà dựng khối 3D'} aria-label="Chế độ 3D"
-        className={`btn absolute right-3 top-[128px] z-10 !min-h-8 !px-2 ${view3d ? '!border-river !bg-river-soft !text-river' : ''}`}
+        className={`btn absolute right-3 top-[128px] z-10 !min-h-8 !rounded-lg !px-2.5 !shadow-md backdrop-blur-md ${view3d ? '!border-river !bg-river-soft !text-river' : '!bg-sheet/95'}`}
       >
-        <Box className="h-4 w-4" aria-hidden="true" /> <span className="text-xs">3D</span>
+        <Box className="h-4 w-4" aria-hidden="true" /> <span className="text-xs font-bold">3D</span>
       </button>
 
-      <button type="button" onClick={fitAll} title="Căn khung theo dữ liệu" aria-label="Căn khung theo dữ liệu" className="btn absolute right-3 top-[88px] z-10 !min-h-8 !px-2">
+      <button type="button" onClick={fitAll} title="Căn khung theo dữ liệu" aria-label="Căn khung theo dữ liệu" className="btn absolute right-3 top-[88px] z-10 !min-h-8 !rounded-lg !bg-sheet/95 !px-2.5 !shadow-md backdrop-blur-md">
         <Maximize className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      <div className="absolute bottom-8 left-3 z-10 max-w-[40%] rounded border border-line bg-sheet/95 px-2 py-1 text-[11px] text-ink-2 shadow-sm">
+      <div className="absolute bottom-8 left-3 z-10 max-w-[45%] rounded-lg border border-line bg-sheet/90 px-2.5 py-1 text-[11px] font-medium text-ink-2 shadow-md backdrop-blur-md">
         Nền: {basemap?.kind === 'offline' ? 'OpenStreetMap, lưu trong hệ thống' : 'OpenStreetMap trực tuyến'}.
         {live?.enabled && !live.connected && ' Mất kết nối bản sao số, vị trí xe có thể cũ.'}
         {route && ` Nét đứt: đường chim bay ${route.label}.`}

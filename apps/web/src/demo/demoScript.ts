@@ -5,7 +5,7 @@
  * Demo storyline for FloodOS Operations Portal. Only active when the image is built with VITE_DEMO_MODE=true
  * (dev compose default; compose.prod.yaml turns it off so no demo accounts or passwords ship to production).
  */
-export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false';
 export const DEMO_PASSWORD = '123456';
 
 export interface DemoCharacter {

@@ -23,22 +23,22 @@ export const GaugeRuler: React.FC<GaugeRulerProps> = ({ level, warn, crit, max, 
   }
   const top = Math.max(max ?? 0, (crit ?? 0) * 1.25, level * 1.15, 60);
   const pct = (v: number) => `${Math.min(100, (v / top) * 100)}%`;
-  const tone = crit !== undefined && level >= crit ? 'bg-crit' : warn !== undefined && level >= warn ? 'bg-warn' : 'bg-water';
+  const tone = crit !== undefined && level >= crit ? 'bg-gradient-to-r from-red-500 to-rose-600' : warn !== undefined && level >= warn ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-sky-500 to-blue-600';
   const step = top > 200 ? 50 : top > 100 ? 20 : 10;
   const ticks: number[] = [];
   for (let t = 0; t <= top; t += step) ticks.push(t);
   return (
     <div className={className}>
       <div className="flex items-baseline justify-between">
-        <span className="num text-lg font-bold text-ink">{level} <span className="text-xs font-semibold text-ink-3">cm</span></span>
-        {source && <span className="eyebrow">{source}</span>}
+        <span className="num text-lg font-extrabold text-ink">{level} <span className="text-xs font-semibold text-ink-3">cm</span></span>
+        {source && <span className="rounded bg-sheet-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-2 ring-1 ring-line">{source}</span>}
       </div>
-      <div className="relative mt-1 h-3 rounded-sm bg-sheet-2 ring-1 ring-line">
-        <div className={`absolute inset-y-0 left-0 rounded-sm ${tone}`} style={{ width: pct(level) }} />
-        {warn !== undefined && <div className="absolute -inset-y-1 w-0.5 bg-warn" style={{ left: pct(warn) }} title={`Cảnh báo ${warn} cm`} />}
-        {crit !== undefined && <div className="absolute -inset-y-1 w-0.5 bg-crit" style={{ left: pct(crit) }} title={`Nguy hiểm ${crit} cm`} />}
+      <div className="relative mt-1.5 h-3.5 rounded-full bg-sheet-2 ring-1 ring-line shadow-inner">
+        <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-300 ${tone}`} style={{ width: pct(level) }} />
+        {warn !== undefined && <div className="absolute -inset-y-1 w-0.5 bg-warn shadow-sm" style={{ left: pct(warn) }} title={`Cảnh báo ${warn} cm`} />}
+        {crit !== undefined && <div className="absolute -inset-y-1 w-0.5 bg-crit shadow-sm" style={{ left: pct(crit) }} title={`Nguy hiểm ${crit} cm`} />}
       </div>
-      <div className="relative mt-0.5 h-3 text-[10px] text-ink-3">
+      <div className="relative mt-1 h-3 text-[10px] font-medium text-ink-3">
         {ticks.map((t) => (
           <span key={t} className="num absolute -translate-x-1/2" style={{ left: pct(t) }}>{t}</span>
         ))}
@@ -53,20 +53,20 @@ export const CaseRiver: React.FC<{ stages: Stage[]; className?: string }> = ({ s
   <ol className={`flex w-full items-start ${className}`} aria-label="Tiến trình vụ việc">
     {stages.map((s, i) => {
       const dot =
-        s.state === 'done' ? 'bg-river border-river'
-        : s.state === 'current' ? 'bg-sheet border-river ring-4 ring-river-soft'
-        : s.state === 'bad' ? 'bg-crit border-crit'
+        s.state === 'done' ? 'bg-river border-river shadow-sm shadow-sky-500/30'
+        : s.state === 'current' ? 'bg-sheet border-river ring-4 ring-river-soft shadow-sm'
+        : s.state === 'bad' ? 'bg-crit border-crit shadow-sm shadow-red-500/30'
         : 'bg-sheet border-line-2';
-      const text = s.state === 'todo' ? 'text-ink-3' : s.state === 'bad' ? 'text-crit' : 'text-ink';
+      const text = s.state === 'todo' ? 'text-ink-3' : s.state === 'bad' ? 'text-crit font-bold' : s.state === 'current' ? 'text-river font-bold' : 'text-ink';
       return (
         <li key={s.key} className="relative flex min-w-0 flex-1 flex-col items-center text-center" aria-current={s.state === 'current' ? 'step' : undefined}>
           {i > 0 && (
             <span
-              className={`absolute right-1/2 top-[7px] h-0.5 w-full ${stages[i - 1].state === 'done' ? 'bg-river' : 'bg-line-2'}`}
+              className={`absolute right-1/2 top-[7px] h-0.5 w-full transition-colors ${stages[i - 1].state === 'done' ? 'bg-river' : 'bg-line-2'}`}
               aria-hidden="true"
             />
           )}
-          <span className={`relative z-10 h-4 w-4 rounded-full border-2 ${dot}`} />
+          <span className={`relative z-10 h-4 w-4 rounded-full border-2 transition-all ${dot}`} />
           <span className={`mt-1.5 text-[11px] font-semibold leading-tight ${text}`}>{s.label}</span>
         </li>
       );
@@ -81,7 +81,7 @@ export const Metric: React.FC<{ label: string; value: React.ReactNode; hint?: st
   return (
     <div className="min-w-0">
       <div className="eyebrow">{label}</div>
-      <div className={`num text-xl font-bold leading-tight ${color}`}>{value}</div>
+      <div className={`num text-xl font-extrabold leading-tight ${color}`}>{value}</div>
       {hint && <div className="text-[11px] text-ink-3">{hint}</div>}
     </div>
   );
@@ -89,7 +89,7 @@ export const Metric: React.FC<{ label: string; value: React.ReactNode; hint?: st
 
 export const EmptyState: React.FC<{ title: string; hint?: string }> = ({ title, hint }) => (
   <div className="px-4 py-8 text-center">
-    <p className="text-sm font-semibold text-ink">{title}</p>
+    <p className="text-sm font-bold text-ink">{title}</p>
     {hint && <p className="mx-auto mt-1 max-w-xs text-xs text-ink-3">{hint}</p>}
   </div>
 );

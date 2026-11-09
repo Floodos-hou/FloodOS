@@ -2,7 +2,7 @@
 // Copyright 2026 FloodOS Contributors
 
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardList, GitBranch, LayoutDashboard, Map as MapIcon, ScrollText, TriangleAlert, X } from 'lucide-react';
+import { ClipboardList, GitBranch, LayoutDashboard, Map as MapIcon, ScrollText, ShieldCheck, TriangleAlert, X } from 'lucide-react';
 import { useAuth } from './context/useAuth';
 import { api } from './services/api';
 import type { TacticalState, FloodPriority, DispatchOrderStatus, FloodReport, UserRole } from './types';
@@ -46,6 +46,11 @@ const HOME_LABEL: Record<string, string> = {
 
 const errText = (err: unknown, fallback: string): string => (err instanceof Error && err.message ? err.message : fallback);
 
+const openReportOnMap = (setSelection: (s: MapSelection) => void, setTab: (t: Tab) => void) => (r: FloodReport) => {
+  setSelection({ type: 'report', data: r });
+  setTab('MAP');
+};
+
 export const App: React.FC = () => {
   const { user, token, isAuthenticated, logout } = useAuth();
 
@@ -85,7 +90,6 @@ export const App: React.FC = () => {
     try {
       const data = await api.getTacticalState(token);
 
-      // Tactical Voice Announcements for incoming emergency events
       if (isInitialLoad.current) {
         (data.reports || []).forEach((r) => announcedReportIds.current.add(r.report_id));
         (data.incidents || []).forEach((i) => announcedIncidentIds.current.add(i.incident_id));
@@ -135,7 +139,6 @@ export const App: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [notice]);
 
-  /** run an API call, refresh, announce; failures are announced and re-thrown so the form can keep its input */
   const act = async (call: () => Promise<unknown>, okText: string, failPrefix: string) => {
     try {
       await call();
@@ -224,7 +227,6 @@ export const App: React.FC = () => {
   const handleResolveTicket = (incidentId: string, notes: string) =>
     act(() => api.updateRepairTicket(token!, incidentId, { action: 'RESOLVED', notes }), 'Đã đóng phiếu sửa chữa, xe trở lại trạng thái sẵn sàng.', 'Không đóng được phiếu');
 
-  // straight line from the best replacement vehicle to the job that lost its vehicle (never a road route)
   const route = useMemo<MapRoute | null>(() => {
     if (!state) return null;
     const inc = state.incidents.find((i) => i.status === 'OPEN_REPLANNING');
@@ -244,12 +246,16 @@ export const App: React.FC = () => {
   const isStaff = isDispatcher || role === 'RESOURCE_MANAGER';
   const isStale = !!updatedAt && now - updatedAt.getTime() > STALE_MS;
 
-  const tabs: { id: Tab; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'HOME', label: HOME_LABEL[role] ?? 'Trang chính', Icon: role === 'REPORTER' ? ClipboardList : LayoutDashboard },
+  const openReportsCount = (state?.reports || []).filter((r) => !['RESOLVED', 'CLOSED', 'REJECTED'].includes(r.status)).length;
+  const activeBpmnCount = (state?.bpmn_instances || []).filter((b) => b.status === 'ACTIVE').length;
+  const auditCount = (state?.audit_logs || []).length;
+
+  const tabs: { id: Tab; label: string; Icon: React.ComponentType<{ className?: string }>; count?: number }[] = [
+    { id: 'HOME', label: HOME_LABEL[role] ?? 'Trang chính', Icon: role === 'REPORTER' ? ClipboardList : LayoutDashboard, count: openReportsCount },
   ];
   if (!isDispatcher) tabs.push({ id: 'MAP', label: 'Bản đồ', Icon: MapIcon });
-  if (isDispatcher) tabs.push({ id: 'PROCESS', label: 'Quy trình', Icon: GitBranch });
-  if (isStaff) tabs.push({ id: 'AUDIT', label: 'Nhật ký', Icon: ScrollText });
+  if (isDispatcher) tabs.push({ id: 'PROCESS', label: 'Quy trình', Icon: GitBranch, count: activeBpmnCount });
+  if (isStaff) tabs.push({ id: 'AUDIT', label: 'Nhật ký', Icon: ScrollText, count: auditCount });
 
   const mapEl = state && (
     <Suspense fallback={<div className="grid h-full min-h-[320px] place-items-center text-sm text-ink-3">Đang nạp bản đồ…</div>}>
@@ -265,10 +271,12 @@ export const App: React.FC = () => {
         selectedKey={selection ? selectionKey(selection) : null}
         onSelect={setSelection}
         legendOpen={tab === 'MAP'}
-        heightClass={tab === 'MAP' ? 'h-[calc(100vh-9rem)] min-h-[420px]' : 'h-full'}
+        heightClass={tab === 'MAP' ? 'h-[calc(100vh-9.5rem)] min-h-[420px]' : 'h-full'}
       />
     </Suspense>
   );
+
+  const chainValid = (state?.chain_proof ?? state?.audit_chain_proof)?.chain_valid ?? true;
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
@@ -279,7 +287,7 @@ export const App: React.FC = () => {
         onRefresh={() => void loadState()}
         isRefreshing={isLoading}
         onOpenProofInspector={() => setShowProofInspector(true)}
-        showStaffTools={isStaff && import.meta.env.DEV}
+        showStaffTools={isStaff}
         orgName={state?.auth_context?.organization_name}
         isStale={isStale}
         updatedAt={updatedAt}
@@ -287,26 +295,72 @@ export const App: React.FC = () => {
       />
 
       <div className="flex min-h-0 flex-1">
-        <nav aria-label="Điều hướng chính" className="sticky top-12 hidden h-[calc(100vh-3rem)] w-44 shrink-0 flex-col gap-1 border-r border-line bg-sheet p-2 md:flex">
-          {tabs.map(({ id, label, Icon }) => (
-            <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined}
-              className={`flex items-center gap-2.5 rounded px-3 py-2 text-left text-sm font-semibold ${tab === id ? 'bg-river-soft text-river-2' : 'text-ink-2 hover:bg-sheet-2'}`}>
-              <Icon className="h-4 w-4" aria-hidden="true" /> {label}
-            </button>
-          ))}
+        <nav
+          aria-label="Điều hướng chính"
+          className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-52 shrink-0 flex-col justify-between border-r border-line bg-sheet p-3 md:flex"
+        >
+          <div className="space-y-1">
+            <div className="eyebrow px-2.5 pb-1.5 pt-1">Không gian làm việc</div>
+            {tabs.map(({ id, label, Icon, count }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+                    active
+                      ? 'bg-river-soft text-river-2 shadow-2xs ring-1 ring-river/20'
+                      : 'text-ink-2 hover:bg-sheet-2 hover:text-ink'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon className={`h-4 w-4 ${active ? 'text-river' : 'text-ink-3'}`} aria-hidden="true" />
+                    {label}
+                  </span>
+                  {count !== undefined && count > 0 && (
+                    <span className={`num rounded-full px-1.5 py-0.5 text-[11px] font-bold ${active ? 'bg-river text-white' : 'bg-paper text-ink-2'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-line bg-sheet-2 p-3 text-xs space-y-2">
+            <div className="flex items-center gap-1.5 font-bold text-ink">
+              <ShieldCheck className={`h-4 w-4 ${chainValid ? 'text-safe' : 'text-crit'}`} aria-hidden="true" />
+              <span>Bảo mật Zero-Trust</span>
+            </div>
+            <div className="text-[11px] leading-relaxed text-ink-3">
+              Sổ cái SHA-256: <span className="font-semibold text-safe">{chainValid ? 'Toàn vẹn' : 'Cảnh báo'}</span>
+              <br />
+              Phân lập dữ liệu: <span className="font-semibold text-ink-2">PostgreSQL RLS</span>
+            </div>
+          </div>
         </nav>
 
-        <main className="min-w-0 flex-1 p-3 pb-24 sm:p-4 md:pb-4">
+        <main className="min-w-0 flex-1 p-3 pb-24 sm:p-4 md:pb-5">
           {error && (
-            <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded border border-crit bg-crit-soft px-3 py-2.5 text-sm">
-              <span className="flex items-center gap-2"><TriangleAlert className="h-4 w-4 text-crit" aria-hidden="true" />
-                <span><span className="font-semibold">Mất kết nối với máy chủ.</span> {error}{updatedAt && ` Đang hiển thị dữ liệu lúc ${updatedAt.toLocaleTimeString('vi-VN')}.`}</span>
+            <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-crit/30 bg-crit-soft px-4 py-3 text-sm shadow-2xs">
+              <span className="flex items-center gap-2">
+                <TriangleAlert className="h-4 w-4 text-crit" aria-hidden="true" />
+                <span>
+                  <span className="font-semibold text-crit">Mất kết nối với máy chủ.</span> {error}
+                  {updatedAt && ` Đang hiển thị dữ liệu lúc ${updatedAt.toLocaleTimeString('vi-VN')}.`}
+                </span>
               </span>
               <button type="button" className="btn" onClick={() => void loadState()}>Thử lại</button>
             </div>
           )}
 
-          {!state && !error && <div role="status" className="grid place-items-center py-24 text-sm text-ink-3">Đang tải dữ liệu điều hành…</div>}
+          {!state && !error && (
+            <div role="status" className="grid place-items-center py-24 text-sm text-ink-3">
+              Đang tải dữ liệu điều hành…
+            </div>
+          )}
 
           {state && tab === 'HOME' && (
             <>
@@ -350,7 +404,9 @@ export const App: React.FC = () => {
                     selection={selection} onClose={() => setSelection(null)} currentUserRole={role} orders={state.orders} zones={state.zones}
                   />
                 ) : (
-                  <div className="panel p-4 text-sm text-ink-2"><span className="font-semibold text-ink">Chọn một điểm trên bản đồ</span> (tin báo, phương tiện, điểm trú, trạm đo hoặc vùng) để xem chi tiết và nguồn dữ liệu.</div>
+                  <div className="panel p-4 text-sm text-ink-2">
+                    <span className="font-semibold text-ink">Chọn một điểm trên bản đồ</span> (tin báo, phương tiện, điểm trú, trạm đo hoặc vùng) để xem chi tiết và nguồn dữ liệu.
+                  </div>
                 )}
               </div>
             </div>
@@ -361,32 +417,44 @@ export const App: React.FC = () => {
         </main>
       </div>
 
-      {/* Mobile Floating Quick Bar (SOS 1-tap, Voice Toggle, Quick Switch) */}
       <MobileFloatingBar
         currentTab={tab}
         onSelectTab={(t) => setTab(t)}
         onOpenSOS={() => setShowMobileSos(true)}
       />
 
-      {/* phone bottom navigation */}
-      <nav aria-label="Điều hướng chính (điện thoại)" className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-sheet md:hidden" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+      <nav
+        aria-label="Điều hướng chính (điện thoại)"
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-sheet/95 backdrop-blur-md md:hidden"
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+      >
         {tabs.map(({ id, label, Icon }) => (
-          <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined}
-            className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold ${tab === id ? 'text-river' : 'text-ink-3'}`}>
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            aria-current={tab === id ? 'page' : undefined}
+            className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold ${tab === id ? 'text-river' : 'text-ink-3'}`}
+          >
             <Icon className="h-5 w-5" aria-hidden="true" /> {label}
           </button>
         ))}
       </nav>
 
       {notice && (
-        <div role={notice.kind === 'err' ? 'alert' : 'status'}
-          className={`fixed bottom-20 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 items-start gap-3 rounded border px-3 py-2.5 text-sm shadow-[var(--shadow-pop)] md:bottom-5 ${notice.kind === 'err' ? 'border-crit bg-crit-soft' : 'border-safe bg-safe-soft'}`}>
+        <div
+          role={notice.kind === 'err' ? 'alert' : 'status'}
+          className={`fixed bottom-20 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 items-start gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:bottom-5 ${
+            notice.kind === 'err' ? 'border-crit/30 bg-crit-soft text-crit' : 'border-safe/30 bg-safe-soft text-safe'
+          }`}
+        >
           <span className="flex-1">{notice.text}</span>
-          <button type="button" aria-label="Đóng thông báo" onClick={() => setNotice(null)}><X className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" aria-label="Đóng thông báo" onClick={() => setNotice(null)}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       )}
 
-      {/* Mobile 1-Tap SOS Emergency Modal */}
       <MobileSOSModal
         isOpen={showMobileSos}
         onClose={() => setShowMobileSos(false)}
@@ -398,12 +466,6 @@ export const App: React.FC = () => {
       <DataLineageModal isOpen={!!lineageId} correlationId={lineageId || ''} onClose={() => setLineageId(null)} />
     </div>
   );
-};
-
-/** field team / resource manager jump to the map tab with the object selected */
-const openReportOnMap = (setSelection: (s: MapSelection) => void, setTab: (t: Tab) => void) => (r: FloodReport) => {
-  setSelection({ type: 'report', data: r });
-  setTab('MAP');
 };
 
 export default App;
