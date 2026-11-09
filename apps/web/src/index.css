@@ -60,7 +60,6 @@ h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: -0.015em;
-  color: var(--color-ink);
 }
 
 :focus-visible {

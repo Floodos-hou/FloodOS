@@ -77,9 +77,10 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
     ALL: [...reports].sort(byUrgencyThenAge),
   }), [reports]);
 
-  // a report picked on the map wins over the last queue click
-  const focusReportId = mapSelection?.type === 'report' ? mapSelection.data.report_id : pickedReportId;
-  const focusReport = reports.find((r) => r.report_id === focusReportId) ?? null;
+  // a report picked on the map wins over the last queue click; otherwise default to top priority report
+  const defaultReportId = lists.VERIFY[0]?.report_id ?? lists.DISPATCH[0]?.report_id ?? lists.ACTIVE[0]?.report_id ?? reports[0]?.report_id ?? null;
+  const focusReportId = mapSelection?.type === 'report' ? mapSelection.data.report_id : (pickedReportId ?? defaultReportId);
+  const focusReport = !pickedIncidentId ? (reports.find((r) => r.report_id === focusReportId) ?? null) : null;
   const focusIncident = activeIncidents.find((i) => i.incident_id === pickedIncidentId) ?? null;
   const otherSelection = mapSelection && mapSelection.type !== 'report' ? mapSelection : null;
 
@@ -103,54 +104,54 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
     <div className="space-y-3">
       {/* ---------- Tactical Command KPI Strip ---------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="panel flex items-center justify-between p-3.5">
+        <div className="panel flex items-center justify-between border-t-4 border-t-rose-500 p-3.5">
           <div>
             <div className="eyebrow">Tin chờ xác minh</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className={`num text-2xl font-bold ${lists.VERIFY.length > 0 ? 'text-crit' : 'text-ink'}`}>{lists.VERIFY.length}</span>
+              <span className={`num text-2xl font-extrabold ${lists.VERIFY.length > 0 ? 'text-crit' : 'text-ink'}`}>{lists.VERIFY.length}</span>
               {urgentVerifyCount > 0 && <span className="chip chip-bad">{urgentVerifyCount} khẩn cấp</span>}
             </div>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-crit-soft text-crit">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-sm shadow-rose-500/30">
             <AlertCircle className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>
 
-        <div className="panel flex items-center justify-between p-3.5">
+        <div className="panel flex items-center justify-between border-t-4 border-t-sky-500 p-3.5">
           <div>
             <div className="eyebrow">Đang điều phối & xử lý</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="num text-2xl font-bold text-river">{lists.DISPATCH.length + lists.ACTIVE.length}</span>
-              <span className="text-xs text-ink-3">{lists.DISPATCH.length} chờ cử đội · {lists.ACTIVE.length} hiện trường</span>
+              <span className="num text-2xl font-extrabold text-river">{lists.DISPATCH.length + lists.ACTIVE.length}</span>
+              <span className="text-xs font-medium text-ink-3">{lists.DISPATCH.length} chờ cử đội · {lists.ACTIVE.length} hiện trường</span>
             </div>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-river-soft text-river">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-sm shadow-sky-500/30">
             <Clock className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>
 
-        <div className="panel flex items-center justify-between p-3.5">
+        <div className="panel flex items-center justify-between border-t-4 border-t-emerald-500 p-3.5">
           <div>
             <div className="eyebrow">Phương tiện & Đội sẵn sàng</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="num text-2xl font-bold text-safe">{readyVehiclesCount}/{vehicles.length}</span>
-              <span className="text-xs text-ink-3">xe · <strong className="num text-ink">{readyTeamsCount}/{teams.length}</strong> đội</span>
+              <span className="num text-2xl font-extrabold text-safe">{readyVehiclesCount}/{vehicles.length}</span>
+              <span className="text-xs font-medium text-ink-3">xe · <strong className="num text-ink">{readyTeamsCount}/{teams.length}</strong> đội</span>
             </div>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-safe-soft text-safe">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-500/30">
             <Truck className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>
 
-        <div className="panel flex items-center justify-between p-3.5">
+        <div className="panel flex items-center justify-between border-t-4 border-t-amber-500 p-3.5">
           <div>
             <div className="eyebrow">Sự cố phương tiện</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className={`num text-2xl font-bold ${activeIncidents.length > 0 ? 'text-warn' : 'text-ink'}`}>{activeIncidents.length}</span>
-              <span className="text-xs text-ink-3">{activeIncidents.length > 0 ? 'Cần duyệt xe thay thế' : 'Hoạt động bình thường'}</span>
+              <span className={`num text-2xl font-extrabold ${activeIncidents.length > 0 ? 'text-warn' : 'text-ink'}`}>{activeIncidents.length}</span>
+              <span className="text-xs font-medium text-ink-3">{activeIncidents.length > 0 ? 'Cần duyệt xe thay thế' : 'Hoạt động bình thường'}</span>
             </div>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-warn-soft text-warn">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/30">
             <Users className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>

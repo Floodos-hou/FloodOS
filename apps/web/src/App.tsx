@@ -297,10 +297,12 @@ export const App: React.FC = () => {
       <div className="flex min-h-0 flex-1">
         <nav
           aria-label="Điều hướng chính"
-          className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-52 shrink-0 flex-col justify-between border-r border-line bg-sheet p-3 md:flex"
+          className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 flex-col justify-between border-r border-sky-900/40 bg-[#081e36] p-3 text-slate-200 shadow-lg md:flex"
         >
-          <div className="space-y-1">
-            <div className="eyebrow px-2.5 pb-1.5 pt-1">Không gian làm việc</div>
+          <div className="space-y-1.5">
+            <div className="px-3 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-widest text-sky-300/70">
+              Không gian tác chiến
+            </div>
             {tabs.map(({ id, label, Icon, count }) => {
               const active = tab === id;
               return (
@@ -309,18 +311,22 @@ export const App: React.FC = () => {
                   type="button"
                   onClick={() => setTab(id)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition-all ${
                     active
-                      ? 'bg-river-soft text-river-2 shadow-2xs ring-1 ring-river/20'
-                      : 'text-ink-2 hover:bg-sheet-2 hover:text-ink'
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25 ring-1 ring-sky-300/40'
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <span className="flex items-center gap-2.5">
-                    <Icon className={`h-4 w-4 ${active ? 'text-river' : 'text-ink-3'}`} aria-hidden="true" />
+                    <Icon className={`h-4 w-4 ${active ? 'text-white' : 'text-sky-300/80'}`} aria-hidden="true" />
                     {label}
                   </span>
                   {count !== undefined && count > 0 && (
-                    <span className={`num rounded-full px-1.5 py-0.5 text-[11px] font-bold ${active ? 'bg-river text-white' : 'bg-paper text-ink-2'}`}>
+                    <span
+                      className={`num rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        active ? 'bg-white/25 text-white' : 'bg-white/10 text-sky-200'
+                      }`}
+                    >
                       {count}
                     </span>
                   )}
@@ -329,15 +335,20 @@ export const App: React.FC = () => {
             })}
           </div>
 
-          <div className="rounded-xl border border-line bg-sheet-2 p-3 text-xs space-y-2">
-            <div className="flex items-center gap-1.5 font-bold text-ink">
-              <ShieldCheck className={`h-4 w-4 ${chainValid ? 'text-safe' : 'text-crit'}`} aria-hidden="true" />
+          <div className="rounded-xl border border-sky-400/20 bg-slate-950/50 p-3.5 text-xs space-y-2 shadow-inner">
+            <div className="flex items-center gap-2 font-bold text-white">
+              <ShieldCheck className={`h-4 w-4 ${chainValid ? 'text-emerald-400' : 'text-rose-400'}`} aria-hidden="true" />
               <span>Bảo mật Zero-Trust</span>
             </div>
-            <div className="text-[11px] leading-relaxed text-ink-3">
-              Sổ cái SHA-256: <span className="font-semibold text-safe">{chainValid ? 'Toàn vẹn' : 'Cảnh báo'}</span>
+            <div className="text-[11px] leading-relaxed text-slate-300">
+              Sổ cái SHA-256:{' '}
+              <span className={`font-bold ${chainValid ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {chainValid ? 'Toàn vẹn 100%' : 'Cảnh báo'}
+              </span>
               <br />
-              Phân lập dữ liệu: <span className="font-semibold text-ink-2">PostgreSQL RLS</span>
+              Phân lập dữ liệu: <span className="font-semibold text-sky-300">PostgreSQL RLS</span>
+              <br />
+              Trợ lý tác chiến: <span className="font-semibold text-purple-300">AI Co-pilot v0.3</span>
             </div>
           </div>
         </nav>

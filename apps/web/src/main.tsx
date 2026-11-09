@@ -10,9 +10,14 @@ import App from './App';
 // Register Service Worker for offline PWA shell and asset caching
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('[PWA] Service Worker registration failed:', err);
-    });
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then((reg) => {
+        void reg.update();
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
   });
 }
 
