@@ -70,6 +70,10 @@ const VEHICLE_TYPE: Record<string, string> = {
   RESCUE_BOAT: 'Xuồng cứu hộ',
   HIGH_CLEARANCE_TRUCK: 'Xe gầm cao lội nước',
   MOBILE_PUMP: 'Máy bơm di động',
+  AMPHIBIOUS_CARRIER: 'Xe lội nước bánh xích',
+  SCOUT_DRONE: 'Drone trinh sát tầm nhiệt',
+  AMBULANCE_AMPHIBIOUS: 'Xe cấp cứu lội nước',
+  COMMAND_VEHICLE: 'Xe chỉ huy tác chiến',
 };
 
 const VEHICLE_STATUS: Record<string, Label> = {
