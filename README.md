@@ -276,6 +276,7 @@ FloodOS triển khai cơ chế kiểm soát truy cập dựa trên vai trò (RBA
 | **Quy trình nghiệp vụ chuẩn BPMN 2.0** | ✅ **CÓ THẬT** | Triển khai BPMN lên Flowable 7 thật; quản lý bản sao trạng thái Idempotent State Mirror. |
 | **Sổ cái kiểm toán SHA-256 & Phả hệ dữ liệu** | ✅ **CÓ THẬT** | Bảng `audit_records` xâu chuỗi băm; Tầng 3 (`apps/traceability`) tự tính lại độc lập từ Parquet. |
 | **Xếp hạng phương án cứu hộ cứu nạn** | ✅ **CÓ THẬT** | Thuật toán chấm điểm theo 4 tiêu chí có giải thích rõ ràng tại [`RescueScoring.java`](apps/floodos/RescueScoring.java). **Không dùng AI giả mạo.** |
+| **AI tóm tắt tình huống & gợi ý ưu tiên (AI Co-pilot)** | ✅ **CÓ THẬT** | Microservice FastAPI (`services/ai-assistant`) gọi LLM API (OpenAI GPT-4o-mini / Anthropic) thật kèm bộ quy tắc dự phòng nội bộ (Deterministic Fallback). Quyết định con người là tối thượng. |
 | **Giao diện tác chiến trực quan & Demo flow** | ✅ **CÓ THẬT** | `apps/web` (React 19, MapLibre GL) kết nối 100% backend thật qua APISIX Gateway. |
 | **Dữ liệu tọa độ phương tiện & Trạm đo** | 🟡 **MÔ PHỎNG** | Bộ sinh giả lập phát qua MQTT (`source=SIMULATOR`). Tọa độ phương tiện chạy đường thẳng; mực nước sinh ngẫu nhiên có chặn. |
 | **Bản đồ địa hình & Mạng lưới giao thông** | ⚠️ **CHƯA CÓ** | Khoảng cách tính theo công thức Haversine (đường chim bay); chưa tích hợp mạng lưới định tuyến giao thông tránh ngập. |
