@@ -115,16 +115,45 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
   };
 
   const mine = [...reports].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const activeMineCount = mine.filter((r) => !['RESOLVED', 'CLOSED', 'REJECTED'].includes(r.status)).length;
+  const openSheltersCount = shelters.filter((s) => s.status === 'ACTIVE' || s.status === 'OPEN').length;
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[minmax(0,1fr)_350px]">
       <div className="space-y-4">
-        <div className="panel flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="min-w-0">
-            <h2 className="text-lg">Khu vực của bạn đang ngập?</h2>
-            <p className="text-sm text-ink-2">Gửi tin báo để điều phối viên xác minh và cử lực lượng. Bạn theo dõi được từng bước ngay trên trang này.</p>
+        <div className="relative overflow-hidden rounded-2xl border border-sky-400/30 bg-gradient-to-r from-[#082f49] via-[#0c4a6e] to-[#0284c7] p-6 text-white shadow-lg">
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 max-w-xl space-y-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-300/30 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold text-sky-200">
+                Cổng Thông tin & Cứu hộ Người dân
+              </span>
+              <h2 className="text-xl font-extrabold text-white sm:text-2xl">Khu vực của bạn đang ngập?</h2>
+              <p className="text-sm leading-relaxed text-sky-100/90">
+                Gửi tin báo kèm tọa độ và ước lượng độ ngập để điều phối viên xác minh và cử đội cứu hộ. Bạn theo dõi trực tiếp tiến độ 5 trạm ngay trên trang này.
+              </p>
+              <div className="flex flex-wrap gap-3 pt-2 text-xs">
+                <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-white">
+                  Tổng tin đã gửi: <strong className="num text-sky-200">{mine.length}</strong>
+                </span>
+                <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-white">
+                  Đang xử lý: <strong className="num text-amber-300">{activeMineCount}</strong>
+                </span>
+                <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-white">
+                  Điểm trú mở cửa: <strong className="num text-emerald-300">{openSheltersCount}</strong>
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-danger btn-lg w-full shrink-0 px-6 py-3.5 text-base font-extrabold shadow-lg shadow-red-900/40 sm:w-auto"
+              onClick={() => {
+                reset();
+                setOpen(true);
+              }}
+            >
+              Báo điểm ngập
+            </button>
           </div>
-          <button type="button" className="btn btn-danger btn-lg w-full sm:w-auto" onClick={() => { reset(); setOpen(true); }}>Báo điểm ngập</button>
         </div>
 
         <h3 className="eyebrow px-1">Tin báo của tôi · {mine.length}</h3>
@@ -134,27 +163,37 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
           mine.map((r) => {
             const order = orders.find((o) => o.report_id === r.report_id && o.status !== 'SUPERSEDED' && o.status !== 'CANCELLED');
             return (
-              <article key={r.report_id} className="panel p-4" aria-label={`Tin báo ${r.report_id}`}>
+              <article key={r.report_id} className="panel overflow-hidden border-l-4 border-l-sky-500 p-5" aria-label={`Tin báo ${r.report_id}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h4 className="text-base">{needType(r.need_type).text}</h4>
-                    <p className="text-xs text-ink-3">Mã tin <span className="font-semibold text-ink">{r.report_id}</span> · gửi {formatLocalDateTime(r.created_at)} ({ageText(r.created_at)})</p>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-sky-100 px-2 py-0.5 font-mono text-xs font-bold text-sky-800">{r.report_id}</span>
+                      <h4 className="text-base font-extrabold text-ink">{needType(r.need_type).text}</h4>
+                    </div>
+                    <p className="mt-1 text-xs text-ink-3">
+                      Gửi lúc {formatLocalDateTime(r.created_at)} ({ageText(r.created_at)}) · Độ sâu báo: <strong className="num text-rose-700">{r.depth_cm} cm</strong> · Số người: <strong className="num text-ink">{r.people_affected}</strong>
+                    </p>
                   </div>
                   <StatusBadge status={r.status} type="report" />
                 </div>
-                <CaseRiver className="my-4" stages={reportStages(r.status)} />
-                {r.description && <p className="rounded border border-line bg-sheet-2 p-2.5 text-sm">{r.description}</p>}
-                {r.status === 'REJECTED' && r.verification_note && <p className="mt-2 text-sm text-crit">Lý do từ chối: {r.verification_note}</p>}
+                <div className="my-4 rounded-xl border border-sky-200/70 bg-gradient-to-r from-sky-50/70 via-white to-indigo-50/40 p-3.5">
+                  <CaseRiver stages={reportStages(r.status)} />
+                </div>
+                {r.description && <p className="rounded-xl border border-line bg-sheet-2 p-3 text-sm font-medium text-ink">{r.description}</p>}
+                {r.status === 'REJECTED' && r.verification_note && <p className="mt-2 rounded-lg bg-crit-soft p-2.5 text-sm font-medium text-crit">Lý do từ chối: {r.verification_note}</p>}
                 {order && (
-                  <p className="mt-2 text-sm text-ink-2">
-                    Lực lượng: <span className="font-semibold text-ink">{order.team_name ?? order.team_id}</span> · {order.vehicle_name ?? order.vehicle_id} · tiến độ <span className="num">{order.progress_pct}%</span>
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-2.5 text-sm text-emerald-950">
+                    <span>
+                      Lực lượng tiếp ứng: <span className="font-bold">{order.team_name ?? order.team_id}</span> · {order.vehicle_name ?? order.vehicle_id}
+                    </span>
+                    <span className="num rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">Tiến độ {order.progress_pct}%</span>
+                  </div>
                 )}
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
                   {r.status === 'AWAITING_CONFIRMATION' ? (
                     <button type="button" className="btn btn-primary" onClick={() => { setError(null); setConfirmNote(''); setConfirming(r); }}>Xác nhận đã được hỗ trợ</button>
-                  ) : <span />}
-                  <button type="button" className="btn btn-ghost !min-h-8 text-xs text-river" onClick={() => onOpenLineage?.(r.correlation_id || '')}>
+                  ) : <span className="text-xs text-ink-3">Chuỗi băm kiểm chứng SHA-256 đã niêm phong</span>}
+                  <button type="button" className="btn !min-h-8 border-sky-200 bg-sky-50/70 text-xs font-bold text-river-2 hover:bg-sky-100" onClick={() => onOpenLineage?.(r.correlation_id || '')}>
                     <GitBranch className="h-3.5 w-3.5" aria-hidden="true" /> Xem nhật ký kiểm chứng
                   </button>
                 </div>
@@ -166,23 +205,35 @@ export const ReporterWorkspace: React.FC<ReporterWorkspaceProps> = ({
 
       <aside className="space-y-3" aria-label="Điểm trú an toàn">
         <h3 className="eyebrow px-1">Điểm trú an toàn · {shelters.length}</h3>
-        <div className="panel rule-y">
-          {shelters.length === 0 && <EmptyState title="Chưa có điểm trú nào" />}
-          {shelters.map((s) => {
-            const occ = s.occupancy ?? s.current_occupancy ?? 0;
-            const pct = s.capacity > 0 ? Math.min(100, Math.round((occ / s.capacity) * 100)) : 0;
-            return (
-              <div key={s.shelter_id} className="p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-semibold">{s.name}</span>
-                  <StatusBadge status={s.status === 'ACTIVE' ? 'OPEN' : s.status} type="shelter" />
+        <div className="panel overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-700 to-teal-600 px-4 py-3 text-white">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-200">Mạng lưới sơ tán dân cư</div>
+            <div className="text-sm font-bold">Điểm tránh trú & tiếp tế khẩn cấp</div>
+          </div>
+          <div className="rule-y">
+            {shelters.length === 0 && <EmptyState title="Chưa có điểm trú nào" />}
+            {shelters.map((s) => {
+              const occ = s.occupancy ?? s.current_occupancy ?? 0;
+              const pct = s.capacity > 0 ? Math.min(100, Math.round((occ / s.capacity) * 100)) : 0;
+              const barTone = pct >= 100 ? 'from-rose-500 to-red-600' : pct >= 80 ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-teal-500';
+              return (
+                <div key={s.shelter_id} className="p-3.5 transition-colors hover:bg-sheet-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-bold text-ink">{s.name}</span>
+                    <StatusBadge status={s.status === 'ACTIVE' ? 'OPEN' : s.status} type="shelter" />
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 ring-1 ring-line">
+                    <div className={`h-full rounded-full bg-gradient-to-r ${barTone}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1.5 flex justify-between text-xs text-ink-3">
+                    <span className="num font-semibold text-ink-2">{occ}/{s.capacity} chỗ ({pct}%)</span>
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase">{s.occupancy_source}</span>
+                  </div>
+                  {s.contact_phone && <div className="mt-1 text-xs font-medium text-river-2">Liên hệ: {s.contact_phone}</div>}
                 </div>
-                <div className="mt-1.5 h-1.5 rounded-sm bg-sheet-2 ring-1 ring-line"><div className={`h-full rounded-sm ${pct >= 100 ? 'bg-crit' : pct >= 80 ? 'bg-warn' : 'bg-safe'}`} style={{ width: `${pct}%` }} /></div>
-                <div className="mt-1 flex justify-between text-xs text-ink-3"><span className="num">{occ}/{s.capacity} chỗ</span><span>{s.occupancy_source}</span></div>
-                {s.contact_phone && <div className="mt-1 text-xs text-ink-2">Liên hệ: {s.contact_phone}</div>}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
         <p className="px-1 text-[11px] text-ink-3">Sĩ số điểm trú là số liệu thí điểm do quản lý nguồn lực cập nhật, chưa liên thông với đơn vị vận hành thật.</p>
       </aside>

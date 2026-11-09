@@ -101,67 +101,96 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
   const urgentVerifyCount = lists.VERIFY.filter((r) => r.priority === 'URGENT' || r.priority === 'CRITICAL').length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {/* ---------- Tactical Command KPI Strip ---------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="panel flex items-center justify-between border-t-4 border-t-rose-500 p-3.5">
-          <div>
-            <div className="eyebrow">Tin chờ xác minh</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className={`num text-2xl font-extrabold ${lists.VERIFY.length > 0 ? 'text-crit' : 'text-ink'}`}>{lists.VERIFY.length}</span>
-              {urgentVerifyCount > 0 && <span className="chip chip-bad">{urgentVerifyCount} khẩn cấp</span>}
+        <div
+          onClick={() => setQueue('VERIFY')}
+          className="panel cursor-pointer overflow-hidden border-t-4 border-t-rose-500 bg-gradient-to-br from-rose-50/90 via-white to-white p-3.5 transition-transform hover:-translate-y-0.5"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow text-rose-700/80">Tin chờ xác minh</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className={`num text-2xl font-extrabold ${lists.VERIFY.length > 0 ? 'text-crit' : 'text-ink'}`}>{lists.VERIFY.length}</span>
+                {urgentVerifyCount > 0 && <span className="chip chip-bad">{urgentVerifyCount} khẩn cấp</span>}
+              </div>
             </div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30">
+              <AlertCircle className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-sm shadow-rose-500/30">
-            <AlertCircle className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-rose-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-rose-500 to-red-600" style={{ width: `${Math.min(100, lists.VERIFY.length * 25)}%` }} />
+          </div>
         </div>
 
-        <div className="panel flex items-center justify-between border-t-4 border-t-sky-500 p-3.5">
-          <div>
-            <div className="eyebrow">Đang điều phối & xử lý</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="num text-2xl font-extrabold text-river">{lists.DISPATCH.length + lists.ACTIVE.length}</span>
-              <span className="text-xs font-medium text-ink-3">{lists.DISPATCH.length} chờ cử đội · {lists.ACTIVE.length} hiện trường</span>
+        <div
+          onClick={() => setQueue('ACTIVE')}
+          className="panel cursor-pointer overflow-hidden border-t-4 border-t-sky-500 bg-gradient-to-br from-sky-50/90 via-white to-white p-3.5 transition-transform hover:-translate-y-0.5"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow text-sky-700/80">Đang điều phối & xử lý</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="num text-2xl font-extrabold text-river">{lists.DISPATCH.length + lists.ACTIVE.length}</span>
+                <span className="text-xs font-medium text-ink-3">{lists.DISPATCH.length} chờ cử đội · {lists.ACTIVE.length} hiện trường</span>
+              </div>
             </div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/30">
+              <Clock className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-sm shadow-sky-500/30">
-            <Clock className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-sky-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-blue-600" style={{ width: `${Math.min(100, (lists.DISPATCH.length + lists.ACTIVE.length) * 8)}%` }} />
+          </div>
         </div>
 
-        <div className="panel flex items-center justify-between border-t-4 border-t-emerald-500 p-3.5">
-          <div>
-            <div className="eyebrow">Phương tiện & Đội sẵn sàng</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="num text-2xl font-extrabold text-safe">{readyVehiclesCount}/{vehicles.length}</span>
-              <span className="text-xs font-medium text-ink-3">xe · <strong className="num text-ink">{readyTeamsCount}/{teams.length}</strong> đội</span>
+        <div className="panel overflow-hidden border-t-4 border-t-emerald-500 bg-gradient-to-br from-emerald-50/90 via-white to-white p-3.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow text-emerald-700/80">Phương tiện & Đội sẵn sàng</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="num text-2xl font-extrabold text-safe">{readyVehiclesCount}/{vehicles.length}</span>
+                <span className="text-xs font-medium text-ink-3">xe · <strong className="num text-ink">{readyTeamsCount}/{teams.length}</strong> đội</span>
+              </div>
             </div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/30">
+              <Truck className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-500/30">
-            <Truck className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-emerald-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-600" style={{ width: `${vehicles.length > 0 ? Math.round((readyVehiclesCount / vehicles.length) * 100) : 0}%` }} />
+          </div>
         </div>
 
-        <div className="panel flex items-center justify-between border-t-4 border-t-amber-500 p-3.5">
-          <div>
-            <div className="eyebrow">Sự cố phương tiện</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className={`num text-2xl font-extrabold ${activeIncidents.length > 0 ? 'text-warn' : 'text-ink'}`}>{activeIncidents.length}</span>
-              <span className="text-xs font-medium text-ink-3">{activeIncidents.length > 0 ? 'Cần duyệt xe thay thế' : 'Hoạt động bình thường'}</span>
+        <div
+          onClick={() => setQueue('INCIDENT')}
+          className="panel cursor-pointer overflow-hidden border-t-4 border-t-amber-500 bg-gradient-to-br from-amber-50/90 via-white to-white p-3.5 transition-transform hover:-translate-y-0.5"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow text-amber-700/80">Sự cố phương tiện</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className={`num text-2xl font-extrabold ${activeIncidents.length > 0 ? 'text-warn' : 'text-ink'}`}>{activeIncidents.length}</span>
+                <span className="text-xs font-medium text-ink-3">{activeIncidents.length > 0 ? 'Cần duyệt xe thay thế' : 'Hoạt động bình thường'}</span>
+              </div>
             </div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/30">
+              <Users className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/30">
-            <Users className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-amber-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: `${activeIncidents.length > 0 ? 65 : 15}%` }} />
+          </div>
         </div>
       </div>
 
       {/* ---------- Main 3-Column Tactical Console ---------- */}
-      <div className="grid min-h-[calc(100vh-11.5rem)] gap-3 lg:grid-cols-[350px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_410px]">
+      <div className="grid min-h-[calc(100vh-11.5rem)] gap-3.5 lg:grid-cols-[350px_minmax(0,1fr)] xl:grid-cols-[365px_minmax(0,1fr)_420px]">
         {/* ---------- queue ---------- */}
         <section className="panel flex min-h-0 flex-col overflow-hidden" aria-label="Hàng đợi vụ việc">
-          <div className="flex gap-1 overflow-x-auto border-b border-line bg-sheet-2 p-2" role="tablist" aria-label="Lọc hàng đợi">
+          <div className="flex gap-1 overflow-x-auto border-b border-line bg-gradient-to-r from-slate-100 via-slate-50 to-sky-50/50 p-2" role="tablist" aria-label="Lọc hàng đợi">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -169,14 +198,14 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                 role="tab"
                 aria-selected={queue === t.id}
                 onClick={() => setQueue(t.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
                   queue === t.id
-                    ? 'bg-ink text-white shadow-2xs'
+                    ? 'bg-gradient-to-r from-[#082f49] to-[#0284c7] text-white shadow-sm'
                     : 'text-ink-2 hover:bg-sheet hover:text-ink'
                 }`}
               >
                 {t.label}
-                <span className={`num rounded-full px-1.5 py-0.2 text-[11px] font-bold ${queue === t.id ? 'bg-white/20 text-white' : t.alert ? 'bg-crit text-white' : 'bg-line text-ink-2'}`}>
+                <span className={`num rounded-full px-1.5 py-0.2 text-[11px] font-bold ${queue === t.id ? 'bg-white/25 text-white' : t.alert ? 'bg-crit text-white' : 'bg-line text-ink-2'}`}>
                   {t.n}
                 </span>
               </button>
@@ -194,15 +223,15 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
                       <button
                         type="button"
                         onClick={() => pickIncident(i)}
-                        className={`block w-full px-3.5 py-3 text-left transition-colors hover:bg-sheet-2 ${
-                          focusIncident?.incident_id === i.incident_id ? 'bg-river-soft/75' : ''
+                        className={`block w-full px-3.5 py-3.5 text-left transition-all hover:bg-amber-50/50 ${
+                          focusIncident?.incident_id === i.incident_id ? 'border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-500/12 to-transparent' : ''
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-bold text-ink">{vehicles.find((v) => v.vehicle_id === i.vehicle_id)?.name ?? i.vehicle_id}</span>
-                          <span className="text-[11px] font-medium text-ink-3">{ageText(i.created_at)}</span>
+                          <span className="chip chip-warn">{ageText(i.created_at)}</span>
                         </div>
-                        <div className="mt-0.5 text-xs font-medium text-crit">{incidentType(i.incident_type)}</div>
+                        <div className="mt-1 text-xs font-bold text-crit">{incidentType(i.incident_type)}</div>
                       </button>
                     </li>
                   ))}
@@ -217,32 +246,35 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
               <ul className="rule-y">
                 {rows.map((r) => {
                   const sel = focusReportId === r.report_id;
+                  const depthVal = reportDepthCm(r);
+                  const depthPct = Math.min(100, Math.round((depthVal / 150) * 100));
+                  const depthColor = depthVal >= 100 ? 'from-rose-500 to-red-600' : depthVal >= 50 ? 'from-amber-500 to-orange-500' : 'from-sky-500 to-blue-600';
                   return (
                     <li key={r.report_id}>
                       <button
                         type="button"
                         onClick={() => pickReport(r)}
                         aria-current={sel ? 'true' : undefined}
-                        className={`flex w-full gap-3 px-3.5 py-3 text-left transition-colors ${
-                          sel ? 'bg-river-soft/75' : 'hover:bg-sheet-2'
+                        className={`flex w-full gap-3 px-3.5 py-3.5 text-left transition-all ${
+                          sel ? 'bg-gradient-to-r from-sky-500/15 via-blue-500/5 to-transparent ring-1 ring-inset ring-sky-500/20' : 'hover:bg-sheet-2'
                         }`}
                       >
                         <span className={`mt-0.5 w-1.5 shrink-0 self-stretch rounded-full ${PRIORITY_BAR[r.priority] ?? 'bg-line-2'}`} aria-hidden="true" />
-                        <span className="min-w-0 flex-1 space-y-1">
+                        <span className="min-w-0 flex-1 space-y-1.5">
                           <span className="flex items-center justify-between gap-2">
                             <span className="truncate text-sm font-bold text-ink">{zoneName(r)}</span>
-                            <span className="num shrink-0 rounded bg-paper px-1.5 py-0.5 text-[11px] font-medium text-ink-3">
+                            <span className="num shrink-0 rounded-full border border-line bg-sheet-2 px-2 py-0.5 text-[10px] font-bold text-ink-2">
                               chờ {waitText(r.created_at)}
                             </span>
                           </span>
-                          <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-2">
-                            <span className="font-mono text-[11px] font-semibold text-river-2">{r.report_id}</span>
-                            <span>·</span>
-                            <span className="font-medium">{needType(r.need_type).text}</span>
-                            <span>·</span>
-                            <span className="num font-semibold text-ink">{reportDepthCm(r)} cm</span>
-                            <span>·</span>
-                            <span className="num font-semibold text-ink">{reportPeopleAffected(r)} người</span>
+                          <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-sky-800">{r.report_id}</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 font-semibold text-ink-2">{needType(r.need_type).text}</span>
+                            <span className="num rounded-md bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">{depthVal} cm</span>
+                            <span className="num rounded-md bg-amber-50 px-1.5 py-0.5 font-bold text-amber-800">{reportPeopleAffected(r)} người</span>
+                          </span>
+                          <span className="block h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                            <span className={`block h-full rounded-full bg-gradient-to-r ${depthColor}`} style={{ width: `${depthPct}%` }} />
                           </span>
                           {queue === 'ALL' && (
                             <span className="mt-1 inline-block">
@@ -257,9 +289,9 @@ export const DispatcherWorkspace: React.FC<DispatcherWorkspaceProps> = ({
               </ul>
             )}
           </div>
-          <div className="border-t border-line bg-sheet-2 px-3.5 py-2.5 text-[11px] text-ink-3">
-            Xếp theo mức ưu tiên rồi theo thời gian chờ. Xe sẵn sàng: <span className="num font-bold text-ink">{readyVehiclesCount}/{vehicles.length}</span>
-            {' · '}Đội sẵn sàng: <span className="num font-bold text-ink">{readyTeamsCount}/{teams.length}</span>
+          <div className="border-t border-line bg-gradient-to-r from-slate-50 to-sky-50/40 px-3.5 py-2.5 text-[11px] text-ink-3">
+            Xếp theo mức ưu tiên rồi theo thời gian chờ. Xe sẵn sàng: <span className="num font-bold text-safe">{readyVehiclesCount}/{vehicles.length}</span>
+            {' · '}Đội sẵn sàng: <span className="num font-bold text-river">{readyTeamsCount}/{teams.length}</span>
           </div>
         </section>
 
@@ -384,45 +416,45 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
 
   return (
     <section className="panel flex h-full flex-col overflow-hidden" aria-label={`Hồ sơ ${report.report_id}`}>
-      <div className="panel-head">
+      <div className="flex items-center justify-between gap-2.5 bg-gradient-to-r from-[#082f49] via-[#0c4a6e] to-[#0284c7] px-4 py-3.5 text-white shadow-xs">
         <div className="min-w-0">
-          <div className="eyebrow">Hồ sơ {report.report_id}</div>
-          <h3 className="truncate text-base font-bold">{zoneLabel}</h3>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-sky-200">Hồ sơ {report.report_id}</div>
+          <h3 className="truncate text-base font-bold text-white">{zoneLabel}</h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={handleToggleAiSummary}
-            className="btn !min-h-8 border-river/30 bg-river-soft/50 px-2.5 py-1 text-xs text-river-2 hover:bg-river-soft"
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-sky-300/40 bg-white/15 px-2.5 py-1 text-xs font-bold text-white backdrop-blur-xs transition-colors hover:bg-white/25"
             title="Gọi AI tổng hợp tình huống, diễn biến và đề xuất hành động"
           >
-            {loadingSummary ? <Loader2 className="h-3.5 w-3.5 animate-spin text-river" /> : <Sparkles className="h-3.5 w-3.5 text-river" />}
+            {loadingSummary ? <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-200" /> : <Sparkles className="h-3.5 w-3.5 text-amber-300" />}
             <span>{showSummary ? 'Ẩn tóm tắt' : '✨ Tóm tắt AI'}</span>
           </button>
           <StatusBadge status={report.priority} type="priority" />
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
         {showSummary && aiSummary && (
-          <div className="rounded-xl border border-river/30 bg-river-soft/40 p-3.5 text-sm space-y-2.5 shadow-2xs">
+          <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-sky-50/80 to-white p-3.5 text-sm space-y-2.5 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-river-2">
-                <Sparkles className="h-3.5 w-3.5 text-river" />
+              <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-indigo-900">
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
                 Tóm tắt Tình huống Điều phối (AI Co-pilot)
               </div>
-              <span className="rounded border border-line bg-sheet px-2 py-0.5 font-mono text-[10px] text-ink-2">
+              <span className="rounded-md border border-indigo-200 bg-white px-2 py-0.5 font-mono text-[10px] font-semibold text-indigo-700">
                 {aiSummary.engine}
               </span>
             </div>
             <p className="text-xs font-medium leading-relaxed text-ink">{aiSummary.summary_text}</p>
             {aiSummary.timeline?.length > 0 && (
               <div>
-                <div className="eyebrow mb-1 text-[11px]">Diễn biến xử lý</div>
+                <div className="eyebrow mb-1 text-[11px] text-indigo-800/80">Diễn biến xử lý</div>
                 <ul className="space-y-1 text-xs text-ink-2">
                   {aiSummary.timeline.map((step, idx) => (
                     <li key={idx} className="flex items-start gap-1.5">
-                      <span className="font-bold text-river">•</span>
+                      <span className="font-bold text-indigo-600">•</span>
                       <span>{step}</span>
                     </li>
                   ))}
@@ -431,7 +463,7 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
             )}
             {aiSummary.suggested_actions?.length > 0 && (
               <div>
-                <div className="eyebrow mb-1 text-[11px]">Đề xuất hành động tiếp theo</div>
+                <div className="eyebrow mb-1 text-[11px] text-emerald-800/80">Đề xuất hành động tiếp theo</div>
                 <ul className="space-y-1 text-xs text-ink-2">
                   {aiSummary.suggested_actions.map((act, idx) => (
                     <li key={idx} className="flex items-start gap-1.5">
@@ -445,20 +477,22 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
           </div>
         )}
 
-        <CaseRiver stages={reportStages(report.status)} />
+        <div className="rounded-xl border border-sky-200/70 bg-gradient-to-r from-sky-50/60 via-white to-indigo-50/40 p-3">
+          <CaseRiver stages={reportStages(report.status)} />
+        </div>
 
         <dl className="grid grid-cols-3 gap-2.5 text-sm">
-          <div className="rounded-lg border border-line bg-sheet-2 p-2.5">
-            <dt className="eyebrow">Nhu cầu</dt>
-            <dd className="mt-0.5 font-bold text-ink">{needType(report.need_type).text}</dd>
+          <div className="rounded-xl border border-rose-200/70 bg-gradient-to-br from-rose-50/80 to-white p-2.5">
+            <dt className="eyebrow text-rose-800/80">Nhu cầu</dt>
+            <dd className="mt-0.5 font-bold text-rose-950">{needType(report.need_type).text}</dd>
           </div>
-          <div className="rounded-lg border border-line bg-sheet-2 p-2.5">
-            <dt className="eyebrow">Độ ngập</dt>
-            <dd className="num mt-0.5 font-bold text-river-2">{reportDepthCm(report)} cm</dd>
+          <div className="rounded-xl border border-sky-200/70 bg-gradient-to-br from-sky-50/80 to-white p-2.5">
+            <dt className="eyebrow text-sky-800/80">Độ ngập</dt>
+            <dd className="num mt-0.5 font-extrabold text-sky-800">{reportDepthCm(report)} cm</dd>
           </div>
-          <div className="rounded-lg border border-line bg-sheet-2 p-2.5">
-            <dt className="eyebrow">Người</dt>
-            <dd className="num mt-0.5 font-bold text-ink">{reportPeopleAffected(report)}</dd>
+          <div className="rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-white p-2.5">
+            <dt className="eyebrow text-amber-800/80">Người</dt>
+            <dd className="num mt-0.5 font-extrabold text-amber-900">{reportPeopleAffected(report)}</dd>
           </div>
         </dl>
 
@@ -467,7 +501,7 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
         </p>
 
         {(report.description || report.notes) && (
-          <p className="rounded-lg border border-line bg-sheet-2 p-3 text-sm leading-relaxed text-ink">
+          <p className="rounded-xl border border-sky-200/60 bg-sky-50/40 p-3 text-sm font-medium leading-relaxed text-ink">
             {report.description || report.notes}
           </p>
         )}
