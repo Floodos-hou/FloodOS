@@ -1184,6 +1184,18 @@ public final class FloodOSService {
         return new HttpResult(200, Map.of("ok", true, "message", "Đã khôi phục dữ liệu mô phỏng về trạng thái ban đầu; sổ cái bắt đầu epoch mới."));
     }
 
+    public synchronized HttpResult enrichDemoData(AuthContext auth) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.PLATFORM_ADMIN), "ENRICH_DEMO_DATA", "System", "demo");
+        if (denied != null) return denied;
+        store.loadEnrichedTacticalScenario();
+        return new HttpResult(200, Map.of(
+                "ok", true,
+                "message", "Đã nạp bổ sung tình huống tác chiến cứu hộ lũ lụt mở rộng (8 vụ việc, 8 phương tiện, 4 trạm đo, 4 điểm trú).",
+                "total_reports", store.reports.size(),
+                "total_vehicles", store.vehicles.size()
+        ));
+    }
+
     // ------------------------------------------------------------------------
     // Evidence upload screening (ClamAV, fail-closed)
     // ------------------------------------------------------------------------

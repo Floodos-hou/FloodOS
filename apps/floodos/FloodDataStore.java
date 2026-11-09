@@ -492,6 +492,67 @@ public final class FloodDataStore {
         dispatched.put("status", "CONFIRMED");
         auditLedger.appendRecord(PILOT_ORG, "CORR-FR-0001", "DispatchOrder", "ORD-0001",
                 "CONFIRM_DISPATCH_ORDER", "dispatcher_hoa", FloodRoles.DISPATCHER, Map.of("report_status", "VERIFIED"), dispatched, 200);
+
+        if ("true".equalsIgnoreCase(System.getenv("FLOODOS_ENRICHED_DEMO"))) {
+            loadEnrichedTacticalScenario();
+        }
+    }
+
+    public synchronized void loadEnrichedTacticalScenario() {
+        Instant base = Instant.now().truncatedTo(ChronoUnit.HOURS);
+        String now = iso(Instant.now());
+
+        addVehicle("V06", PILOT_ORG, "Xe lội nước bánh xích 06", "AMPHIBIOUS_CARRIER", 16, "PERSONS", "WORKING", 85, 98, 20.9675, 105.8730, "T02", now);
+        addVehicle("V07", PILOT_ORG, "Xuồng cứu hộ cao tốc 07", "RESCUE_BOAT", 12, "PERSONS", "WORKING", 74, 95, 20.9610, 105.8820, "T01", now);
+        addVehicle("V08", PILOT_ORG, "Drone trinh sát tầm nhiệt 08", "SCOUT_DRONE", 5, "KG", "IDLE", 92, 99, 20.9710, 105.8610, "T02", now);
+
+        shelters.put("S04", new SafeShelter("S04", PILOT_ORG, "Nhà thi đấu TDTT quận (điểm trú dã chiến)", 350, 120, "SEED", 20.9780, 105.8650, "OPEN", now));
+        gauges.put("G04", new GaugeStation("G04", PILOT_ORG, "Z04", "Trạm thủy văn sông Nhuệ G04", 20.9805, 105.8765, 85, 120, 78.0, now, "SIMULATOR"));
+
+        reports.put("FR-0005", report("FR-0005", "Z02", "usr_reporter_lan", 20.9592, 105.8845, 125, "EVACUATION", 5,
+                "Nước lũ dâng ngập ngang ngực, có cụ già 82 tuổi và 2 trẻ nhỏ đang mắc kẹt trên gác xép cần xuồng cứu hộ gấp", "CRITICAL", "RECEIVED", base.minus(15, ChronoUnit.MINUTES)));
+        reports.put("FR-0006", report("FR-0006", "Z04", "usr_reporter_hung", 20.9815, 105.8775, 45, "ROAD_BLOCKED", 0,
+                "Cây đổ chắn ngang tuyến đường D đoạn trũng sâu 45cm, chia cắt xe cứu hộ tiếp cận", "HIGH", "VERIFIED", base.minus(45, ChronoUnit.MINUTES)));
+        reports.put("FR-0007", report("FR-0007", "Z03", "usr_reporter_lan", 20.9738, 105.8598, 25, "FOOD_WATER", 18,
+                "Xóm trũng bị ngập cô lập mất điện 3 ngày, bà con cạn kiệt nước sạch và đồ hộp", "NORMAL", "IN_PROGRESS", base.minus(120, ChronoUnit.MINUTES)));
+        reports.put("FR-0008", report("FR-0008", "Z01", "usr_reporter_hung", 20.9658, 105.8708, 85, "EVACUATION", 6,
+                "Đã sơ tán an toàn 6 người dân ngập sâu đến Trường tiểu học cụm A an toàn", "URGENT", "RESOLVED", base.minus(240, ChronoUnit.MINUTES)));
+
+        orders.put("ORD-0003", new DispatchOrder("ORD-0003", PILOT_ORG, "FR-0008", "usr_reporter_hung", "Z01", "V06", "T02",
+                iso(base.minus(3, ChronoUnit.HOURS)), iso(base.minus(1, ChronoUnit.HOURS)), "COMPLETED", 100.0, null, null,
+                "CORR-FR-0008", "usr_dispatcher_hoa", iso(base.minus(210, ChronoUnit.MINUTES))));
+        orders.put("ORD-0004", new DispatchOrder("ORD-0004", PILOT_ORG, "FR-0007", "usr_reporter_lan", "Z03", "V03", "T02",
+                iso(base.minus(2, ChronoUnit.HOURS)), iso(base.plus(1, ChronoUnit.HOURS)), "IN_PROGRESS", 65.0, null, null,
+                "CORR-FR-0007", "usr_dispatcher_hoa", iso(base.minus(90, ChronoUnit.MINUTES))));
+
+        resolutions.put("RES-0008", new ReportResolution("RES-0008", PILOT_ORG, "FR-0008", "ORD-0003",
+                "RESOLVED", 15.0, null, "usr_team_cuong", "usr_reporter_hung", "CONFIRMED",
+                "Đã hoàn thành sơ tán 6 người dân ngập sâu an toàn về điểm trú. Sức khỏe người dân ổn định.",
+                "CORR-FR-0008", iso(base.minus(30, ChronoUnit.MINUTES)), iso(base.minus(45, ChronoUnit.MINUTES))));
+
+        for (String rId : List.of("FR-0005", "FR-0006", "FR-0007", "FR-0008")) {
+            FloodReport r = reports.get(rId);
+            String[] step = reportStep(r.status);
+            bpmnEngine.startInstance(r.bpmnProcessId, r.organizationId, PROCESS_REPORT, r.reportId,
+                    step[0], step[1], step[2],
+                    List.of(BpmnWorkflowEngine.makeStepHistory("startReport", "Tin báo " + r.reportId + " được tiếp nhận (tình huống mở rộng)",
+                            "SYSTEM", "PLATFORM_ADMIN", r.createdAt)),
+                    now);
+        }
+
+        Map<String, Object> c5 = new LinkedHashMap<>();
+        c5.put("report_id", "FR-0005");
+        c5.put("depth_cm", 125.0);
+        c5.put("priority", "CRITICAL");
+        auditLedger.appendRecord(PILOT_ORG, "CORR-FR-0005", "FloodReport", "FR-0005",
+                "CREATE_FLOOD_REPORT", "reporter_lan", FloodRoles.REPORTER, null, c5, 200);
+
+        Map<String, Object> c8 = new LinkedHashMap<>();
+        c8.put("report_id", "FR-0008");
+        c8.put("resolution_id", "RES-0008");
+        c8.put("status", "RESOLVED");
+        auditLedger.appendRecord(PILOT_ORG, "CORR-FR-0008", "ReportResolution", "RES-0008",
+                "CONFIRM_RESOLUTION_AND_SEAL_LEDGER", "reporter_hung", FloodRoles.REPORTER, null, c8, 200);
     }
 
     private void addUser(String username, String fullName, String orgId, String role) {

@@ -345,6 +345,10 @@ export const api = {
     return request('/sim/reset', { method: 'POST', body: '{}' }, token);
   },
 
+  async simEnrich(token: string) {
+    return request('/sim/enrich', { method: 'POST', body: '{}' }, token);
+  },
+
   async simTick(token: string) {
     // Stub for UI simulation clock tick
     return { ok: true };

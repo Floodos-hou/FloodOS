@@ -319,6 +319,9 @@ public final class FloodOSServer {
             if ("/api/v1/sim/reset".equals(path)) {
                 return service.resetDemo(who);
             }
+            if ("/api/v1/sim/enrich".equals(path)) {
+                return service.enrichDemoData(who);
+            }
             if ("/api/v1/flood-reports".equals(path)) {
                 return service.createFloodReport(who, body);
             }
