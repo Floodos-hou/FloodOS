@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 FloodOS Contributors
+
+# ============================================================================
+# FloodOS Infrastructure Blueprint for Render.com (100% Free Tier)
+# https://render.com/docs/blueprint-spec
+# ============================================================================
+
+services:
+  # 1. FloodOS Operations & Experience Web Portal (Free Static Site on Render CDN)
+  - type: web
+    name: floodos-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_DEMO_MODE
+        value: "true"
+      - key: VITE_API_GATEWAY_URL
+        fromService:
+          type: web
+          name: floodos-core-api
+          property: host
+
+  # 2. FloodOS Headless Core PaaS (Java 21 LTS Free Docker Web Service)
+  - type: web
+    name: floodos-core-api
+    runtime: docker
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: FLOODOS_PROFILE
+        value: FULL
+      - key: FLOODOS_ENRICHED_DEMO
+        value: "true"
+      - key: FLOODOS_ALLOW_DEMO_RESET
+        value: "true"
