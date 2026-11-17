@@ -95,11 +95,17 @@ export function useLiveFleet(token: string | null, role: string | undefined) {
       return;
     }
     let cancelled = false;
+    let inFlight = false;
+    let activeCtrl: AbortController | null = null;
 
     async function poll() {
+      if (inFlight || cancelled) return;
+      inFlight = true;
+      const ctrl = new AbortController();
+      activeCtrl = ctrl;
       try {
-        const raw = await api.getDigitalTwin(token!);
-        if (cancelled) return;
+        const raw = await api.getDigitalTwin(token!, ctrl.signal);
+        if (cancelled || ctrl.signal.aborted) return;
         const list = parseEntities(raw as Snapshot);
         const nextMap = new Map<string, LiveMachine>();
         const now = Date.now();
@@ -141,13 +147,16 @@ export function useLiveFleet(token: string | null, role: string | undefined) {
           error: null,
         }));
       } catch (err: any) {
-        if (cancelled) return;
+        if (cancelled || err?.name === 'AbortError') return;
         setInfo((prev) => ({
           ...prev,
           enabled: true,
           connected: false,
           error: err?.message || 'Polling error',
         }));
+      } finally {
+        inFlight = false;
+        if (activeCtrl === ctrl) activeCtrl = null;
       }
     }
 
@@ -155,6 +164,7 @@ export function useLiveFleet(token: string | null, role: string | undefined) {
     const handle = setInterval(poll, POLL_MS);
     return () => {
       cancelled = true;
+      activeCtrl?.abort();
       clearInterval(handle);
     };
   }, [enabled, token]);

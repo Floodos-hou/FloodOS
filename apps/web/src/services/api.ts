@@ -98,8 +98,8 @@ export const api = {
   // --------------------------------------------------------------------------
   // Tactical State (GET /api/v1/state)
   // --------------------------------------------------------------------------
-  async getTacticalState(token: string): Promise<TacticalState> {
-    const raw = await request<any>('/state', {}, token);
+  async getTacticalState(token: string, signal?: AbortSignal): Promise<TacticalState> {
+    const raw = await request<any>('/state', { signal }, token);
     return {
       ...raw,
       zones: raw.zones || [],
@@ -119,8 +119,8 @@ export const api = {
   // --------------------------------------------------------------------------
   // NGSI-LD Digital Twin
   // --------------------------------------------------------------------------
-  async getDigitalTwin(token: string): Promise<{ entities: any[] }> {
-    return request<{ entities: any[] }>('/digital-twin/entities', {}, token);
+  async getDigitalTwin(token: string, signal?: AbortSignal): Promise<{ entities: any[] }> {
+    return request<{ entities: any[] }>('/digital-twin/entities', { signal }, token);
   },
 
   // --------------------------------------------------------------------------

@@ -83,12 +83,20 @@ export const App: React.FC = () => {
   const announcedReportIds = useRef<Set<string>>(new Set());
   const announcedIncidentIds = useRef<Set<string>>(new Set());
   const isInitialLoad = useRef<boolean>(true);
+  const stateAbortRef = useRef<AbortController | null>(null);
+  const stateInFlightRef = useRef<boolean>(false);
 
-  const loadState = useCallback(async () => {
+  const loadState = useCallback(async (fromPoll = false) => {
     if (!token) return;
+    if (fromPoll && stateInFlightRef.current) return;
+    stateAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    stateAbortRef.current = ctrl;
+    stateInFlightRef.current = true;
     setIsLoading(true);
     try {
-      const data = await api.getTacticalState(token);
+      const data = await api.getTacticalState(token, ctrl.signal);
+      if (ctrl.signal.aborted) return;
 
       if (isInitialLoad.current) {
         (data.reports || []).forEach((r) => announcedReportIds.current.add(r.report_id));
@@ -117,20 +125,30 @@ export const App: React.FC = () => {
       setUpdatedAt(new Date());
       setError(null);
     } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') return;
       const status = (err as { status?: number }).status;
       if (status === 401) logout('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
       else setError(errText(err, 'Không thể kết nối đến máy chủ FloodOS.'));
     } finally {
-      setIsLoading(false);
+      if (stateAbortRef.current === ctrl) {
+        stateInFlightRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, [token, logout]);
 
   useEffect(() => {
     if (!isAuthenticated || !token) return;
-    const first = window.setTimeout(() => { void loadState(); }, 0);
-    const poll = window.setInterval(() => { void loadState(); }, POLL_MS);
+    const first = window.setTimeout(() => { void loadState(false); }, 0);
+    const poll = window.setInterval(() => { void loadState(true); }, POLL_MS);
     const clock = window.setInterval(() => setNow(Date.now()), 15_000);
-    return () => { window.clearTimeout(first); window.clearInterval(poll); window.clearInterval(clock); };
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(poll);
+      window.clearInterval(clock);
+      stateAbortRef.current?.abort();
+      stateInFlightRef.current = false;
+    };
   }, [isAuthenticated, token, loadState]);
 
   useEffect(() => {

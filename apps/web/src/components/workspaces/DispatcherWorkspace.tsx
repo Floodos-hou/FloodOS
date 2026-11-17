@@ -373,6 +373,7 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
   } | null>(null);
   const [loadingAar, setLoadingAar] = useState(false);
   const [showAarModal, setShowAarModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const summaryAbortRef = React.useRef<AbortController | null>(null);
   const aarAbortRef = React.useRef<AbortController | null>(null);
 
@@ -397,6 +398,7 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
     const ctrl = new AbortController();
     summaryAbortRef.current = ctrl;
     setLoadingSummary(true);
+    setAiError(null);
     try {
       const data = await api.getReportAiSummary(token, report.report_id, ctrl.signal);
       if (!ctrl.signal.aborted) {
@@ -405,7 +407,7 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
       }
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') {
-        console.error('Failed to get AI summary', err);
+        setAiError(err instanceof Error ? err.message : 'Không thể gọi Trợ lý AI lúc này.');
       }
     } finally {
       if (!ctrl.signal.aborted) setLoadingSummary(false);
@@ -420,12 +422,13 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
       const ctrl = new AbortController();
       aarAbortRef.current = ctrl;
       setLoadingAar(true);
+      setAiError(null);
       try {
         const data = await api.getAfterActionReport(token, report.report_id, ctrl.signal);
         if (!ctrl.signal.aborted) setAarReport(data);
       } catch (err) {
         if ((err as Error)?.name !== 'AbortError') {
-          console.error('Failed to get AAR', err);
+          setAiError(err instanceof Error ? err.message : 'Không thể tạo báo cáo tổng kết AI.');
         }
       } finally {
         if (!ctrl.signal.aborted) setLoadingAar(false);
@@ -457,6 +460,11 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
       </div>
 
       <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
+        {aiError && (
+          <p role="alert" className="rounded-lg border border-crit/30 bg-crit-soft px-3 py-2 text-xs font-medium text-crit">
+            {aiError}
+          </p>
+        )}
         {showSummary && aiSummary && (
           <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-sky-50/80 to-white p-3.5 text-sm space-y-2.5 shadow-sm">
             <div className="flex items-center justify-between">
