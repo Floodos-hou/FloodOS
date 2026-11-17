@@ -375,10 +375,14 @@ services:
     restart: unless-stopped
     environment:
       PORT: 8088
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-3-5-haiku-latest}
+      ANTHROPIC_API_BASE: ${ANTHROPIC_API_BASE:-https://api.anthropic.com}
+      CORS_ALLOW_ORIGINS: ${AI_CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "127.0.0.1:8088:8088"
     healthcheck:

@@ -23,9 +23,9 @@
 
 ## 2. Dual-Engine Architecture (Zero-Mock Drift)
 
-- **Live LLM Engine**: Connected to OpenAI API (`gpt-4o-mini` or specified model) or OpenAI-compatible endpoint when `OPENAI_API_KEY` is provided.
-- **Tactical Heuristic Engine (Deterministic Fallback)**: Automatically activates when no API key is supplied or when the network is isolated. Computes hydrological priority matrices, tactical timelines, and official post-action summaries deterministically.
-- All responses declare their active processing engine (`engine: "OPENAI_..."` vs `engine: "TACTICAL_HEURISTIC_FALLBACK"`) for 100% transparency.
+- **Live LLM Engine**: Supports OpenAI-compatible Chat Completions (`OPENAI_API_KEY`) and Anthropic Messages API (`ANTHROPIC_API_KEY`). When `AI_PROVIDER=auto`, OpenAI is tried first (if configured), then Anthropic (if configured).
+- **Tactical Heuristic Engine (Deterministic Fallback)**: Automatically activates when no API key is supplied, when the network is isolated, or when an upstream LLM call fails/returns invalid output.
+- All responses declare their active processing engine (`OPENAI_...`, `ANTHROPIC_...`, or `TACTICAL_HEURISTIC_FALLBACK`) for 100% transparency.
 
 ---
 
@@ -34,9 +34,16 @@
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `PORT` | `8088` | HTTP listening port |
-| `OPENAI_API_KEY` | *(empty)* | OpenAI API secret key |
-| `OPENAI_MODEL` | `gpt-4o-mini` | LLM model name |
-| `OPENAI_API_BASE` | `https://api.openai.com/v1` | LLM API endpoint URL |
+| `AI_PROVIDER` | `auto` | Provider selection (`auto`, `openai`, `anthropic`) |
+| `OPENAI_API_KEY` | *(empty)* | OpenAI-compatible API secret key |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model name |
+| `OPENAI_API_BASE` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
+| `ANTHROPIC_API_KEY` | *(empty)* | Anthropic API secret key |
+| `ANTHROPIC_MODEL` | `claude-3-5-haiku-latest` | Anthropic model name |
+| `ANTHROPIC_API_BASE` | `https://api.anthropic.com` | Anthropic API base URL |
+| `LLM_TIMEOUT_SECONDS` | `15.0` | Upstream LLM request timeout (seconds) |
+| `CORS_ALLOW_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173` | Allowed CORS origins (comma-separated) |
+| `LOG_LEVEL` | `INFO` | Python logger level |
 
 ---
 

@@ -353,12 +353,10 @@ public final class FloodOSServer {
                 return service.classifyPriority(who, body);
             }
             if ("/api/v1/ai/summarize".equals(path)) {
-                var aiRes = service.getStore().aiAssistant.summarize(body);
-                return new HttpResult(aiRes.status(), aiRes.body());
+                return service.summarizeSituation(who, body);
             }
             if ("/api/v1/ai/after-action-report".equals(path)) {
-                var aiRes = service.getStore().aiAssistant.afterActionReport(body);
-                return new HttpResult(aiRes.status(), aiRes.body());
+                return service.generateAfterActionReport(who, body);
             }
             return new HttpResult(404, Map.of("error", "NOT_FOUND", "path", path));
         }

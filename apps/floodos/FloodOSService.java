@@ -1507,6 +1507,24 @@ public final class FloodOSService {
         return new HttpResult(res.status(), res.body());
     }
 
+    public synchronized HttpResult summarizeSituation(AuthContext auth, Map<String, Object> body) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.FIELD_TEAM, FloodRoles.PLATFORM_ADMIN),
+                "SUMMARIZE_SITUATION", "AiAssistant", "SUMMARIZE");
+        if (denied != null) return denied;
+
+        AiAssistantClient.Result res = store.aiAssistant.summarize(body);
+        return new HttpResult(res.status(), res.body());
+    }
+
+    public synchronized HttpResult generateAfterActionReport(AuthContext auth, Map<String, Object> body) {
+        HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.REPORTER, FloodRoles.PLATFORM_ADMIN),
+                "GENERATE_AFTER_ACTION_REPORT", "AiAssistant", "AAR");
+        if (denied != null) return denied;
+
+        AiAssistantClient.Result res = store.aiAssistant.afterActionReport(body);
+        return new HttpResult(res.status(), res.body());
+    }
+
     public synchronized HttpResult getReportAfterActionReport(AuthContext auth, String reportId) {
         HttpResult denied = rbac(auth, List.of(FloodRoles.DISPATCHER, FloodRoles.REPORTER, FloodRoles.PLATFORM_ADMIN),
                 "GET_AFTER_ACTION_REPORT", "FloodReport", reportId);

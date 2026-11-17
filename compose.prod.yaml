@@ -135,3 +135,11 @@ services:
       args:
         VITE_DEMO_MODE: "false"
     restart: always
+
+  ai-assistant:
+    restart: always
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-3-5-haiku-latest}
+      CORS_ALLOW_ORIGINS: ${AI_CORS_ALLOW_ORIGINS:-http://localhost:3000}
+    ports: !reset []

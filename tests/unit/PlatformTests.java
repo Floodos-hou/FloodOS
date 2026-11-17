@@ -1157,6 +1157,17 @@ final class PlatformTests {
                 equal(200, aarRes.statusCode(), "aar status");
                 Map<?, ?> aarBody = JsonCodec.parseObject(aarRes.body());
                 isTrue(String.valueOf(aarBody.get("markdown_content")).contains("BÁO CÁO TỔNG KẾT"), "aar markdown header");
+
+                HttpResponse<String> postSumRes = http(base, "POST", "/api/v1/ai/summarize", JsonCodec.toJson(Map.of(
+                        "report_id", "FR-0001", "depth_cm", 80, "people_affected", 3, "description", "Nước dâng nhanh"
+                )), "Authorization", "Bearer " + tok);
+                equal(200, postSumRes.statusCode(), "post summarize allowed for dispatcher");
+
+                String rmTok = KeycloakOidcEngine.issueJwt(new KeycloakOidcEngine.UserAccount("usr_resource_giang", "resource_giang", "pw", "Giang", "giang@x", "ORG_HN_PILOT_01", FloodRoles.RESOURCE_MANAGER));
+                HttpResponse<String> deniedSum = http(base, "POST", "/api/v1/ai/summarize", JsonCodec.toJson(Map.of("report_id", "FR-0001")), "Authorization", "Bearer " + rmTok);
+                equal(403, deniedSum.statusCode(), "post summarize enforces RBAC");
+                HttpResponse<String> deniedAar = http(base, "POST", "/api/v1/ai/after-action-report", JsonCodec.toJson(Map.of("report_id", "FR-0001", "created_at", "2026-11-09T08:00:00Z")), "Authorization", "Bearer " + rmTok);
+                equal(403, deniedAar.statusCode(), "post after-action-report enforces RBAC");
             });
         } finally {
             server.stop();
