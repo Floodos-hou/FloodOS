@@ -357,7 +357,7 @@ export const api = {
   // --------------------------------------------------------------------------
   // AI Tactical Assistant (Summarize, Priority Classification, After-Action)
   // --------------------------------------------------------------------------
-  async getReportAiSummary(token: string, reportId: string): Promise<{
+  async getReportAiSummary(token: string, reportId: string, signal?: AbortSignal): Promise<{
     report_id: string;
     summary_text: string;
     current_status: string;
@@ -366,7 +366,7 @@ export const api = {
     engine: string;
     generated_at: string;
   }> {
-    return request(`/flood-reports/${reportId}/ai-summary`, {}, token);
+    return request(`/flood-reports/${reportId}/ai-summary`, { signal }, token);
   },
 
   async classifyPriority(token: string, payload: {
@@ -375,7 +375,7 @@ export const api = {
     people_affected?: number;
     need_type?: string;
     location_hint?: string;
-  }): Promise<{
+  }, signal?: AbortSignal): Promise<{
     suggested_priority: 'CRITICAL' | 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
     confidence: number;
     reasoning: string;
@@ -386,10 +386,11 @@ export const api = {
     return request('/ai/classify-priority', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
     }, token);
   },
 
-  async getAfterActionReport(token: string, reportId: string): Promise<{
+  async getAfterActionReport(token: string, reportId: string, signal?: AbortSignal): Promise<{
     report_id: string;
     report_title: string;
     executive_summary: string;
@@ -397,6 +398,6 @@ export const api = {
     engine: string;
     generated_at: string;
   }> {
-    return request(`/flood-reports/${reportId}/after-action-report`, {}, token);
+    return request(`/flood-reports/${reportId}/after-action-report`, { signal }, token);
   },
 };

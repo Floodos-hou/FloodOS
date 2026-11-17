@@ -373,6 +373,15 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
   } | null>(null);
   const [loadingAar, setLoadingAar] = useState(false);
   const [showAarModal, setShowAarModal] = useState(false);
+  const summaryAbortRef = React.useRef<AbortController | null>(null);
+  const aarAbortRef = React.useRef<AbortController | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      summaryAbortRef.current?.abort();
+      aarAbortRef.current?.abort();
+    };
+  }, []);
 
   const handleToggleAiSummary = async () => {
     if (showSummary) {
@@ -383,16 +392,23 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
       setShowSummary(true);
       return;
     }
-    if (!token) return;
+    if (!token || loadingSummary) return;
+    summaryAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    summaryAbortRef.current = ctrl;
     setLoadingSummary(true);
     try {
-      const data = await api.getReportAiSummary(token, report.report_id);
-      setAiSummary(data);
-      setShowSummary(true);
+      const data = await api.getReportAiSummary(token, report.report_id, ctrl.signal);
+      if (!ctrl.signal.aborted) {
+        setAiSummary(data);
+        setShowSummary(true);
+      }
     } catch (err) {
-      console.error('Failed to get AI summary', err);
+      if ((err as Error)?.name !== 'AbortError') {
+        console.error('Failed to get AI summary', err);
+      }
     } finally {
-      setLoadingSummary(false);
+      if (!ctrl.signal.aborted) setLoadingSummary(false);
     }
   };
 
@@ -400,14 +416,19 @@ const CasePanel: React.FC<CasePanelProps> = ({ report, zoneLabel, orders, teams,
     if (!token) return;
     setShowAarModal(true);
     if (!aarReport || aarReport.report_id !== report.report_id) {
+      aarAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      aarAbortRef.current = ctrl;
       setLoadingAar(true);
       try {
-        const data = await api.getAfterActionReport(token, report.report_id);
-        setAarReport(data);
+        const data = await api.getAfterActionReport(token, report.report_id, ctrl.signal);
+        if (!ctrl.signal.aborted) setAarReport(data);
       } catch (err) {
-        console.error('Failed to get AAR', err);
+        if ((err as Error)?.name !== 'AbortError') {
+          console.error('Failed to get AAR', err);
+        }
       } finally {
-        setLoadingAar(false);
+        if (!ctrl.signal.aborted) setLoadingAar(false);
       }
     }
   };
@@ -612,21 +633,21 @@ const VerifyForm: React.FC<{ report: FloodReport; onVerify: DispatcherWorkspaceP
 
   React.useEffect(() => {
     if (!token) return;
-    let active = true;
+    const ctrl = new AbortController();
     setLoadingAiRec(true);
     api.classifyPriority(token, {
       description: report.description || report.notes || 'Tin báo người dân',
       depth_cm: report.depth_cm,
       people_affected: report.people_affected,
       need_type: report.need_type,
-    }).then((res) => {
-      if (active) setAiRec(res);
+    }, ctrl.signal).then((res) => {
+      if (!ctrl.signal.aborted) setAiRec(res);
     }).catch(() => {
-      // Graceful fallback
+      // Graceful fallback or aborted on report switch
     }).finally(() => {
-      if (active) setLoadingAiRec(false);
+      if (!ctrl.signal.aborted) setLoadingAiRec(false);
     });
-    return () => { active = false; };
+    return () => { ctrl.abort(); };
   }, [report.report_id, report.depth_cm, report.people_affected, report.need_type, token]);
 
   const submit = async (e: React.FormEvent) => {
